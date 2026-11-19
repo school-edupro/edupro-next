@@ -88,3 +88,17 @@ MobileAuthController_appVersion
 # the redesign: the school's logo on the sign-in, code and PIN screens, fetched after a sign-in and kept on the phone
 # (the school's public logo, by its code from /me/profiles)
 PublicSchoolController_logo
+
+# the parent's Fees in the app, as the web Fees page has it, with no web page (docs/design/89, "Fees in the
+# app"): other fees, the fee bill and tax certificate on screen and as PDF, online payments and their gateways;
+# the app starts a payment itself (app: mobile) and opens only the gateway's page; the development gateway is
+# answered from the app
+FeesController_myBill
+FeesController_myTaxCertificate
+FeesController_myTaxCertificateFile !file
+MiscFeesController_mine
+PaymentsController_mine
+PaymentsController_createMine
+PaymentsController_createMineMisc
+PaymentsController_gatewayOptions
+PaymentsController_mock

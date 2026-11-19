@@ -1114,6 +1114,17 @@ export class PaymentsService {
     });
   }
 
+  /**
+   * Where a family payment comes back to. The gateway always returns to the parent web app's return endpoint
+   * (the address registered with the gateway); from there the web app goes to its fees page, and the phone app
+   * to /api/payments/mobile-done, which the app's checkout view watches for and closes on (no page shows).
+   */
+  private familyReturn(app: 'web' | 'mobile' | undefined, webPath: string, studentId: string) {
+    return app === 'mobile'
+      ? `${this.env.PARENT_APP_URL}/api/payments/mobile-done?student=${studentId}`
+      : `${this.env.PARENT_APP_URL}${webPath}`;
+  }
+
   /** Sprint 13: a guardian pays for one of their children, up to what the ledger says is payable. */
   async createFamilyIntent(ctx: RequestContext, dto: CreateFamilyIntentDto) {
     const { tenant, yearId } = this.yearOf(ctx);
@@ -1156,7 +1167,7 @@ export class PaymentsService {
           email: u.email ?? 'unknown@example.invalid',
           mobile: u.mobile ?? '',
         },
-        returnUrl: `${this.env.PARENT_APP_URL}/fees?student=${dto.studentId}`,
+        returnUrl: this.familyReturn(dto.app, `/fees?student=${dto.studentId}`, dto.studentId),
         createdByUser: ctx.user.id,
         requestId: ctx.requestId,
       });
@@ -1186,7 +1197,12 @@ export class PaymentsService {
    */
   async createFamilyMiscIntent(
     ctx: RequestContext,
-    dto: { lineId: string; gatewayId?: string; returnTo?: 'fees' | 'consents' },
+    dto: {
+      lineId: string;
+      gatewayId?: string;
+      returnTo?: 'fees' | 'consents';
+      app?: 'web' | 'mobile';
+    },
   ) {
     const tenant = requireTenant(ctx);
     const v = await this.viewer.resolve(ctx, 'fees.family.view');
@@ -1242,10 +1258,13 @@ export class PaymentsService {
           email: u.email ?? 'unknown@example.invalid',
           mobile: u.mobile ?? '',
         },
-        returnUrl:
+        returnUrl: this.familyReturn(
+          dto.app,
           dto.returnTo === 'consents'
-            ? `${this.env.PARENT_APP_URL}/consents?student=${line.student_id}`
-            : `${this.env.PARENT_APP_URL}/fees?student=${line.student_id}`,
+            ? `/consents?student=${line.student_id}`
+            : `/fees?student=${line.student_id}`,
+          line.student_id,
+        ),
         createdByUser: ctx.user.id,
         requestId: ctx.requestId,
       });

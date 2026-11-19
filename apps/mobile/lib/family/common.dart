@@ -565,6 +565,100 @@ String plainText(String html) => html
     .replaceAll(RegExp(r'\n\s*\n\s*\n+'), '\n\n')
     .trim();
 
+/// Saves or shares a file from the API (the phone's own share sheet: Files, Drive, WhatsApp …).
+Future<void> shareFile(BuildContext context, S s, Future<ApiFile> Function() load) async {
+  try {
+    final f = await load();
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile.fromData(Uint8List.fromList(f.bytes), mimeType: f.contentType, name: f.name)],
+        fileNameOverrides: [f.name],
+      ),
+    );
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(s, e))));
+    }
+  }
+}
+
+/// View and Download icons for one file (no file name on the links): View opens it in the app, Download saves
+/// or shares it.
+class FileIcons extends ConsumerWidget {
+  const FileIcons({super.key, required this.label, required this.load, required this.name});
+  final String label;
+  final Future<ApiFile> Function() load;
+
+  /// the keys: `view-NAME`, `download-NAME`
+  final String name;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          key: Key('view-$name'),
+          tooltip: '${s.view} $label',
+          icon: const Icon(Icons.visibility_outlined),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => FileScreen(title: label, load: load),
+            ),
+          ),
+        ),
+        IconButton(
+          key: Key('download-$name'),
+          tooltip: '${s.download} $label',
+          icon: const Icon(Icons.download_outlined),
+          onPressed: () => shareFile(context, s, load),
+        ),
+      ],
+    );
+  }
+}
+
+/// A label and its value, side by side (a paper's particulars).
+class FactLine extends StatelessWidget {
+  const FactLine(this.label, this.value, {super.key, this.strong = false});
+  final String label;
+  final String value;
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: TextStyle(color: dark ? Tokens.mobGray300 : Tokens.textMuted, fontSize: 14),
+            ),
+          ),
+          const SizedBox(width: Tokens.sp2),
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: strong ? 16 : 15,
+                fontWeight: strong ? Tokens.fwBold : Tokens.fwSemibold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Attachments as View and Download icons, numbered (no file names on the links).
 class Attachments extends ConsumerWidget {
   const Attachments({super.key, required this.count, required this.load});

@@ -192,6 +192,68 @@ final feesProvider = FutureProvider.autoDispose.family<Loaded<Json?>, Profile>((
   return Loaded(childIn(asJson(r.data)['children'], p), r.at, stale: r.stale);
 });
 
+/// The child's other fees (a trip, an activity, a form), as the school announced them.
+final miscFeesProvider = FutureProvider.autoDispose.family<Loaded<Json?>, Profile>((ref, p) async {
+  final r = await cached('misc:${p.id}', () => _api(ref).miscFeesMine());
+  return Loaded(childIn(asJson(r.data)['children'], p), r.at, stale: r.stale);
+});
+
+/// The family's online payments of this child (recent first).
+final feeIntentsProvider = FutureProvider.autoDispose.family<List<Json>, Profile>((ref, p) async {
+  try {
+    final r = asJson(await _api(ref).paymentsMine());
+    return [
+      for (final x in asList(r['data']))
+        if ('${x['entityId']}' == p.studentId) x,
+    ];
+  } on ApiException catch (e) {
+    // a parent the school does not let pay online has no online payments to show
+    if (e.status == 403) return const [];
+    rethrow;
+  }
+});
+
+/// The gateways a fee (school, hostel, misc) may be paid through, with their convenience charge. Null: the
+/// person may not pay online (no permission); empty: the school has opened no gateway for this fee.
+final feeGatewaysProvider = FutureProvider.autoDispose.family<List<Json>?, (Profile, String)>((
+  ref,
+  args,
+) async {
+  final (_, ledger) = args;
+  try {
+    return asList(asJson(await _api(ref).paymentsGatewayOptions(ledger: ledger))['data']);
+  } on ApiException catch (e) {
+    if (e.status == 403) return null;
+    rethrow;
+  }
+});
+
+/// The fee bill of the child for the session: all fees, the school fee or the hostel fee.
+final feeBillProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profile, String)>((
+  ref,
+  args,
+) async {
+  final (p, ledger) = args;
+  final r = await cached(
+    'bill:${p.id}:$ledger',
+    () => _api(ref).feesMyBill(studentId: p.studentId!, ledger: ledger),
+  );
+  return Loaded(asJson(r.data), r.at, stale: r.stale);
+});
+
+/// The tax certificate of the child for a financial year (null: the current one).
+final taxCertificateProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profile, String?)>((
+  ref,
+  args,
+) async {
+  final (p, year) = args;
+  final r = await cached(
+    'tax:${p.id}:${year ?? ''}',
+    () => _api(ref).feesMyTaxCertificate(studentId: p.studentId!, financialYearId: year),
+  );
+  return Loaded(asJson(r.data), r.at, stale: r.stale);
+});
+
 /// The report card PDF: asks the API to make it, then waits for it (up to [wait]) and fetches it.
 Future<ApiFile> reportCardPdf(
   EduProApi api,

@@ -414,15 +414,193 @@ class School {
                   'receivedOn': day(-31),
                   'amount': '15000.00',
                   'mode': 'Online',
+                  'ledger': 'school',
+                  'status': 'posted',
+                  'lateFee': '0.00',
+                  'refunded': '0.00',
+                  'settled': true,
+                  'clearedOn': null,
                 },
               ],
               'payableNow': '12650.00',
               'payableSchool': '12650.00',
               'payableHostel': '0.00',
-              'hidden': 0,
+              'hidden': 1,
+              'year': {'code': '2026-27', 'status': 'active'},
+              'fee': {
+                'feeGroup': 'general',
+                'payPlan': 'quarterly',
+                'hosteller': false,
+                'transport': null,
+                'discounts': ['Sibling'],
+                'optionalHeads': [],
+              },
             },
           ],
         };
+      // ---- Fees in the app (made-up): other fees, gateways, online payments, bill, tax certificate ----
+      case 'GET /fees/misc-fees/mine':
+        return {
+          'children': [
+            {
+              'student': {'id': '41', 'name': 'Kid Sample'},
+              'lines': [
+                {
+                  'id': 'm1',
+                  'title': 'Science trip',
+                  'mandatory': false,
+                  'seats': 40,
+                  'seatsTaken': 12,
+                  'remark': null,
+                  'amount': '800.00',
+                  'paid': '0.00',
+                  'balance': '800.00',
+                  'lastDate': day(10),
+                  'status': 'open',
+                  'blocked': null,
+                },
+              ],
+            },
+          ],
+        };
+      case 'GET /payments/gateways/options':
+        return {
+          'data': [
+            {'id': 'g1', 'label': 'Cards and UPI', 'chargePercent': '1.50', 'chargeFlat': '0.00'},
+            {'id': 'g2', 'label': 'Net banking', 'chargePercent': '0', 'chargeFlat': '10.00'},
+          ],
+        };
+      case 'GET /payments/intents/mine':
+        return {
+          'data': [
+            {
+              'id': 'i1',
+              'txnId': 'TXN1',
+              'amount': '12650.00',
+              'status': 'failed',
+              'provider': 'mock',
+              'entityId': '41',
+              'createdAt': '${day(-1)}T10:00:00Z',
+            },
+          ],
+        };
+      case 'POST /payments/intents/mine':
+      case 'POST /payments/intents/mine/misc':
+        return {
+          'intent': {
+            'id': 'i9',
+            'txnId': 'TXN9',
+            'amount': '${c.body!['amount'] ?? '800.00'}',
+            'returnUrl': 'https://parent.example.test/api/payments/mobile-done?student=41',
+          },
+          'checkout': {
+            'kind': 'form',
+            'provider': 'mock',
+            'mode': 'mock',
+            'action': '/api/v1/payments/payu/mock',
+            'method': 'POST',
+            'fields': <String, String>{},
+          },
+        };
+      case 'POST /payments/payu/mock':
+        return c.body!['outcome'] == 'success'
+            ? {'outcome': 'applied', 'status': 'succeeded'}
+            : {'outcome': 'failed', 'status': 'failed'};
+      case 'GET /fees/mine/bill':
+        return {
+          'billNo': 'SPS/2026-27/A1234',
+          'billDate': day(0),
+          'session': {'from': '2026-04-01', 'to': '2027-03-31'},
+          'student': {
+            'name': 'Kid Sample',
+            'admissionNo': 'A1234',
+            'section': 'VI-A',
+            'guardian': 'Parent Sample',
+            'route': null,
+          },
+          'heads': [
+            {'ledger': 'school', 'head': 'Tuition fee', 'optional': false, 'amount': '50000.00'},
+            {'ledger': 'school', 'head': 'Computer fee', 'optional': true, 'amount': '4000.00'},
+          ],
+          'discount': '1500.00',
+          'schedules': [
+            {
+              'ledger': 'school',
+              'payPlan': 'quarterly',
+              'rows': [
+                {
+                  'no': '2',
+                  'months': 'Jul–Sep',
+                  'dueOn': day(-2),
+                  'payable': '12500.00',
+                  'paid': '0.00',
+                  'balance': '12500.00',
+                  'lateFee': '150.00',
+                },
+              ],
+            },
+          ],
+          'receipts': [
+            {
+              'receiptNo': 'R-77',
+              'mode': 'online',
+              'receivedOn': day(-31),
+              'amount': '15000.00',
+              'finalAmount': '15000.00',
+              'counted': true,
+            },
+          ],
+          'summary': {
+            'due': '27500.00',
+            'lateFee': '150.00',
+            'received': '15000.00',
+            'refund': '0.00',
+            'advance': '0.00',
+            'balance': '12650.00',
+            'balanceWords': 'Rupees Twelve Thousand Six Hundred Fifty Only',
+          },
+        };
+      case 'GET /fees/mine/bill/file':
+        return const ApiFile(bytes: [1], contentType: 'application/pdf', name: 'bill.pdf');
+      case 'GET /fees/mine/tax-certificate':
+        final fy = c.query?['financialYearId'] ?? 'fy2';
+        return {
+          'school': {'name': 'Sample School', 'address': 'Sample City'},
+          'financialYear': {
+            'id': fy,
+            'name': fy == 'fy1' ? '2025-26' : '2026-27',
+            'from': fy == 'fy1' ? '2025-04-01' : '2026-04-01',
+            'to': fy == 'fy1' ? '2026-03-31' : '2027-03-31',
+          },
+          'student': {
+            'id': '41',
+            'name': 'Kid Sample',
+            'admissionNo': 'A1234',
+            'section': 'VI-A',
+            'guardian': 'Parent Sample',
+          },
+          'rows': fy == 'fy1'
+              ? []
+              : [
+                  {
+                    'receivedOn': day(-31),
+                    'receiptNo': 'R-77',
+                    'mode': 'online',
+                    'head': 'Tuition fee',
+                    'amount': '15000.00',
+                  },
+                ],
+          'total': fy == 'fy1' ? '0.00' : '15000.00',
+          'totalWords': fy == 'fy1' ? 'Rupees Zero Only' : 'Rupees Fifteen Thousand Only',
+          'otherPaid': '0.00',
+          'issuedOn': day(0),
+          'years': [
+            {'id': 'fy2', 'name': '2026-27'},
+            {'id': 'fy1', 'name': '2025-26'},
+          ],
+        };
+      case 'GET /fees/mine/tax-certificate/file':
+        return const ApiFile(bytes: [1], contentType: 'application/pdf', name: 'tax.pdf');
       case 'GET /fees/mine/receipts/1001/file':
         return const ApiFile(bytes: [1], contentType: 'application/octet-stream', name: 'r.pdf');
     }
@@ -531,6 +709,135 @@ void main() {
     await pumpFamily(tester, school: school);
     expect(find.byKey(const Key('shortcut-queries')), findsOneWidget);
     expect(find.byKey(const Key('shortcut-messages')), findsNothing);
+  });
+
+  testWidgets(
+    'Fees in the app: due now, ticked the oldest first, the gateway charge, paid through the gateway — no web page',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 2200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final (t, _) = await pumpFamily(tester);
+      await tester.tap(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('Fees')),
+      );
+      await tester.pumpAndSettle();
+      // due now: the school fee and the other fee (late fee included)
+      expect(
+        find.descendant(of: find.byKey(const Key('figDueNow')), matching: find.text('₹13,450')),
+        findsOneWidget,
+      );
+      expect(find.text('Pay plan: Quarterly'), findsOneWidget);
+      expect(find.text('Discount: Sibling'), findsOneWidget);
+      expect(find.text('Later instalments appear when the school opens them.'), findsOneWidget);
+      // the overdue instalment is ticked; Cards and UPI adds 1.5%
+      String? total() => tester.widget<Text>(find.byKey(const Key('payTotal-school'))).data;
+      expect(total(), '₹12,839.75');
+      await tester.tap(find.byKey(const Key('gateway-school-g2')));
+      await tester.pumpAndSettle();
+      expect(total(), '₹12,660');
+      // untick: nothing to pay
+      await tester.tap(find.byKey(Key('tick-school-${day(-2)}')));
+      await tester.pumpAndSettle();
+      expect(find.text('Tick an instalment to pay'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.byKey(const Key('pay-school'))).onPressed, isNull);
+      await tester.tap(find.byKey(Key('tick-school-${day(-2)}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pay-school')));
+      await tester.pumpAndSettle();
+      // the app starts the payment itself, for the phone
+      expect(
+        t.calls.lastWhere((c) => c.method == 'POST' && c.path == '/payments/intents/mine').body,
+        {
+          'studentId': '41',
+          'amount': 12650,
+          'ledger': 'school',
+          'gatewayId': 'g2',
+          'app': 'mobile',
+        },
+      );
+      // the development gateway answers in the app (a real one opens its own page only)
+      expect(find.text('Development gateway'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('mockSuccess')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/payments/payu/mock').body, {
+        'txnid': 'TXN9',
+        'outcome': 'success',
+      });
+      expect(find.text('Payment received. The receipt is below.'), findsOneWidget);
+      // the receipts: the receipt with View / Download, and the online payments
+      expect(find.byKey(const Key('view-receipt-1001')), findsOneWidget);
+      expect(find.byKey(const Key('download-receipt-1001')), findsOneWidget);
+      expect(find.byKey(const Key('intent-i1')), findsOneWidget);
+      expect(find.text('Failed'), findsOneWidget);
+      // no web page was opened for any of it
+      expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
+    },
+  );
+
+  testWidgets('Fees in the app: other fees paid online, the fee bill and the tax certificate', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (t, _) = await pumpFamily(tester);
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Fees')));
+    await tester.pumpAndSettle();
+    // other fees: a trip, paid in full; two gateways, so the parent chooses
+    await tester.tap(find.byKey(const Key('section-other')));
+    await tester.pumpAndSettle();
+    expect(find.text('Science trip'), findsOneWidget);
+    expect(find.textContaining('Seats 12/40'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('payMisc-m1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('miscGateway-g1')));
+    await tester.pumpAndSettle();
+    expect(
+      t.calls.lastWhere((c) => c.method == 'POST' && c.path == '/payments/intents/mine/misc').body,
+      {'lineId': 'm1', 'gatewayId': 'g1', 'app': 'mobile'},
+    );
+    await tester.tap(find.byKey(const Key('mockFail')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('The payment did not go through. No money was taken, or it comes back.'),
+      findsOneWidget,
+    );
+
+    // the fee bill on screen, and its PDF
+    await tester.tap(find.byKey(const Key('section-bill')));
+    await tester.pumpAndSettle();
+    expect(find.text('SPS/2026-27/A1234'), findsOneWidget);
+    expect(find.text('Computer fee (optional)'), findsOneWidget);
+    expect(find.text('Rupees Twelve Thousand Six Hundred Fifty Only'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('view-feeBill')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/fees/mine/bill/file').query, {
+      'studentId': '41',
+      'ledger': 'school',
+    });
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    // the tax certificate: this year's, its PDF, then last year's
+    await tester.tap(find.byKey(const Key('taxCertificate')));
+    await tester.pumpAndSettle();
+    expect(find.text('Rupees Fifteen Thousand Only'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('view-taxCertificate')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/fees/mine/tax-certificate/file').query, {
+      'studentId': '41',
+      'financialYearId': 'fy2',
+    });
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('taxYear')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2025-26').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('No fee that counts for the certificate was received in this year.'),
+      findsOneWidget,
+    );
+    expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
   });
 
   testWidgets(
@@ -700,11 +1007,15 @@ void main() {
     final (t, _) = await pumpFamily(tester);
     await tester.tap(find.text('Fees'));
     await tester.pumpAndSettle();
-    expect(find.text('₹12,500'), findsOneWidget);
-    expect(find.textContaining('Pay online · ₹12,650'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byKey(const Key('figSchoolFee')), matching: find.text('₹12,650')),
+      findsOneWidget,
+    );
     expect(find.text('Overdue'), findsOneWidget);
     expect(find.textContaining('Late fee ₹150'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('receipt-1001')));
+    await tester.tap(find.byKey(const Key('section-receipts')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('view-receipt-1001')));
     await tester.pumpAndSettle();
     expect(t.calls.any((c) => c.path == '/fees/mine/receipts/1001/file'), isTrue);
     await tester.tap(find.byType(BackButton));
@@ -772,7 +1083,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('staleLine')), findsOneWidget);
     expect(find.textContaining('No connection. This is the copy from'), findsOneWidget);
-    expect(find.text('₹12,500'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byKey(const Key('figSchoolFee')), matching: find.text('₹12,650')),
+      findsOneWidget,
+    );
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
@@ -817,6 +1131,16 @@ void main() {
         }
         await tester.tap(find.text(s.fees).last);
         await check('Fees');
+        for (final x in ['other', 'receipts', 'bill']) {
+          await scrollTo(tester, find.byKey(Key('section-$x')));
+          await tester.tap(find.byKey(Key('section-$x')));
+          await check('Fees, $x');
+        }
+        await scrollTo(tester, find.byKey(const Key('taxCertificate')));
+        await tester.tap(find.byKey(const Key('taxCertificate')));
+        await check('Tax certificate');
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
         await tester.tap(find.text(s.messages).last);
         await check('Messages');
         await tester.tap(find.text(s.notices).last);
@@ -874,11 +1198,24 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    for (final tab in ['Fees', 'Messages']) {
-      await tester.tap(find.text(tab).last);
+    await tester.tap(find.text('Fees').last);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Fees');
+    for (final x in ['other', 'receipts', 'bill']) {
+      await scrollTo(tester, find.byKey(Key('section-$x')));
+      await tester.tap(find.byKey(Key('section-$x')));
       await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull, reason: tab);
+      expect(tester.takeException(), isNull, reason: 'Fees, $x');
     }
+    await scrollTo(tester, find.byKey(const Key('taxCertificate')));
+    await tester.tap(find.byKey(const Key('taxCertificate')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'tax certificate');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Messages').last);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Messages');
     await tester.tap(find.byKey(const Key('message-m1')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'message in full');

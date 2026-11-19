@@ -574,6 +574,52 @@ describe('collect and pay (e2e, Sprint 13)', () => {
       headers: h(parent),
     });
     expect((mineIntents.json().data as Array<{ status: string }>)[0]!.status).toBe('succeeded');
+
+    // the phone app (docs/design/89): the gateway still returns to the web app's registered return address;
+    // the payer then lands on the app's end address (/api/payments/mobile-done), never on a web page
+    payments.gatewayFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          id: `order_m_${uid}`,
+          amount: 100,
+          currency: 'INR',
+          receipt: 'x',
+          status: 'created',
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+    const fromPhone = await inject({
+      method: 'POST',
+      url: '/payments/intents/mine',
+      headers: h(parent),
+      json: { studentId: students.child, amount: 1, app: 'mobile' },
+    });
+    expect(fromPhone.statusCode).toBe(201);
+    const phoneOut = fromPhone.json() as {
+      intent: { returnUrl: string };
+      checkout: { kind: string; callbackUrl: string };
+    };
+    expect(phoneOut.intent.returnUrl).toContain(
+      `/api/payments/mobile-done?student=${students.child}`,
+    );
+    expect(phoneOut.checkout.callbackUrl).toContain('/api/payments/return?provider=razorpay');
+    // (left unpaid: a receipt here would change the settlement test that follows)
+
+    // the tax certificate as a PDF for the phone: own child only
+    const certFile = await inject({
+      method: 'GET',
+      url: `/fees/mine/tax-certificate/file?studentId=${students.child}`,
+      headers: h(parent),
+    });
+    expect(certFile.statusCode).toBe(200);
+    expect(certFile.json()).toMatchObject({ contentType: 'application/pdf' });
+    expect(Buffer.from(certFile.json().base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
+    const notMyCert = await inject({
+      method: 'GET',
+      url: `/fees/mine/tax-certificate/file?studentId=${students.full}`,
+      headers: h(parent),
+    });
+    expect(notMyCert.statusCode).toBe(404);
   });
 
   it('CCAvenue: the encrypted response must decrypt and match the order and amount', async () => {

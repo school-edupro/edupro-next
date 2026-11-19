@@ -1,6 +1,9 @@
 import { receiptLayoutPdf } from './receipt-layout-pdf';
 import { receiptPdf } from './receipt-pdf';
 import { billPdf } from './bill-pdf';
+import { purchaseStockPdf } from '../purchase/purchase-stock-pdf';
+import { blankBox } from '../purchase/purchase-doc-sign';
+import { registerGeneratedOn } from '../exams/register-head';
 import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { amountInWords } from '@edupro/db';
@@ -930,6 +933,75 @@ export class FeeDocumentsService {
     if (v.kind !== 'family' || !v.students.some((s) => s.id === studentId))
       throw new DomainError('not-found', 'Student not found', { status: 404 });
     return this.certificate(ctx, studentId, financialYearId);
+  }
+
+  /**
+   * A parent's tax certificate as a PDF (the phone app's Download; docs/design/89): the school's letterhead,
+   * the student and the financial year, the fee received that counts, the total in words and a box for the
+   * school's signatory.
+   */
+  async myTaxCertificateFile(ctx: RequestContext, studentId: string, financialYearId?: string) {
+    const t = await this.myTaxCertificate(ctx, studentId, financialYearId);
+    const logoId = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ logo: string | null }>(
+        `SELECT NULLIF(branding->>'logoFileId', '') AS logo FROM schools WHERE id = app.current_school_id()`,
+      );
+      return r.rows[0]?.logo ?? null;
+    });
+    const dmy = (iso: string) => iso.slice(0, 10).split('-').reverse().join('-');
+    const money2 = (v: string) =>
+      Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const bytes = await purchaseStockPdf({
+      school: { name: t.school.name, address: t.school.address || null },
+      logo: await this.logo(ctx, logoId),
+      title: 'Fee certificate for income tax',
+      number: `${t.financialYear.name} / ${t.student.admissionNo}`,
+      generatedOn: registerGeneratedOn(),
+      watermark: null,
+      facts: [
+        ['Student', t.student.name],
+        ['Admission no.', t.student.admissionNo],
+        ['Class', t.student.section ?? '-'],
+        ['Parent / guardian', t.student.guardian ?? '-'],
+        [
+          'Financial year',
+          `${t.financialYear.name} (${dmy(t.financialYear.from)} to ${dmy(t.financialYear.to)})`,
+        ],
+        ['Issued on', dmy(t.issuedOn)],
+      ],
+      columns: [
+        { label: 'Date', width: 70 },
+        { label: 'Receipt no.', width: 110 },
+        { label: 'Mode', width: 60 },
+        { label: 'Fee head', width: 190 },
+        { label: 'Amount (Rs)', width: 90, right: true },
+      ],
+      rows: t.rows.map((r) => ({
+        cells: [
+          dmy(r.receivedOn),
+          r.receiptNo ?? '',
+          r.mode.toUpperCase(),
+          r.head,
+          money2(r.amount),
+        ],
+      })),
+      total: t.rows.length > 0 ? { label: 'Total', value: money2(t.total) } : undefined,
+      signatures: [blankBox('Authorised signatory')],
+      foot:
+        (t.rows.length > 0
+          ? `This is to certify that the fee above, ${t.totalWords}, was received by the school for this student during the financial year.`
+          : 'No fee that counts for the certificate was received in this financial year.') +
+        ' A computer-generated certificate from the school\u2019s fee records.',
+    });
+    return {
+      filename:
+        `tax-certificate-${t.student.admissionNo}-${t.financialYear.name}`.replace(
+          /[^A-Za-z0-9-]+/g,
+          '-',
+        ) + '.pdf',
+      contentType: 'application/pdf',
+      base64: bytes.toString('base64'),
+    };
   }
 
   // ---- provisional bill of a withdrawal (full and final) ---------------------------------------------

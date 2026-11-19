@@ -262,6 +262,158 @@ class S {
   String get noFees =>
       _t('No fee statement for this year yet.', 'इस वर्ष का शुल्क विवरण अभी नहीं है।');
 
+  // ---- Fees in the app, as the web Fees page (no web page; docs/design/89 "Fees in the app") ----
+  String get dueNow => _t('Due now', 'अभी देय');
+  String get lateFeeIncluded => _t('Late fee included', 'विलंब शुल्क सहित');
+  String get schoolFee => _t('School fee', 'विद्यालय शुल्क');
+  String get hostelFee => _t('Hostel fee', 'छात्रावास शुल्क');
+  String get otherFees => _t('Other fees', 'अन्य शुल्क');
+  String get feeSections => _t('Fee sections', 'शुल्क के भाग');
+  String payPlan(String plan) => _t('Pay plan: ${switch (plan) {
+    'monthly' => 'Monthly',
+    'quarterly' => 'Quarterly',
+    'half_yearly' => 'Half-yearly',
+    _ => 'Yearly',
+  }}', 'भुगतान योजना: ${switch (plan) {
+    'monthly' => 'मासिक',
+    'quarterly' => 'त्रैमासिक',
+    'half_yearly' => 'अर्धवार्षिक',
+    _ => 'वार्षिक',
+  }}');
+  String get hosteller => _t('Hosteller', 'छात्रावासी');
+  String transportOf(String route) => _t('Transport: $route', 'परिवहन: $route');
+  String discountOf(String list) => _t('Discount: $list', 'छूट: $list');
+  String get oldestFirst => _t(
+    'Tick the instalments to pay. They are paid the oldest first, so a tick takes the earlier ones with it.',
+    'जिन किस्तों का भुगतान करना है उन पर टिक करें। पहले सबसे पुरानी किस्त चुकाई जाती है, इसलिए एक टिक पिछली किस्तों को भी साथ ले लेता है।',
+  );
+  String feeOf(String amount) => _t('Fee $amount', 'शुल्क $amount');
+  String paidOf(String amount) => _t('Paid $amount', 'भुगतान $amount');
+  String get counterOnly =>
+      _t('Paid at the school fee counter only.', 'केवल विद्यालय के शुल्क काउंटर पर जमा होगा।');
+  String payInstalment(String label) => _t('Pay $label', '$label का भुगतान');
+  String get payThrough => _t('Pay through', 'भुगतान का माध्यम');
+  String convenienceCharge(String what) => _t('Convenience charge $what', 'सुविधा शुल्क $what');
+  String get noCharge => _t('No convenience charge', 'कोई सुविधा शुल्क नहीं');
+  String get totalToPay => _t('Total to pay', 'कुल देय');
+  String feePlusCharge(String fee, String charge) =>
+      _t('$fee + convenience charge $charge', '$fee + सुविधा शुल्क $charge');
+  String payAmount(String amount) => _t('Pay $amount', '$amount का भुगतान करें');
+  String get tickToPay => _t('Tick an instalment to pay', 'भुगतान के लिए किस्त पर टिक करें');
+  String get noGateway => _t(
+    'Online payment is not open for this fee yet. Please pay at the school fee counter.',
+    'इस शुल्क के लिए ऑनलाइन भुगतान अभी खुला नहीं है। कृपया विद्यालय के शुल्क काउंटर पर जमा करें।',
+  );
+  String get laterInstalments => _t(
+    'Later instalments appear when the school opens them.',
+    'आगे की किस्तें विद्यालय द्वारा खोले जाने पर दिखेंगी।',
+  );
+  String get noDemand =>
+      _t('No fee demand has been raised yet.', 'अभी कोई शुल्क माँग नहीं बनी है।');
+  String inHostel(String from, String to) =>
+      _t('In the hostel: $from – $to', 'छात्रावास में: $from – $to');
+  String get sessionStart => _t('session start', 'सत्र का आरंभ');
+  String get sessionEnd => _t('session end', 'सत्र का अंत');
+  String get miscHelpPay => _t(
+    'Fees announced by the school for a trip, an activity or a form. Pay online in full, or at the school fee counter.',
+    'यात्रा, गतिविधि या फ़ॉर्म के लिए विद्यालय द्वारा घोषित शुल्क। पूरा ऑनलाइन भुगतान करें, या विद्यालय के शुल्क काउंटर पर।',
+  );
+  String get miscHelpCounter => _t(
+    'Fees announced by the school for a trip, an activity or a form. They are paid at the school fee counter.',
+    'यात्रा, गतिविधि या फ़ॉर्म के लिए विद्यालय द्वारा घोषित शुल्क। ये विद्यालय के शुल्क काउंटर पर जमा होते हैं।',
+  );
+  String get noOtherFees => _t('No other fees.', 'कोई अन्य शुल्क नहीं।');
+  String lastDate(String d) => _t('Last date $d', 'अंतिम तिथि $d');
+  String amountOf(String a) => _t('Amount $a', 'राशि $a');
+  String get mandatory => _t('Mandatory', 'अनिवार्य');
+  String get optional => _t('Optional', 'वैकल्पिक');
+  String seatsOf(int taken, int of) => _t('Seats $taken/$of', 'सीटें $taken/$of');
+  String toPayOf(String a) => _t('To pay $a', 'देय $a');
+  String payOnlineOf(String a) => _t('Pay online $a', 'ऑनलाइन भुगतान $a');
+  String get noReceipts => _t('No receipts yet.', 'अभी कोई रसीद नहीं।');
+  String get bounced => _t('Bounced', 'अनादृत');
+  String refundedOf(String a) => _t('Refunded $a', 'वापस किया $a');
+  String partlyRefundedOf(String a) => _t('Partly refunded $a', 'आंशिक वापसी $a');
+  String get cancelledTag => _t('Cancelled', 'रद्द');
+  String clearedOn(String d) => _t('Cleared $d', 'समाशोधित $d');
+  String get settled => _t('Settled', 'निपटाया गया');
+  String get onlinePayments => _t('Online payments', 'ऑनलाइन भुगतान');
+  String intentStatus(String status) => switch (status) {
+    'succeeded' => _t('Paid', 'भुगतान हुआ'),
+    'failed' => _t('Failed', 'असफल'),
+    'expired' => _t('Expired', 'समाप्त'),
+    'cancelled' => _t('Cancelled', 'रद्द'),
+    _ => _t('Waiting', 'प्रतीक्षा में'),
+  };
+  String get receiptPdf => _t('Receipt PDF', 'रसीद PDF');
+  String get billAll => _t('All', 'सभी');
+  String get billRegular => _t('Regular', 'नियमित');
+  String get billHostel => _t('Hostel', 'छात्रावास');
+  String get billNo => _t('Bill no.', 'बिल सं.');
+  String get billDate => _t('Bill date', 'बिल तिथि');
+  String get sessionLabel => _t('Session', 'सत्र');
+  String get studentLabel => _t('Student', 'विद्यार्थी');
+  String get admissionNoLabel => _t('Admission no.', 'प्रवेश क्रमांक');
+  String get classLabel => _t('Class', 'कक्षा');
+  String get guardianLabel => _t('Parent / guardian', 'अभिभावक');
+  String get routeLabel => _t('Transport route', 'परिवहन मार्ग');
+  String get feeForSession => _t('Fee for the session', 'सत्र का शुल्क');
+  String get discountLabel => _t('Discount', 'छूट');
+  String get optionalHead => _t('optional', 'वैकल्पिक');
+  String scheduleOf(String ledger) => ledger == 'hostel'
+      ? _t('Hostel fee instalments', 'छात्रावास शुल्क की किस्तें')
+      : _t('School fee instalments', 'विद्यालय शुल्क की किस्तें');
+  String get payableCol => _t('Payable', 'देय');
+  String get balanceCol => _t('Balance', 'शेष');
+  String get summary => _t('Summary', 'सारांश');
+  String get dueLabel => _t('Due', 'देय');
+  String get receivedLabel => _t('Received', 'प्राप्त');
+  String get refundLabel => _t('Refund', 'वापसी');
+  String get advanceLabel => _t('Advance', 'अग्रिम');
+  String get balanceLabel => _t('Balance', 'शेष');
+  String get billNotMade =>
+      _t('The fee bill could not be made. Please try again.', 'फ़ीस बिल नहीं बन सका। फिर कोशिश करें।');
+  String get financialYear => _t('Financial year', 'वित्तीय वर्ष');
+  String get issuedOn => _t('Issued on', 'जारी तिथि');
+  String get taxHelp => _t(
+    'Tuition fee paid in a financial year, for your income-tax return.',
+    'आयकर रिटर्न के लिए, एक वित्तीय वर्ष में जमा ट्यूशन शुल्क।',
+  );
+  String get taxCertifies => _t(
+    'This is to certify that the following fee has been received by the school for the above student during the financial year.',
+    'प्रमाणित किया जाता है कि उपरोक्त विद्यार्थी के लिए वित्तीय वर्ष में विद्यालय को निम्न शुल्क प्राप्त हुआ है।',
+  );
+  String get noTaxFee => _t(
+    'No fee that counts for the certificate was received in this year.',
+    'इस वर्ष प्रमाण-पत्र में गिना जाने वाला कोई शुल्क प्राप्त नहीं हुआ।',
+  );
+  String get totalLabel => _t('Total', 'कुल');
+  String get amountInWords => _t('Amount in words', 'शब्दों में राशि');
+  String get computerMade => _t(
+    'A computer-generated certificate from the school’s fee records.',
+    'विद्यालय के शुल्क अभिलेखों से कंप्यूटर द्वारा बना प्रमाण-पत्र।',
+  );
+  String get taxNotAvailable => _t(
+    'The certificate is not available. Please contact the school office.',
+    'प्रमाण-पत्र उपलब्ध नहीं है। कृपया विद्यालय कार्यालय से संपर्क करें।',
+  );
+  String get paying => _t('Pay', 'भुगतान');
+  String get cancelPayment => _t('Stop paying?', 'भुगतान रोकें?');
+  String get cancelPaymentHelp => _t(
+    'Nothing is charged until you finish on the payment page.',
+    'भुगतान पृष्ठ पर पूरा करने तक कुछ नहीं कटता।',
+  );
+  String get keepPaying => _t('Go on paying', 'भुगतान जारी रखें');
+  String get stopPaying => _t('Stop', 'रोकें');
+  String get devGateway => _t('Development gateway', 'परीक्षण गेटवे');
+  String devGatewayHelp(String amount, String txn) => _t(
+    '$amount for transaction $txn. No money moves here; choose how the gateway should answer.',
+    'लेन-देन $txn के लिए $amount। यहाँ कोई पैसा नहीं जाता; चुनें कि गेटवे क्या उत्तर दे।',
+  );
+  String get paySuccess => _t('Pay (success)', 'भुगतान (सफल)');
+  String get payFail => _t('Fail the payment', 'भुगतान असफल करें');
+  String get choosePayThrough => _t('Choose how to pay', 'भुगतान का माध्यम चुनें');
+
   // the phone's unsent work (phase C)
   String get unsent => _t('Not sent yet', 'अभी नहीं भेजा गया');
   String unsentN(int n) => _t(

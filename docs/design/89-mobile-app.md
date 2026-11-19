@@ -560,3 +560,44 @@ PIN steps, today's classes, sign-in/code/PIN accessibility in light and dark —
 existing family and staff accessibility and large-text checks pass on the new screens). A headless run of the web
 build on the test schools (parent, student, staff) matched the design; with a test logo the unlock screen showed the
 school's crest and name.
+
+## As built — Fees in the app, with no web page (19 Nov 2026)
+
+The user asked for the parent app's Fees to be the web app's `/fees` page, with no web page called. Decided with the
+user: **the gateway's own page opens inside the app** (card, UPI and net-banking details must be typed on the
+gateway's page: RBI and card-security rules), and **the fee bill and tax certificate as app screens with View and
+Download of their PDF**.
+
+**On the screen** (`family/fees.dart`): the child, class and session with the pay plan, hostel, transport and
+discounts; Due now (late fee included), School fee, Hostel fee (a hosteller) and Other fees as figures; sections as
+chips that wrap — **School fee / Hostel fee** (instalments ticked the oldest first, everything due today ticked to
+start; rows kept off online payment say "Paid at the school fee counter only"; the gateways with their convenience
+charge; the total; Pay), **Other fees** (trips, activities, forms: last date, amount, seats, Pay online in full, the
+gateway chosen when there are several), **Receipts** (school/hostel tag, bounced, refunded, cancelled, cleared or
+settled; View and Download; the online payments with their status), **Fee bill** (All / Regular / Hostel; the
+particulars, fee heads, each fee's instalments, receipts and the summary with the balance in words; its PDF) and the
+**tax certificate** (`family/fee_papers.dart`: financial year, the receipts that count, total in words; its PDF). The
+same rules as the web pay panel (`family/fee_pay.dart`: `openRows`, `firstUpTo`, `feeFor`, `chargeOn`).
+
+**Paying** (`fee_pay.dart`): the app starts the payment itself (`POST /payments/intents/mine` or `/mine/misc` with
+`app: mobile`) and opens `CheckoutScreen`: a few lines of its own HTML that hand over to the gateway (the auto-posted
+form for PayU / CCAvenue / SBI ePay, Razorpay's checkout, Atom's script — only from Atom's addresses; values
+escaped), opened from the school's registered web address so a gateway that checks where a payment comes from sees
+the same one as from the website. The gateway still returns to the parent web app's registered return endpoint
+(`/api/payments/return`, a server route: no page); for a phone payment the intent's return address is
+`/api/payments/mobile-done?student=…` (`PaymentsService.familyReturn`), which the checkout view watches for and
+closes on, reading `paid`; that route only answers a plain line if it is ever loaded (public, no session). UPI app
+links from a gateway's page open outside the app. In development (mock mode) the app shows the development gateway's
+two answers itself (`POST /payments/payu/mock`, refused outside mock mode). After a payment the ledger, other fees and
+online payments are fetched again; a paid one opens Receipts.
+
+**API**: `app: 'web' | 'mobile'` on the two family intent bodies; `GET /fees/mine/tax-certificate/file` (the PDF:
+the school's letterhead as the store papers print it, the facts, the receipts that count, the total, a box for the
+authorised signatory, the certify line). The old "Pay" and "Tax certificate" web pages are no longer opened by the
+app (`WebPageScreen` lost its return watcher).
+
+**Checks**: API e2e (`collect-and-pay`: a phone payment's return address and the gateway's registered return; the
+tax certificate PDF, own child only); app tests 73 (the pay rules, the escaping of the hand-over page, the end
+address; Fees end to end with the development gateway, other fees, receipts, bill and tax certificate; light, dark,
+Hindi accessibility and double-size text on every Fees part); a headless pass of the web build on a test school.
+Live payment waits for the schools' gateway accounts (the fee module's phase 2).

@@ -291,6 +291,42 @@ class EduProApi {
   /// GET /public/schools/{schoolCode}/logo — The school’s logo (base64)
   Future<dynamic> publicSchoolLogo({required String schoolCode}) =>
       _t.send('GET', '/public/schools/${Uri.encodeComponent(schoolCode)}/logo');
+
+  /// GET /fees/mine/bill — The fee bill of one of the family's children, for the whole session
+  Future<dynamic> feesMyBill({required String studentId, String? ledger}) =>
+      _t.send('GET', '/fees/mine/bill', query: {'studentId': studentId, if (ledger != null) 'ledger': ledger});
+
+  /// GET /fees/mine/tax-certificate — A parent's tax certificate for one of their children
+  Future<dynamic> feesMyTaxCertificate({required String studentId, String? financialYearId}) =>
+      _t.send('GET', '/fees/mine/tax-certificate', query: {'studentId': studentId, if (financialYearId != null) 'financialYearId': financialYearId});
+
+  /// GET /fees/mine/tax-certificate/file — A parent's tax certificate for one of their children, as a PDF
+  Future<ApiFile> feesMyTaxCertificateFile({required String studentId, String? financialYearId}) =>
+      _t.file('GET', '/fees/mine/tax-certificate/file', query: {'studentId': studentId, if (financialYearId != null) 'financialYearId': financialYearId});
+
+  /// GET /fees/misc-fees/mine — The misc fees announced for one's own children
+  Future<dynamic> miscFeesMine() =>
+      _t.send('GET', '/fees/misc-fees/mine');
+
+  /// GET /payments/intents/mine — The family's own online payments (recent first)
+  Future<dynamic> paymentsMine() =>
+      _t.send('GET', '/payments/intents/mine');
+
+  /// POST /payments/intents/mine — A guardian starts an online payment for one of their children
+  Future<dynamic> paymentsCreateMine({required CreateFamilyIntentDto body}) =>
+      _t.send('POST', '/payments/intents/mine', body: body.toJson());
+
+  /// POST /payments/intents/mine/misc — A guardian pays a child's misc fee online, in full
+  Future<dynamic> paymentsCreateMineMisc({required CreateFamilyMiscIntentDto body}) =>
+      _t.send('POST', '/payments/intents/mine/misc', body: body.toJson());
+
+  /// GET /payments/gateways/options — The gateways a fee may be paid through, with their convenience charge
+  Future<dynamic> paymentsGatewayOptions({String? ledger}) =>
+      _t.send('GET', '/payments/gateways/options', query: {if (ledger != null) 'ledger': ledger});
+
+  /// POST /payments/payu/mock — Development gateway: signs and applies a success or failure for a transaction
+  Future<dynamic> paymentsMock({required MockPayDto body}) =>
+      _t.send('POST', '/payments/payu/mock', body: body.toJson());
 }
 
 /** The OtpStartDto the API takes. */
@@ -661,5 +697,48 @@ class PushEventsOffDto {
   final List<String> off;
   Map<String, Object?> toJson() => {
         'off': off,
+      };
+}
+
+/** The CreateFamilyIntentDto the API takes. */
+class CreateFamilyIntentDto {
+  const CreateFamilyIntentDto({required this.studentId, required this.amount, this.ledger, this.gatewayId, this.app});
+  final String studentId;
+  final num amount;
+  final String? ledger;
+  final String? gatewayId;
+  final String? app;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'amount': amount,
+        if (ledger != null) 'ledger': ledger,
+        if (gatewayId != null) 'gatewayId': gatewayId,
+        if (app != null) 'app': app,
+      };
+}
+
+/** The CreateFamilyMiscIntentDto the API takes. */
+class CreateFamilyMiscIntentDto {
+  const CreateFamilyMiscIntentDto({required this.lineId, this.gatewayId, this.returnTo, this.app});
+  final String lineId;
+  final String? gatewayId;
+  final String? returnTo;
+  final String? app;
+  Map<String, Object?> toJson() => {
+        'lineId': lineId,
+        if (gatewayId != null) 'gatewayId': gatewayId,
+        if (returnTo != null) 'returnTo': returnTo,
+        if (app != null) 'app': app,
+      };
+}
+
+/** The MockPayDto the API takes. */
+class MockPayDto {
+  const MockPayDto({required this.txnid, this.outcome});
+  final String txnid;
+  final String? outcome;
+  Map<String, Object?> toJson() => {
+        'txnid': txnid,
+        if (outcome != null) 'outcome': outcome,
       };
 }

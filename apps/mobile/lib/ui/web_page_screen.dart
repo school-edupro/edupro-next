@@ -29,36 +29,19 @@ final webLinkProvider = FutureProvider.autoDispose.family<String, (String, Strin
   return '${r['url']}';
 });
 
-/// A web app page inside the app, for the screens that have no native one yet. With [doneWhen], the page closes
-/// itself when the web app reaches an address it matches (the fee payment's return to `/fees?paid=`) and hands the
-/// address back.
+/// A web app page inside the app, for the screens that have no native one yet (fees have their own screens and
+/// pay through the gateway's page only: family/fee_pay.dart).
 class WebPageScreen extends ConsumerStatefulWidget {
-  const WebPageScreen({
-    super.key,
-    required this.app,
-    required this.to,
-    required this.title,
-    this.doneWhen,
-  });
+  const WebPageScreen({super.key, required this.app, required this.to, required this.title});
   final String app;
   final String to;
   final String title;
-  final bool Function(Uri url)? doneWhen;
 
   @override
   ConsumerState<WebPageScreen> createState() => _WebPageScreenState();
 }
 
 class _WebPageScreenState extends ConsumerState<WebPageScreen> {
-  bool _done = false;
-
-  void _watch(WebUri? url) {
-    final u = url?.uriValue;
-    if (_done || u == null || widget.doneWhen == null || !widget.doneWhen!(u)) return;
-    _done = true;
-    Navigator.of(context).pop(u);
-  }
-
   @override
   Widget build(BuildContext context) {
     final link = ref.watch(webLinkProvider((widget.app, widget.to)));
@@ -76,8 +59,6 @@ class _WebPageScreenState extends ConsumerState<WebPageScreen> {
             mediaPlaybackRequiresUserGesture: true,
             allowsInlineMediaPlayback: true,
           ),
-          onUpdateVisitedHistory: (_, url, _) => _watch(url),
-          onLoadStop: (_, url) => _watch(url),
         ),
       ),
     );

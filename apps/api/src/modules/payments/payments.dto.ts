@@ -41,6 +41,8 @@ export const CreateFamilyIntentSchema = z.object({
   ledger: z.enum(['school', 'hostel']).default('school'),
   /** the gateway the payer chose, when the fee has more than one */
   gatewayId: IdSchema.optional(),
+  /** where the payer comes back: the parent web app's fees page, or the phone app (docs/design/89) */
+  app: z.enum(['web', 'mobile']).default('web'),
 });
 export class CreateFamilyIntentDto extends createZodDto(CreateFamilyIntentSchema) {}
 
@@ -50,6 +52,8 @@ export const CreateFamilyMiscIntentSchema = z.object({
   gatewayId: IdSchema.optional(),
   /** where the payer comes back: the fees page (default) or the consent forms page */
   returnTo: z.enum(['fees', 'consents']).default('fees'),
+  /** the phone app: the payer comes back to the app, not to a web page */
+  app: z.enum(['web', 'mobile']).default('web'),
 });
 export class CreateFamilyMiscIntentDto extends createZodDto(CreateFamilyMiscIntentSchema) {}
 

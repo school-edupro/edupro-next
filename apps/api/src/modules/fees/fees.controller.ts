@@ -525,6 +525,13 @@ export class FeesController {
     return this.papers.myTaxCertificate(ctx, q.studentId, q.financialYearId);
   }
 
+  @Get('mine/tax-certificate/file')
+  @ApiOperation({ summary: "A parent's tax certificate for one of their children, as a PDF" })
+  @RequirePermission(FEES.familyView)
+  myTaxCertificateFile(@ReqCtx() ctx: RequestContext, @Query() q: MyTaxCertificateQueryDto) {
+    return this.papers.myTaxCertificateFile(ctx, q.studentId, q.financialYearId);
+  }
+
   @Get('students/:id/fnf')
   @ApiOperation({ summary: 'Provisional bill of a withdrawal: payable and refundable' })
   @RequirePermission(FEES.ledgerView)
