@@ -269,8 +269,8 @@ class EduProApi {
       _t.file('GET', '/payroll/me/payslips/${Uri.encodeComponent(recordId)}');
 
   /// GET /approvals/inbox — Everything waiting for my decision, every kind, one shape
-  Future<dynamic> approvalsInbox({String? kind}) =>
-      _t.send('GET', '/approvals/inbox', query: {if (kind != null) 'kind': kind});
+  Future<dynamic> approvalsInbox({String? kind, String? view}) =>
+      _t.send('GET', '/approvals/inbox', query: {if (kind != null) 'kind': kind, if (view != null) 'view': view});
 
   /// POST /approvals/{kind}/{id}/decision — Approve or reject one item through its own route
   Future<dynamic> approvalsDecide({required ApprovalDecisionDto body, required String kind, required String id}) =>
