@@ -6,6 +6,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
+import '../family/teachers.dart';
 import '../family/academics.dart';
 import '../family/fees.dart';
 import '../family/profile.dart';
@@ -86,6 +87,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/notices' => NoticesList(profile: p),
     // the profile, its changes, Your data and consents: on the phone, no web page
     '/profile' => ProfileScreen(profile: p),
+    // who teaches the child, with the contact the school shows: on the phone, no web page
+    '/teachers' => TeachersScreen(profile: p),
     _ => null,
   };
 }

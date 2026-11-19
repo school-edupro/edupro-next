@@ -491,6 +491,29 @@ class S {
   String get profileTitle => _t('Profile', 'प्रोफ़ाइल');
   String get rollNo => _t('Roll no', 'अनुक्रमांक');
   String get classTeacher => _t('Class teacher', 'कक्षा अध्यापक');
+  String get teachersHelp => _t(
+    'The class teacher and the teacher of each subject.',
+    'कक्षा अध्यापक और हर विषय के शिक्षक।',
+  );
+  String teacherRole(String role) => switch (role) {
+    'class_teacher' => classTeacher,
+    'co_class_teacher' => _t('Co-class teacher', 'सह-कक्षा अध्यापक'),
+    _ => _t('Subject teacher', 'विषय शिक्षक'),
+  };
+  String get mobileLabel => _t('Mobile', 'मोबाइल');
+  String get emailLabel => _t('E-mail', 'ई-मेल');
+  String callWho(String name) => _t('Call $name', '$name को फ़ोन करें');
+  String emailWho(String name) => _t('E-mail $name', '$name को ई-मेल करें');
+  String get noTeachers => _t(
+    'The school has not assigned teachers to this class yet.',
+    'विद्यालय ने अभी इस कक्षा के शिक्षक तय नहीं किए हैं।',
+  );
+  String get contactMasked => _t(
+    'The school shows part of the number and e-mail only. To reach a teacher, raise a query or book an '
+        'appointment from the Help desk.',
+    'विद्यालय नंबर और ई-मेल का केवल कुछ भाग दिखाता है। शिक्षक से संपर्क के लिए हेल्प डेस्क से प्रश्न भेजें या '
+        'मुलाक़ात का समय लें।',
+  );
   String get profileComplete => _t('Profile complete', 'प्रोफ़ाइल पूर्ण');
   String get downloadProfile => _t('Download profile (PDF)', 'प्रोफ़ाइल डाउनलोड करें (PDF)');
   String get profilePdf => _t('Profile (PDF)', 'प्रोफ़ाइल (PDF)');

@@ -666,3 +666,13 @@ parent's child or a student), the same three views as apps/parent/app/(app)/atte
   **certificate or letter from the phone** (PDF or photo, 5 MB each, several; uploaded as files and sent as
   `fileIds`); the certificate rules per kind are listed and a leave that needs one is not sent without it. The web
   page is no longer opened for it.
+
+## As built — My teachers (19 Nov 2026)
+
+**My teachers in the app, with no web page** (`family/teachers.dart`; More → My teachers, for a parent's child or a
+student), as apps/parent/app/(app)/teachers: the child and class; "The class teacher and the teacher of each
+subject."; a card per teacher, the class teacher first (`GET academics/my-teachers`): the photo
+(`GET academics/my-teachers/:employeeId/photo`, fetched through the app's API address) or the initials, the name,
+the role (Class teacher / Co-class teacher / Subject teacher), the subjects, the designation, and the contact the
+school shows. In full: the number and e-mail are buttons that call or write from the phone. In part: shown as they
+are, with the note to raise a query or book an appointment from the Help desk. Hidden: not shown.

@@ -92,6 +92,31 @@ final attendanceYearProvider = FutureProvider.autoDispose.family<Loaded<Json?>, 
   return Loaded(childIn(asJson(r.data)['children'], p), r.at, stale: r.stale);
 });
 
+/// Who teaches the child (the class teacher first, then each subject's teacher) and how much of their contact the
+/// school shows (`full`, `masked` or `hidden`): `{contact, child}`.
+final myTeachersProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((ref, p) async {
+  final r = await cached('teachers:${p.id}', () => _api(ref).academicSettingsMyTeachers());
+  final j = asJson(r.data);
+  return Loaded(
+    {'contact': asJson(j['contact']), 'child': childIn(j['students'], p)},
+    r.at,
+    stale: r.stale,
+  );
+});
+
+/// A teacher's photo for the family (the API checks the teacher teaches the child); none when it cannot be had.
+final teacherPhotoProvider = FutureProvider.autoDispose.family<ApiFile?, String>((
+  ref,
+  employeeId,
+) async {
+  try {
+    final f = await _api(ref).academicSettingsTeacherPhoto(employeeId: employeeId);
+    return RegExp(r'^image/(png|jpeg|webp)$').hasMatch(f.contentType) ? f : null;
+  } on ApiException {
+    return null;
+  }
+});
+
 /// The child's leave applications, the kinds of leave and the school's rules for them.
 final leavesProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((ref, p) async {
   final r = await cached('leave:${p.id}', () => _api(ref).leaveMine());

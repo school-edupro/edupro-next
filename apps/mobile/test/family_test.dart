@@ -41,6 +41,9 @@ class School {
 
   /// the school takes queries from this parent: the menu has the Queries page
   bool queries = false;
+
+  /// the school shows the teachers' numbers and e-mails in full (otherwise in part)
+  bool teachersFull = false;
   int statusPolls = 0;
   final leaves = <Map<String, Object?>>[
     {
@@ -113,6 +116,7 @@ class School {
               'icon': 'users',
               'items': [
                 {'href': '/profile', 'label': 'Profile', 'help': null, 'icon': 'user'},
+                {'href': '/teachers', 'label': 'My teachers', 'help': null, 'icon': 'users'},
               ],
             },
             if (queries)
@@ -153,6 +157,50 @@ class School {
             },
           ],
         };
+      case 'GET /academics/my-teachers':
+        final how = teachersFull ? 'full' : 'masked';
+        return {
+          'contact': {'mobile': how, 'email': how},
+          'students': [
+            {
+              'id': '41',
+              'name': 'Kid Sample',
+              'section': 'VI-A',
+              'teachers': [
+                {
+                  'employeeId': '51',
+                  'name': 'Tara Teacher',
+                  'designation': 'TGT',
+                  'role': 'class_teacher',
+                  'subjects': ['English'],
+                  'mobile': teachersFull ? '9000000051' : '90XXXXXX51',
+                  'email': teachersFull ? 'tara@example.test' : 't***@example.test',
+                  'hasPhoto': true,
+                },
+                {
+                  'employeeId': '52',
+                  'name': 'Sam Tutor',
+                  'designation': null,
+                  'role': 'subject_teacher',
+                  'subjects': ['Maths', 'Science'],
+                  'mobile': null,
+                  'email': null,
+                  'hasPhoto': false,
+                },
+              ],
+            },
+            {'id': '99', 'name': 'Another Child', 'section': 'II-B', 'teachers': []},
+          ],
+        };
+      case 'GET /academics/my-teachers/51/photo':
+        // a 1 × 1 PNG
+        return ApiFile(
+          bytes: base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+          ),
+          contentType: 'image/png',
+          name: 'photo.png',
+        );
       case 'GET /attendance/bus-roll/mine':
         return {
           'month': c.query?['month'],
@@ -1344,6 +1392,57 @@ void main() {
     expect(find.byKey(const Key('leaveOnWeb')), findsNothing);
   });
 
+  Future<void> openTeachers(WidgetTester tester) async {
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'My teachers'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'My teachers in the app, as on the website: class teacher first, photo, subjects, contact in part',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final (t, _) = await pumpFamily(tester, kind: 'student');
+      await openTeachers(tester);
+      expect(t.calls.any((c) => c.path == '/academics/my-teachers'), isTrue);
+      expect(find.text('Kid Sample · VI-A'), findsOneWidget);
+      expect(find.text('The class teacher and the teacher of each subject.'), findsOneWidget);
+      // the class teacher first, with the photo from the API; the subject teacher with initials
+      expect(
+        tester.getTopLeft(find.byKey(const Key('teacher-51'))).dy,
+        lessThan(tester.getTopLeft(find.byKey(const Key('teacher-52'))).dy),
+      );
+      expect(find.text('Class teacher'), findsOneWidget);
+      expect(find.text('Subject teacher'), findsOneWidget);
+      expect(t.calls.any((c) => c.path == '/academics/my-teachers/51/photo'), isTrue);
+      expect(find.byKey(const Key('teacherPhoto-51')), findsOneWidget);
+      expect(find.text('ST'), findsOneWidget);
+      expect(find.text('Subject: Maths, Science'), findsOneWidget);
+      expect(find.text('TGT'), findsOneWidget);
+      // in part: shown as it is, nothing to tap, and where to reach the teacher
+      expect(find.text('Mobile: 90XXXXXX51'), findsOneWidget);
+      expect(find.byKey(const Key('call-51')), findsNothing);
+      expect(find.byKey(const Key('contactMasked')), findsOneWidget);
+      expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
+    },
+  );
+
+  testWidgets('My teachers: a number and e-mail the school shows in full can be tapped', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final school = School()..teachersFull = true;
+    await pumpFamily(tester, school: school);
+    await openTeachers(tester);
+    expect(find.byKey(const Key('call-51')), findsOneWidget);
+    expect(find.byKey(const Key('mail-51')), findsOneWidget);
+    expect(find.bySemanticsLabel('Call Tara Teacher'), findsOneWidget);
+    expect(find.byKey(const Key('contactMasked')), findsNothing);
+  });
+
   testWidgets('homework: due first, by day; "I have seen this" and an attachment', (tester) async {
     final (t, _) = await pumpFamily(tester);
     await tester.tap(find.text('Academics'));
@@ -1730,6 +1829,12 @@ void main() {
         await scrollTo(tester, find.byKey(const Key('yourData')));
         await tester.tap(find.byKey(const Key('yourData')));
         await check('Your data');
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(ListTile, s.menu('My teachers')));
+        await check('My teachers');
         handle.dispose();
       },
     );
@@ -1840,6 +1945,14 @@ void main() {
     await tester.tap(find.byKey(const Key('yourData')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Your data');
+    // My teachers
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'My teachers'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'My teachers');
   });
 
   test('the copies are kept per profile and wiped at sign-out', () async {

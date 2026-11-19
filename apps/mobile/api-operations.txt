@@ -32,6 +32,8 @@ LeaveController_cancel
 LeaveController_myFile !file
 AttendanceDeskController_familyYear
 BusRollController_mine
+AcademicSettingsController_myTeachers
+AcademicSettingsController_teacherPhoto !file
 DailyWorkController_viewerInfo
 DailyWorkController_list
 DailyWorkController_file !file

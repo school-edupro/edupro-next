@@ -100,6 +100,14 @@ class EduProApi {
   Future<dynamic> busRollMine({String? month}) =>
       _t.send('GET', '/attendance/bus-roll/mine', query: {if (month != null) 'month': month});
 
+  /// GET /academics/my-teachers — The class teacher and subject teachers of the family's children
+  Future<dynamic> academicSettingsMyTeachers() =>
+      _t.send('GET', '/academics/my-teachers');
+
+  /// GET /academics/my-teachers/{employeeId}/photo
+  Future<ApiFile> academicSettingsTeacherPhoto({required String employeeId}) =>
+      _t.file('GET', '/academics/my-teachers/${Uri.encodeComponent(employeeId)}/photo');
+
   /// GET /academics/daily-work/viewer — Who is reading: the sections a teacher covers or the children of a guardian
   Future<dynamic> dailyWorkViewerInfo() =>
       _t.send('GET', '/academics/daily-work/viewer');
