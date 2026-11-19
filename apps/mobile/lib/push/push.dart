@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/endpoints.g.dart';
 import '../app_services.dart';
+import '../app.dart';
 import '../config.dart';
+import 'links.dart';
 
 /// Push notifications (docs/design/89 §5.3): the phone's Firebase token is registered as the app `mobile` with the
 /// school of the profile in use (again on each switch — the API keeps one row a school and token); the API sends
@@ -15,12 +17,26 @@ class Push {
   final Ref ref;
   String? _token;
 
+  bool _listening = false;
+
+  void _listen(FirebaseMessaging m) {
+    if (_listening) return;
+    _listening = true;
+    // tapped while the app was in the background
+    FirebaseMessaging.onMessageOpenedApp.listen((msg) => openFromPush(ref, msg.data));
+    // tapped while the app was closed
+    m.getInitialMessage().then((msg) {
+      if (msg != null) openFromPush(ref, msg.data);
+    });
+  }
+
   Future<void> registerForCurrentSchool() async {
     if (!AppConfig.pushEnabled) return;
     try {
       if (_token == null) {
         await Firebase.initializeApp();
         final m = FirebaseMessaging.instance;
+        _listen(m);
         final allowed = await m.requestPermission();
         if (allowed.authorizationStatus == AuthorizationStatus.denied) return;
         // TODO(phase D): register() and onRegistered (installation ids) once the workers send to them; the
@@ -40,6 +56,19 @@ class Push {
       // push is a help, never a reason the app does not open
     }
   }
+}
+
+/// A tapped notification opens the page it is about (the profile switched to the school and child it names).
+void openFromPush(Ref ref, Map<String, dynamic> data) {
+  if (LinkTarget.fromData(data) == null) return;
+  ref
+      .read(routerProvider)
+      .push(
+        Uri(
+          path: '/open',
+          queryParameters: {for (final e in data.entries) e.key: '${e.value}'},
+        ).toString(),
+      );
 }
 
 final pushProvider = Provider<Push>(Push.new);

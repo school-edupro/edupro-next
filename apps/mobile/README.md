@@ -12,7 +12,11 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000   # Android emulator
 
 Build settings (`--dart-define`): `API_BASE_URL` (default `http://localhost:4000`), `PUSH=true` once the EduPro
 Firebase project's files are in `android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist`,
-`SENTRY_DSN` for crash reports (no personal data is sent), `APP_VERSION`.
+`SENTRY_DSN` for crash reports (no personal data is sent), `APP_VERSION` (else the pubspec's version, read at start).
+
+The API decides when an app must update: `MOBILE_MIN_VERSION`, `MOBILE_LATEST_VERSION`, `MOBILE_STORE_URL_ANDROID`,
+`MOBILE_STORE_URL_IOS` (`GET /auth/mobile/app-version`). The fonts (Poppins, Source Sans 3, SIL Open Font License) ship
+in `assets/fonts`.
 
 ## Generated sources (never edit by hand)
 
@@ -49,6 +53,9 @@ flutter analyze && flutter test
   (`family/data.dart`, wiped at sign-out) and shows it when there is no network.
 - Staff screens (`lib/staff/`, phase C): My day, mark a class, my attendance and corrections, my leave, homework,
   marks, timetable, payslips, and the Approvals inbox (`GET /approvals/inbox`) in the bar.
+- Notifications: a tap (or a shared link) goes to `/open?link=…&event=…&schoolId=…&studentId=…`, which switches to the
+  profile it is about and opens the screen (`lib/push/links.dart`, `ui/link_opener.dart`); Settings → Notifications
+  switches kinds off per school (`/comms/push/events`).
 - Writes that must not be lost go through the outbox (`lib/api/outbox.dart`): kept on the phone with no network and
   sent later with an `Idempotency-Key` (the API answers a repeat with the first answer). Other online writes that may be
   retried pass a key with `withCall(CallOptions(idempotencyKey: …), …)`.

@@ -16,6 +16,7 @@ import { CompatParityController } from './compat-parity.controller';
 import { CompatParityService } from './compat-parity.service';
 import { CompatController } from './compat.controller';
 import { CompatService } from './compat.service';
+import { OldAppsController } from './old-apps.controller';
 
 /** S4 handshake, S5 reads, S11 teacher-app writes (homework, attendance, notices), S20 parity endpoints. */
 @Module({
@@ -35,6 +36,7 @@ import { CompatService } from './compat.service';
     CompatReadsController,
     CompatWritesController,
     CompatParityController,
+    OldAppsController,
   ],
   providers: [CompatService, CompatReadsService, CompatWritesService, CompatParityService],
   exports: [CompatService],

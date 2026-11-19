@@ -275,6 +275,18 @@ class EduProApi {
   /// POST /approvals/{kind}/{id}/decision — Approve or reject one item through its own route
   Future<dynamic> approvalsDecide({required ApprovalDecisionDto body, required String kind, required String id}) =>
       _t.send('POST', '/approvals/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/decision', body: body.toJson());
+
+  /// GET /comms/push/events — The kinds of push the school sends and those I switched off
+  Future<dynamic> commsPushEvents() =>
+      _t.send('GET', '/comms/push/events');
+
+  /// PUT /comms/push/events — Switch kinds of push off (or back on) for me in this school
+  Future<dynamic> commsPushSetEvents({required PushEventsOffDto body}) =>
+      _t.send('PUT', '/comms/push/events', body: body.toJson());
+
+  /// GET /auth/mobile/app-version — Mobile app: whether this version must (or may) be updated, and the store link
+  Future<dynamic> mobileAuthAppVersion({String? platform, String? version}) =>
+      _t.send('GET', '/auth/mobile/app-version', query: {if (platform != null) 'platform': platform, if (version != null) 'version': version});
 }
 
 /** The OtpStartDto the API takes. */
@@ -636,5 +648,14 @@ class ApprovalDecisionDto {
   Map<String, Object?> toJson() => {
         'decision': decision,
         if (reason != null) 'reason': reason,
+      };
+}
+
+/** The PushEventsOffDto the API takes. */
+class PushEventsOffDto {
+  const PushEventsOffDto({required this.off});
+  final List<String> off;
+  Map<String, Object?> toJson() => {
+        'off': off,
       };
 }

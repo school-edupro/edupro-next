@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
+import { PushService } from '../comms/push.service';
 import { FilesService } from '../files/files.service';
 import type {
   LeaveApplyDto,
@@ -77,6 +78,7 @@ export class LeaveService {
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
     private readonly files: FilesService,
+    private readonly push: PushService,
   ) {}
 
   private year(ctx: RequestContext): string {
@@ -433,6 +435,7 @@ export class LeaveService {
         [id],
       );
       await this.start(c, id, dto.studentId, yearId, long ? 'long' : 'short');
+      await this.tellWaiting(c, ctx, id);
       await this.audit.stage(ctx, c, {
         action: 'attendance.leave.apply',
         entityType: 'student_leaves',
@@ -559,6 +562,42 @@ export class LeaveService {
     });
   }
 
+  /** The approvers of the level a leave now waits at hear of it (docs/design/89 §5.4). */
+  private async tellWaiting(c: PoolClient, ctx: RequestContext, id: string) {
+    const l = await this.find(c, id);
+    const who = await c.query<{ ids: string[] | null }>(
+      `SELECT approver_user_ids::text[] AS ids FROM student_leave_approvals
+        WHERE leave_id = $1 AND status = 'pending' ORDER BY seq LIMIT 1`,
+      [id],
+    );
+    await this.push.send(c, ctx, {
+      userIds: (who.rows[0]?.ids ?? []).filter((u) => u !== ctx.user.id),
+      title: 'Leave to approve',
+      body: `${l.student}${l.section ? ` (${l.section})` : ''}: ${l.leaveTypeLabel}, ${l.fromDate === l.toDate ? l.fromDate : `${l.fromDate} to ${l.toDate}`}`,
+      link: `/leaves?tab=inbox&open=${id}`,
+      event: 'approvals',
+    });
+  }
+
+  /** The family (the student's guardians and the student) hears the decision. */
+  private async tellFamily(c: PoolClient, ctx: RequestContext, id: string) {
+    const l = await this.find(c, id);
+    const fam = await c.query<{ id: string }>(
+      `SELECT g.user_id::text AS id FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+        WHERE sg.student_id = $1 AND g.user_id IS NOT NULL AND g.deleted_at IS NULL
+       UNION SELECT s.user_id::text FROM students s WHERE s.id = $1 AND s.user_id IS NOT NULL`,
+      [l.studentId],
+    );
+    await this.push.send(c, ctx, {
+      userIds: fam.rows.map((x) => x.id),
+      title: l.status === 'approved' ? 'Leave approved' : 'Leave not approved',
+      body: `${l.student}: ${l.fromDate === l.toDate ? l.fromDate : `${l.fromDate} to ${l.toDate}`}${l.decisionNote ? ` · ${l.decisionNote}` : ''}`,
+      link: '/attendance?view=leave',
+      event: 'attendance',
+      studentId: l.studentId,
+    });
+  }
+
   async decide(ctx: RequestContext, id: string, dto: LeaveDecideDto) {
     this.assertHolds(ctx, DECIDE, SETUP);
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -598,6 +637,9 @@ export class LeaveService {
           [id],
         );
       }
+      // the next level's approvers, or the family once decided, hear of it
+      if (final) await this.tellFamily(c, ctx, id);
+      else await this.tellWaiting(c, ctx, id);
       await this.audit.stage(ctx, c, {
         action: `attendance.leave.${dto.outcome}`,
         entityType: 'student_leaves',

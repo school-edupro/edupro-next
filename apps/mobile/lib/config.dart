@@ -13,5 +13,7 @@ abstract final class AppConfig {
   static const sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
 
   /// The app's own version, sent with the phone's session.
-  static const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
+  /// The installed version: the build's `APP_VERSION` when given, else the app's own (pubspec), read at start-up.
+  static String appVersion = const String.fromEnvironment('APP_VERSION', defaultValue: '1.0.0');
+  static const versionGiven = bool.hasEnvironment('APP_VERSION');
 }

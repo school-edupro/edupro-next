@@ -116,7 +116,9 @@ describe('permission coverage', () => {
       // the mobile app (docs/design/89): verify checks the one-time code as OtpController.verify does; refresh
       // takes a 256-bit refresh token kept only as a keyed hash, bound to the device, rotated at each use (an old
       // one again signs the phone out); redeem turns a 60-second single-use link, bound to its web app and the
-      // phone's open session, into that web app's session
+      // phone's open session, into that web app's session; appVersion says only whether a version must be updated
+      // (no data: the minimum and latest versions and the store link, as the old apps' app_version)
+      'MobileAuthController.appVersion (auth/mobile)',
       'MobileAuthController.redeem (auth/mobile)',
       'MobileAuthController.refresh (auth/mobile)',
       'MobileAuthController.verify (auth/mobile)',

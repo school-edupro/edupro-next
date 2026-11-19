@@ -466,6 +466,16 @@ SETTINGS_CATALOGUE['compat.app_force_below'] = {
   module: 'platform',
 };
 
+// docs/design/89 phase D: moving the old apps' users to the one EduPro app — what the old apps' update prompt says
+// (e.g. "Install the new EduPro app: <link>"); empty keeps the old words
+SETTINGS_CATALOGUE['compat.app_update_message'] = {
+  schema: z.string().max(300),
+  default: '',
+  description:
+    'What the old school apps show when an update is due (e.g. to install the new EduPro app, with its link)',
+  module: 'platform',
+};
+
 // ---- Sprints 22-23: pilot feature flags, cut-over tolerance, hypercare SLAs ----
 export const MODULE_FLAGS = [
   'people',

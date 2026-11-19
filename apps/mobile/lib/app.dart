@@ -6,7 +6,10 @@ import 'api/outbox.dart';
 import 'auth/auth_controller.dart';
 import 'l10n/strings.dart';
 import 'theme/theme.dart';
+import 'push/links.dart';
 import 'ui/home_shell.dart';
+import 'ui/link_opener.dart';
+import 'ui/update_gate.dart';
 import 'ui/pin_screen.dart';
 import 'ui/settings_screen.dart';
 import 'ui/sign_in_screen.dart';
@@ -44,6 +47,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/pin/set', builder: (_, _) => const PinScreen(setting: true)),
       GoRoute(path: '/', builder: (_, _) => const HomeShell()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+      // a tapped notification or a shared link: /open?link=/homework&schoolId=7&studentId=41
+      GoRoute(
+        path: '/open',
+        builder: (_, st) {
+          final t = LinkTarget.fromData(st.uri.queryParameters);
+          return t == null ? const LinkUnknown() : LinkOpener(target: t);
+        },
+      ),
       GoRoute(
         path: '/web',
         builder: (_, st) => WebPageScreen(
@@ -99,6 +110,8 @@ class _EduProAppState extends ConsumerState<EduProApp> {
       supportedLocales: const [Locale('en'), Locale('hi')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: ref.watch(routerProvider),
+      // a build below the minimum stops at "Update EduPro" (the check failing never stops the app)
+      builder: (_, child) => UpdateGate(child: child ?? const SizedBox()),
     );
   }
 }

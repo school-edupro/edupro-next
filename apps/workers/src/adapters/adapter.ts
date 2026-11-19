@@ -21,6 +21,8 @@ export interface OutboundMessage {
   attachments?: Array<{ name: string; contentType: string; bytes?: Buffer; url?: string }>;
   /** push: where the notification opens the app */
   link?: string | null;
+  /** Push to the mobile app: what it is about, so a tap opens the right profile and screen (docs/design/89 §5.3). */
+  pushData?: { event?: string | null; schoolId?: string | null; studentId?: string | null };
 }
 
 export interface DeliveryResult {

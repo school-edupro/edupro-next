@@ -30,6 +30,7 @@ import {
 } from './gatepass.dto';
 import { templateStatus } from './template-status';
 import { qrPng, visitorCardPdf } from './visitor-card';
+import { PushService } from '../comms/push.service';
 
 type Row = Record<string, unknown>;
 type Audience = 'student' | 'staff';
@@ -282,6 +283,7 @@ export class GatePassService {
     private readonly files: FilesService,
     @Inject(ENV) private readonly env: Env,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
+    private readonly push: PushService,
   ) {}
 
   private may(ctx: RequestContext, permission: string): boolean {
@@ -502,7 +504,7 @@ export class GatePassService {
    * rest wait their turn. Any N: every level may act at once and the pass is approved when N have. A
    * level nobody holds (or that only the requester holds) is skipped and shown as such.
    */
-  private async startApprovals(c: PoolClient, id: string): Promise<void> {
+  private async startApprovals(c: PoolClient, ctx: RequestContext, id: string): Promise<void> {
     const s = await this.settings(c);
     const p = await this.find(c, id);
     // hostel leave has its own levels (0160); a pupil's or staff pass those of its audience
@@ -567,7 +569,7 @@ export class GatePassService {
       mode === 'any' ? Math.max(1, Math.min(need, holders)) : Math.max(1, holders),
     ]);
     if (!holders) return this.finish(c, id, 'approved', 'No approver is set up');
-    await this.tellApprovers(c, id);
+    await this.tellApprovers(c, ctx, id);
   }
 
   /** What the SMS / WhatsApp templates of a pass may use. */
@@ -622,8 +624,8 @@ export class GatePassService {
     ]);
   }
 
-  /** A mail to everyone who may act on the pass now. */
-  private async tellApprovers(c: PoolClient, id: string): Promise<void> {
+  /** SMS / WhatsApp, a push and (when on) a mail to everyone who may act on the pass now. */
+  private async tellApprovers(c: PoolClient, ctx: RequestContext, id: string): Promise<void> {
     const s = await this.settings(c);
     const p = await this.find(c, id);
     const school = await c.query<{ name: string }>(
@@ -633,6 +635,14 @@ export class GatePassService {
       `SELECT label, approver_user_ids::text[] AS users FROM gate_pass_approvals WHERE pass_id = $1 AND status = 'pending' AND acted_at IS NULL`,
       [id],
     );
+    // the app: a push to the approvers (docs/design/89 §5.4)
+    await this.push.send(c, ctx, {
+      userIds: levels.rows.flatMap((l) => l.users).filter((u) => u !== ctx.user.id),
+      title: 'Gate pass to approve',
+      body: `${whoOfPass(p)} · ${KIND_LABEL[p.kind] ?? p.kind}`,
+      link: '/gate-passes',
+      event: 'approvals',
+    });
     for (const l of levels.rows)
       await c.query(
         `SELECT app.template_to_users('gate_pass_to_approve', $1::bigint[], $2::jsonb)`,
@@ -871,7 +881,7 @@ export class GatePassService {
              SELECT id FROM gate_pass_approvals WHERE pass_id = $1 AND status = 'waiting' ORDER BY seq LIMIT 1) RETURNING id::text`,
           [id],
         );
-        if (next.rows[0]) await this.tellApprovers(c, id);
+        if (next.rows[0]) await this.tellApprovers(c, ctx, id);
         else await this.finish(c, id, 'approved', null);
       }
       return this.detail(c, ctx, id);
@@ -1310,7 +1320,7 @@ export class GatePassService {
       ],
     );
     const id = r.rows[0]!.id;
-    await this.startApprovals(c, id);
+    await this.startApprovals(c, ctx, id);
     await this.audit.stage(ctx, c, {
       action: 'engagement.gate_pass.request',
       entityType: 'gate_passes',
@@ -1589,7 +1599,7 @@ export class GatePassService {
           `INSERT INTO gate_pass_items (school_id, pass_id, name, qty, serial_no, returnable) VALUES (app.current_school_id(), $1, $2, $3, $4, $5)`,
           [id, i.name, i.qty, i.serialNo ?? null, i.returnable],
         );
-      await this.startApprovals(c, id);
+      await this.startApprovals(c, ctx, id);
       await this.audit.stage(ctx, c, {
         action: 'engagement.gate_pass.request',
         entityType: 'gate_passes',

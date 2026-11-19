@@ -36,6 +36,17 @@ const EnvSchema = z.object({
   ADMIN_APP_URL: z.string().url().default('http://localhost:3000'),
   PARENT_APP_URL: z.string().url().default('http://localhost:3001'),
   TEACHER_APP_URL: z.string().url().default('http://localhost:3002'),
+  // the mobile app (docs/design/89 phase D): an app below the minimum must update; below the latest it may
+  MOBILE_MIN_VERSION: z
+    .string()
+    .regex(/^\d+(\.\d+){0,3}$/)
+    .default('1.0.0'),
+  MOBILE_LATEST_VERSION: z
+    .string()
+    .regex(/^\d+(\.\d+){0,3}$/)
+    .default('1.0.0'),
+  MOBILE_STORE_URL_ANDROID: z.string().url().optional(),
+  MOBILE_STORE_URL_IOS: z.string().url().optional(),
   /**
    * Sprint 13: the gateway a school uses unless its setting payments.gateway says otherwise. "mock" is the
    * development gateway (every provider's flow is simulated by /payments/payu/mock); refused in production.

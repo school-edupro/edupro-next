@@ -6,15 +6,19 @@ import '../auth/auth_controller.dart';
 import '../config.dart';
 import '../l10n/strings.dart';
 import '../theme/tokens.g.dart';
+import '../profiles/profiles.dart';
+import 'notifications_screen.dart';
+import 'phones_screen.dart';
 import 'widgets.dart';
 
-/// Settings: the language and signing this phone out (the list of phones follows in phase D).
+/// Settings: the language, the notifications of the profile's school, the person's phones, signing out.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
+    final profile = ref.watch(profilesProvider).value?.current;
     return Scaffold(
       appBar: AppBar(title: Text(s.settings)),
       body: ListView(
@@ -23,7 +27,30 @@ class SettingsScreen extends ConsumerWidget {
           Text(s.language, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: Tokens.sp2),
           const LanguageSwitch(),
-          const SizedBox(height: Tokens.sp6),
+          const SizedBox(height: Tokens.sp5),
+          if (profile != null)
+            ListTile(
+              key: const Key('notifications'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.notifications_outlined),
+              title: Text(s.notifications),
+              subtitle: Text(profile.schoolName),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => NotificationsScreen(profile: profile)),
+              ),
+            ),
+          ListTile(
+            key: const Key('phones'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.devices_outlined),
+            title: Text(s.phones),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () =>
+                Navigator.of(context)
+                    .push(MaterialPageRoute<void>(builder: (_) => const PhonesScreen())),
+          ),
+          const SizedBox(height: Tokens.sp5),
           OutlinedButton.icon(
             key: const Key('signOut'),
             icon: const Icon(Icons.logout),

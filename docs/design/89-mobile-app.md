@@ -449,3 +449,73 @@ and reject, directly and through the inbox; nothing decided; then approved with 
 (+1: a person holding exactly the rights the inbox asks each kind by is refused by no list; the counts add up and
 `view=counts`); unit `approvals.service.spec` (a kind counted by its route's total; counts alone) and
 `workflow-step-up.spec` (which entity types ask for the second factor).
+
+## As built — phase D, polish (19 Nov 2026)
+
+**Notifications**
+
+- **The person chooses** (§5.3): Settings → Notifications lists the kinds of push the profile's school sends that the
+  profile hears of (a family: homework, attendance and leave, notices, fees, bus, messages, query replies; staff:
+  approvals, notices, attendance and leave, messages, query replies) and switches each off or on — kept per school on
+  the server (`GET`/`PUT /comms/push/events`, the person's preference `push.off`), so every phone of the person follows
+  it. `PushService.send` and the help-desk's SQL push leave out people who switched that kind off.
+- **A tap opens the right place**: a push to a phone now carries `event`, `schoolId` and, where the sender knows it,
+  `studentId` beside `link`. The app's `/open` route switches to the profile it is about (the child; the school's staff
+  profile for an approval) and opens the native screen, else the web page; a staff member's approval push opens the
+  Approvals inbox. Links outside EduPro are not followed. Shared links use the same route.
+- **The approver hears of it** (§5.4): the approval engine now tells the next level's approvers when a request moves up
+  (it told only the first level for flows without auto-skip: admission level 2, consent forms, lesson plans, fee
+  approvals, message approval, certificate requests); a pupil's leave tells the approvers of its waiting level and, once
+  decided, the family (it told nobody); a gate pass pushes to its approvers besides SMS / WhatsApp.
+- **Pushes that never arrived, fixed**: a template on the push channel (certificate requests, staff leave's "app"
+  messages) went to the person's mobile number as if it were a device — it now goes to their phones and browsers
+  through the push sender, with a link to its page (leave waiting → leave approvals, a decision → my leave, a
+  certificate → the certificates page) and the kind `approvals` for messages waiting on a decision (they counted as
+  "attendance"); the help-desk's SQL push sent phone tokens through the school's own Firebase (migration 0403: phones
+  are marked for the EduPro project and get it without a school Firebase).
+- The push token stays the classic FCM token: firebase_messaging 17's `register()` gives an installation id the
+  workers' FCM v1 messages do not target, and there is no EduPro Firebase project yet to change and test both together.
+
+**Phones, updates, the old apps**
+
+- Settings → **Phones signed in**: the person's phones (this one marked), when last used, the app version; another one
+  is signed out from here (the school can do the same).
+- **Update check**: `GET /auth/mobile/app-version?platform=&version=` (public) answers from the API's
+  `MOBILE_MIN_VERSION`, `MOBILE_LATEST_VERSION` and `MOBILE_STORE_URL_ANDROID` / `_IOS`; a build below the minimum stops
+  at "Update EduPro" with the store link (a failing check never stops the app). The app now reads its own version from
+  the platform (the pubspec's) unless the build gives `APP_VERSION` — it said 0.1.0 before, which the check would have
+  stopped.
+- **The old apps' users**: the school writes what the old apps' update prompt says (`compat.app_update_message`, e.g.
+  "Install the new EduPro app" with its link; with `compat.app_version_*` / `compat.app_force_below` it shows as a
+  prompt or a forced update), and **`GET /platform/old-apps`** shows how many people signed in through the old apps in
+  the last 7 and 30 days, by the user type they sent, beside the EduPro app's users — the school retires the compat API
+  when the first reaches nought (ADR-015). The prompt goes live once the store listing exists (phase E).
+
+**Every More item, Hindi, accessibility, slow phones**
+
+- **Every web page the app opens from More** (48: a parent's, a school administrator's and a teacher's menus) opened
+  through the phone's one-time link in a browser: each comes up signed in, without the web app's own frame, without an
+  error page and without serious or critical axe findings. It found the staff app's My profile failing (500) for a
+  sign-in with no staff record — it now says the sign-in is not linked to a staff record.
+- **Hindi**: the app's 246 texts compared with the web apps' dictionaries; 33 aligned to the web's words (फ़ीस, अवकाश,
+  अतिदेय, विलंब, शैक्षणिक …); three differ on purpose ("Open" on a button is the verb; "Seen" stays neutral for
+  homework and notices; "Fee bill" spelt as the Fees tab).
+- **Slow phones**: the screens' last copies are kept a file each on a phone (they were all in the preferences file,
+  which Android reads whole); the brand fonts (Poppins, Source Sans 3; SIL Open Font License, licences beside them,
+  1.9 MB) ship in the app, so a first launch offline looks the same and nothing is fetched from Google at run time
+  (`google_fonts` removed). No measurement on a low-end Android phone yet (no Android Studio on this Mac).
+- Accessibility guidelines checked on the new screens (Notifications, Phones) in light and dark.
+
+**Tests**: API e2e `mobile-notifications` (7: a kind switched off and on; a pupil's leave to its approver and the
+decision to the family; a gate pass to its approver; a request moving to its next level; a push-channel template to the
+phone, not to a mobile number, and refused plainly without a device; the help-desk's push to phones and switched off;
+the version check, the old apps' words and who still uses them); `certificate-requests` and `leave-requests` now check
+their app messages reach the phone (they checked the undeliverable rows); workers 60 (the phone's push data). Flutter
+56 (links and profiles, an approval push opening the inbox, notifications, phones, the update gate, the file store,
+accessibility). Full API e2e 201 files: the files that failed in the full run pass on their own and on a second run of
+their batches (load). Lint, types, unit 92, permissions, database 151. Checked in a browser on a test school: a made-up
+teacher's Settings, Notifications (switches saved) and Phones read the real API without an error.
+
+**Not done in phase D (needs the company / this Mac)**: measuring on a low-end Android phone, pushes end to end (the
+EduPro Firebase project), the store links (the listings). Phase E: internal test builds, a pilot school, the store
+listings and reviews, then all schools.

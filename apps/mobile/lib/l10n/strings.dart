@@ -54,7 +54,7 @@ class S {
   String get wrongPin => _t('That PIN is not right.', 'यह पिन सही नहीं है।');
   String get forgotPin => _t('Forgot the PIN? Sign in again', 'पिन भूल गए? फिर से साइन इन करें');
   String get home => _t('Home', 'होम');
-  String get more => _t('More', 'और');
+  String get more => _t('More', 'अधिक');
   String get profiles => _t('Switch profile', 'प्रोफ़ाइल बदलें');
   String get kindStaff => _t('Staff', 'कर्मचारी');
   String get kindParent => _t('Parent', 'अभिभावक');
@@ -80,8 +80,8 @@ class S {
   String get openInBrowser => _t('Open in the browser', 'ब्राउज़र में खोलें');
 
   // ---- phase B: the family's screens
-  String get academics => _t('Academics', 'पढ़ाई');
-  String get fees => _t('Fees', 'शुल्क');
+  String get academics => _t('Academics', 'शैक्षणिक');
+  String get fees => _t('Fees', 'फ़ीस');
   String get messages => _t('Messages', 'संदेश');
   String get homework => _t('Homework', 'गृहकार्य');
   String get timetable => _t('Timetable', 'समय-सारणी');
@@ -109,25 +109,25 @@ class S {
   String get today => _t('Today', 'आज');
   String get attendanceToday => _t('Attendance today', 'आज की उपस्थिति');
   String get notMarked => _t('Not marked yet', 'अभी दर्ज नहीं');
-  String get thisMonth => _t('This month', 'इस महीने');
+  String get thisMonth => _t('This month', 'इस माह');
   String presentOf(int present, int days) =>
       _t('$present of $days days present', '$days में से $present दिन उपस्थित');
   String get homeworkDue => _t('Homework due', 'बाकी गृहकार्य');
   String get noHomeworkDue =>
       _t('No homework due today or tomorrow.', 'आज या कल कोई गृहकार्य बाकी नहीं।');
-  String get feesPayable => _t('Fees to pay', 'देय शुल्क');
-  String get nothingDue => _t('Nothing due', 'कुछ बाकी नहीं');
+  String get feesPayable => _t('Fees to pay', 'देय फ़ीस');
+  String get nothingDue => _t('Nothing due', 'कुछ बकाया नहीं');
   String get nextExam => _t('Next exam', 'अगली परीक्षा');
-  String get noExam => _t('No exam coming up.', 'कोई परीक्षा नहीं आ रही।');
-  String get latestNotices => _t('Latest notices', 'नई सूचनाएँ');
+  String get noExam => _t('No exam coming up.', 'आगे कोई परीक्षा नहीं।');
+  String get latestNotices => _t('Latest notices', 'नवीनतम सूचनाएँ');
   String get unreadMessages => _t('Unread messages', 'अपठित संदेश');
 
   // attendance and leave
   String attendanceCode(String code) => switch (code) {
     'P' => _t('Present', 'उपस्थित'),
     'A' => _t('Absent', 'अनुपस्थित'),
-    'LV' => _t('On leave', 'छुट्टी पर'),
-    'L' => _t('Late', 'देर से'),
+    'LV' => _t('On leave', 'अवकाश पर'),
+    'L' => _t('Late', 'विलंब'),
     'SR' => _t('Short leave', 'अल्प अवकाश'),
     'H' => _t('Half day', 'आधा दिन'),
     'OD' => _t('On duty', 'ड्यूटी पर'),
@@ -136,31 +136,31 @@ class S {
   };
   String monthSummary(int present, int absent, int leave, int days) => _t(
     'Present $present · Absent $absent · Leave $leave · of $days days',
-    'उपस्थित $present · अनुपस्थित $absent · छुट्टी $leave · कुल $days दिन',
+    'उपस्थित $present · अनुपस्थित $absent · अवकाश $leave · कुल $days दिन',
   );
-  String get leaves => _t('Leave', 'छुट्टी');
-  String get applyLeave => _t('Apply for leave', 'छुट्टी के लिए आवेदन');
-  String get leaveType => _t('Kind of leave', 'छुट्टी का प्रकार');
+  String get leaves => _t('Leave', 'अवकाश');
+  String get applyLeave => _t('Apply for leave', 'अवकाश के लिए आवेदन करें');
+  String get leaveType => _t('Kind of leave', 'अवकाश का प्रकार');
   String get fromDate => _t('First day', 'पहला दिन');
   String get toDate => _t('Last day', 'आखिरी दिन');
   String get reason => _t('Reason', 'कारण');
   String get reasonShort =>
       _t('Write the reason (at least 5 letters).', 'कारण लिखें (कम से कम 5 अक्षर)।');
-  String get chooseLeaveType => _t('Choose the kind of leave.', 'छुट्टी का प्रकार चुनें।');
-  String get leaveSent => _t('Leave application sent.', 'छुट्टी का आवेदन भेजा गया।');
-  String get cancelLeave => _t('Cancel this leave', 'यह छुट्टी रद्द करें');
+  String get chooseLeaveType => _t('Choose the kind of leave.', 'अवकाश का प्रकार चुनें।');
+  String get leaveSent => _t('Leave application sent.', 'अवकाश का आवेदन भेजा गया।');
+  String get cancelLeave => _t('Cancel this leave', 'यह अवकाश रद्द करें');
   String get cancelLeaveAsk =>
-      _t('Cancel this leave application?', 'क्या यह छुट्टी का आवेदन रद्द करें?');
-  String get leaveCancelled => _t('Leave cancelled.', 'छुट्टी रद्द की गई।');
+      _t('Cancel this leave application?', 'क्या यह अवकाश का आवेदन रद्द करें?');
+  String get leaveCancelled => _t('Leave cancelled.', 'अवकाश रद्द किया गया।');
   String get certificateNeeded => _t(
     'This leave needs a certificate. Apply on the web page to attach it.',
-    'इस छुट्टी के लिए प्रमाण-पत्र चाहिए। उसे लगाने के लिए वेब पेज पर आवेदन करें।',
+    'इस अवकाश के लिए प्रमाण-पत्र चाहिए। उसे लगाने के लिए वेब पेज पर आवेदन करें।',
   );
   String get applyOnWeb => _t('Apply on the web page', 'वेब पेज पर आवेदन करें');
   String leaveStatus(String status) => switch (status) {
-    'pending' => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा'),
+    'pending' => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा में'),
     'approved' => _t('Approved', 'स्वीकृत'),
-    'rejected' => _t('Not approved', 'अस्वीकृत'),
+    'rejected' => _t('Not approved', 'स्वीकृत नहीं'),
     'cancelled' => _t('Cancelled', 'रद्द'),
     _ => status,
   };
@@ -168,7 +168,7 @@ class S {
 
   // homework and notices
   String workKind(String kind) => switch (kind) {
-    'classwork' => _t('Classwork', 'कक्षा कार्य'),
+    'classwork' => _t('Classwork', 'कक्षा-कार्य'),
     'assignment' => _t('Assignment', 'असाइनमेंट'),
     _ => _t('Homework', 'गृहकार्य'),
   };
@@ -176,12 +176,12 @@ class S {
   String postedBy(String name) => _t('By $name', '$name द्वारा');
   String get acknowledge => _t('I have seen this', 'मैंने यह देख लिया');
   String get acknowledged => _t('Seen', 'देख लिया');
-  String get pinned => _t('Pinned', 'पिन किया गया');
+  String get pinned => _t('Pinned', 'पिन की गई');
   String get loadMore => _t('Show more', 'और दिखाएँ');
 
   // timetable, calendar, date sheet
   String get breakTime => _t('Break', 'अवकाश');
-  String get holidays => _t('Holidays', 'छुट्टियाँ');
+  String get holidays => _t('Holidays', 'अवकाश');
   String get events => _t('Events', 'कार्यक्रम');
 
   // results
@@ -205,16 +205,16 @@ class S {
   // fees
   String get payableNow => _t('To pay now', 'अभी देय');
   String get balance => _t('Balance for the year', 'वर्ष का बकाया');
-  String get paid => _t('Paid', 'जमा');
-  String get payNow => _t('Pay online', 'ऑनलाइन भुगतान करें');
+  String get paid => _t('Paid', 'भुगतान हुआ');
+  String get payNow => _t('Pay online', 'ऑनलाइन भुगतान');
   String get instalments => _t('Instalments', 'किस्तें');
   String get receipts => _t('Receipts', 'रसीदें');
   String receiptNo(String no) => _t('Receipt $no', 'रसीद $no');
-  String get feeBill => _t('Fee bill', 'शुल्क बिल');
+  String get feeBill => _t('Fee bill', 'फ़ीस बिल');
   String get taxCertificate => _t('Fee certificate for tax', 'कर हेतु शुल्क प्रमाण-पत्र');
   String instalmentStatus(String status) => switch (status) {
-    'paid' => _t('Paid', 'जमा'),
-    'overdue' => _t('Overdue', 'देरी'),
+    'paid' => _t('Paid', 'भुगतान हुआ'),
+    'overdue' => _t('Overdue', 'अतिदेय'),
     'due' => _t('Due', 'देय'),
     _ => _t('Upcoming', 'आगामी'),
   };
@@ -270,7 +270,7 @@ class S {
   String get markClass => _t('Mark a class', 'कक्षा की उपस्थिति');
   String get dayAttendance => _t('Day attendance', 'दिन की उपस्थिति');
   String get section => _t('Class and section', 'कक्षा और वर्ग');
-  String get dateLabel => _t('Date', 'तारीख');
+  String get dateLabel => _t('Date', 'तारीख़');
   String get allPresent => _t('All present', 'सब उपस्थित');
   String get save => _t('Save', 'सहेजें');
   String get saved => _t('Saved.', 'सहेजा गया।');
@@ -279,13 +279,13 @@ class S {
   String markedBy(String who) => _t('Marked by $who', '$who ने दर्ज की');
   String presentAbsent(int p, int a, int n) =>
       _t('Present $p · Absent $a · of $n', 'उपस्थित $p · अनुपस्थित $a · कुल $n');
-  String get onLeaveLocked => _t('On approved leave', 'स्वीकृत छुट्टी पर');
+  String get onLeaveLocked => _t('On approved leave', 'स्वीकृत अवकाश पर');
   String get myAttendance => _t('My attendance', 'मेरी उपस्थिति');
-  String get myLeave => _t('My leave', 'मेरी छुट्टी');
+  String get myLeave => _t('My leave', 'मेरा अवकाश');
   String get payslips => _t('My payslips', 'मेरी वेतन पर्चियाँ');
   String get askCorrection => _t('Ask for a correction', 'सुधार का अनुरोध');
-  String get inTime => _t('In', 'आगमन');
-  String get outTime => _t('Out', 'प्रस्थान');
+  String get inTime => _t('In', 'प्रवेश');
+  String get outTime => _t('Out', 'निकास');
   String get correctionSent => _t('Correction asked for.', 'सुधार का अनुरोध भेजा गया।');
   String get correctionNeeds => _t(
     'Give the in or out time, or what the day should be.',
@@ -298,12 +298,12 @@ class S {
     'HD' => _t('Half day', 'आधा दिन'),
     'A' => _t('Absent', 'अनुपस्थित'),
     'WO' => _t('Weekly off', 'साप्ताहिक अवकाश'),
-    'H' => _t('Holiday', 'छुट्टी'),
-    'LV' => _t('On leave', 'छुट्टी पर'),
+    'H' => _t('Holiday', 'अवकाश'),
+    'LV' => _t('On leave', 'अवकाश पर'),
     'HOLD' => _t('On hold', 'रोका गया'),
     _ => code,
   };
-  String get balances => _t('Leave balance', 'छुट्टी शेष');
+  String get balances => _t('Leave balance', 'अवकाश शेष');
   String available(String n) => _t('$n available', '$n उपलब्ध');
   String get halfDay => _t('Half day', 'आधा दिन');
   String get firstHalf => _t('First half', 'पहला भाग');
@@ -311,14 +311,14 @@ class S {
   String get confirm => _t('Go ahead', 'आगे बढ़ें');
   String get documentNeeded => _t(
     'This leave needs a document. Apply on the web page to attach it.',
-    'इस छुट्टी के लिए दस्तावेज़ चाहिए। उसे लगाने के लिए वेब पेज पर आवेदन करें।',
+    'इस अवकाश के लिए दस्तावेज़ चाहिए। उसे लगाने के लिए वेब पेज पर आवेदन करें।',
   );
   String get askCancel => _t('Ask to cancel', 'रद्द करने का अनुरोध');
   String staffLeaveStatus(String status) => switch (status) {
-    'pending' => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा'),
+    'pending' => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा में'),
     'approved' => _t('Approved', 'स्वीकृत'),
-    'rejected' => _t('Not approved', 'अस्वीकृत'),
-    'withdrawn' => _t('Withdrawn', 'वापस लिया'),
+    'rejected' => _t('Not approved', 'स्वीकृत नहीं'),
+    'withdrawn' => _t('Withdrawn', 'वापस लिया गया'),
     'cancelled' => _t('Cancelled', 'रद्द'),
     _ => status,
   };
@@ -356,7 +356,7 @@ class S {
   }
 
   // approvals
-  String get nothingToApprove => _t('Nothing waits for you.', 'आपके लिए कुछ प्रतीक्षा में नहीं।');
+  String get nothingToApprove => _t('Nothing waits for you.', 'आपके लिए कुछ लंबित नहीं है।');
   String get all => _t('All', 'सभी');
   String get approve => _t('Approve', 'स्वीकृत करें');
   String get reject => _t('Reject', 'अस्वीकार करें');
@@ -378,6 +378,42 @@ class S {
   );
   String someUnavailable(String kinds) =>
       _t('Could not be read just now: $kinds', 'अभी पढ़ा नहीं जा सका: $kinds');
+
+  // ---- phase D
+  String get phones => _t('Phones signed in', 'साइन-इन फ़ोन');
+  String get thisPhone => _t('This phone', 'यह फ़ोन');
+  String lastUsed(String at) => _t('Last used $at', 'अंतिम उपयोग $at');
+  String get signOutPhone => _t('Sign out', 'साइन आउट');
+  String signOutPhoneAsk(String name) =>
+      _t('Sign $name out of EduPro?', '$name को EduPro से साइन आउट करें?');
+  String get phoneSignedOut => _t('That phone is signed out.', 'वह फ़ोन साइन आउट हो गया।');
+
+  String get notifications => _t('Notifications', 'सूचनाएँ (नोटिफ़िकेशन)');
+  String get notificationsHelp => _t(
+    'Choose what this school may send to this phone. Messages still arrive in the app.',
+    'चुनें कि यह विद्यालय इस फ़ोन पर क्या भेज सकता है। संदेश ऐप में फिर भी आएँगे।',
+  );
+  String pushEvent(String e) => switch (e) {
+    'school_message' => _t('Messages from the school', 'विद्यालय के संदेश'),
+    'attendance' => _t('Attendance and leave', 'उपस्थिति और अवकाश'),
+    'fees' => _t('Fees', 'फ़ीस'),
+    'transport' => _t('Bus and transport', 'बस और परिवहन'),
+    'queries' => _t('Replies to queries', 'प्रश्नों के उत्तर'),
+    'notices' => _t('Notices and circulars', 'सूचनाएँ और परिपत्र'),
+    'homework' => _t('Homework', 'गृहकार्य'),
+    'approvals' => _t('Approvals waiting for me', 'मेरी प्रतीक्षा में स्वीकृतियाँ'),
+    _ => e,
+  };
+  String get schoolSendsNone =>
+      _t('This school sends no notifications.', 'यह विद्यालय कोई सूचना नहीं भेजता।');
+  String get updateTitle => _t('Update EduPro', 'EduPro अपडेट करें');
+  String get updateNeeded => _t(
+    'This version of EduPro no longer works. Please update the app to go on.',
+    'EduPro का यह संस्करण अब काम नहीं करता। आगे बढ़ने के लिए ऐप अपडेट करें।',
+  );
+  String get updateAvailable =>
+      _t('A new version of EduPro is available.', 'EduPro का नया संस्करण उपलब्ध है।');
+  String get updateNow => _t('Update', 'अपडेट करें');
 
   // dates and money
   static const _monEn = [

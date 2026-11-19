@@ -13,6 +13,7 @@ import {
   CreditDto,
   InboxQueryDto,
   CommsInboxReadDto,
+  PushEventsOffDto,
   PushDeviceDto,
   ProviderDto,
   ProviderTestDto,
@@ -186,6 +187,20 @@ export class CommsPushController {
   @ApiOperation({ summary: 'Firebase web config and VAPID key for the apps (no secrets)' })
   config(@ReqCtx() ctx: RequestContext) {
     return this.push.config(ctx);
+  }
+
+  @Get('events')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'The kinds of push the school sends and those I switched off' })
+  events(@ReqCtx() ctx: RequestContext) {
+    return this.push.events(ctx);
+  }
+
+  @Put('events')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Switch kinds of push off (or back on) for me in this school' })
+  setEvents(@ReqCtx() ctx: RequestContext, @Body() dto: PushEventsOffDto) {
+    return this.push.setOff(ctx, dto.off);
   }
 
   @Post('devices')

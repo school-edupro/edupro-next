@@ -1,4 +1,3 @@
-import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'tokens.g.dart';
@@ -17,12 +16,13 @@ ThemeData eduproTheme({required Brightness brightness, bool webFonts = true}) {
     surface: dark ? Tokens.mobGray900 : Tokens.mobWhite,
   );
   final base = ThemeData(brightness: brightness).textTheme;
-  // Poppins and Source Sans 3 as on the web (fetched once and kept); tests use the platform font
-  final body = (webFonts ? GoogleFonts.sourceSans3TextTheme(base) : base).apply(
+  // Poppins and Source Sans 3 as on the web, shipped in the app (assets/fonts); tests use the platform font
+  final body = base.apply(
+    fontFamily: webFonts ? 'SourceSans3' : null,
     bodyColor: dark ? Tokens.mobGray100 : Tokens.mobGray700,
     displayColor: dark ? Tokens.mobWhite : Tokens.mobNavy800,
   );
-  final headings = webFonts ? GoogleFonts.poppinsTextTheme(body) : body;
+  final headings = webFonts ? body.apply(fontFamily: 'Poppins') : body;
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,

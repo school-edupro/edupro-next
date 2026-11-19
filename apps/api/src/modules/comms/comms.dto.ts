@@ -469,3 +469,22 @@ export const PushDeviceSchema = z.object({
   userAgent: z.string().trim().max(300).optional(),
 });
 export class PushDeviceDto extends createZodDto(PushDeviceSchema) {}
+
+/** The kinds of push a person switches off for a school (the phone's Settings → Notifications). */
+export const PushEventsOffSchema = z.object({
+  off: z
+    .array(
+      z.enum([
+        'school_message',
+        'attendance',
+        'fees',
+        'transport',
+        'queries',
+        'notices',
+        'homework',
+        'approvals',
+      ]),
+    )
+    .max(20),
+});
+export class PushEventsOffDto extends createZodDto(PushEventsOffSchema) {}

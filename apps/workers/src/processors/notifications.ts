@@ -22,6 +22,9 @@ interface MessageDbRow {
   channel: Channel;
   /** 'mobile': a push to the mobile app's phone (docs/design/89) */
   push_app: string | null;
+  push_event: string | null;
+  push_student: string | null;
+  school_id: string;
   recipient_address: string;
   subject: string | null;
   body: string;
@@ -159,6 +162,7 @@ export function notificationProcessor(
       const r = await c.query<MessageDbRow>(
         `SELECT m.id::text, m.channel, m.recipient_address, m.subject, m.body, m.status, m.attempts, m.format, m.params, m.attachments, m.variables->>'link' AS link,
                 m.variables->>'app' AS push_app,
+                m.variables->>'event' AS push_event, m.variables->>'studentId' AS push_student, m.school_id::text AS school_id,
                 m.reply_to,
                 COALESCE(m.expires_at < now(), false) AS expired,
                 (SELECT s.status::text FROM schools s WHERE s.id = m.school_id) AS school_status,
@@ -282,6 +286,15 @@ export function notificationProcessor(
             : null,
         attachments,
         link: row.link,
+        ...(row.channel === 'push' && row.push_app === 'mobile'
+          ? {
+              pushData: {
+                event: row.push_event,
+                schoolId: row.school_id,
+                studentId: row.push_student,
+              },
+            }
+          : {}),
       });
       await db.withTenant(tenant, (c) =>
         c.query(

@@ -230,6 +230,36 @@ export class MobileAuthService {
     };
   }
 
+  /**
+   * Whether an app of this version must update (below MOBILE_MIN_VERSION: it stops at an "Update EduPro" page) or may
+   * (below MOBILE_LATEST_VERSION: a line on top), with the store link of the platform (docs/design/89 phase D).
+   */
+  appVersion(platform: 'android' | 'ios' | 'web', version?: string) {
+    const cmp = (a: string, b: string) => {
+      const x = a.split('.').map(Number);
+      const y = b.split('.').map(Number);
+      for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
+        const d = (x[i] ?? 0) - (y[i] ?? 0);
+        if (d !== 0) return d;
+      }
+      return 0;
+    };
+    const minimum = this.env.MOBILE_MIN_VERSION;
+    const latest = this.env.MOBILE_LATEST_VERSION;
+    return {
+      minimum,
+      latest,
+      mustUpdate: version !== undefined && cmp(version, minimum) < 0,
+      mayUpdate: version !== undefined && cmp(version, latest) < 0,
+      storeUrl:
+        platform === 'ios'
+          ? (this.env.MOBILE_STORE_URL_IOS ?? null)
+          : platform === 'android'
+            ? (this.env.MOBILE_STORE_URL_ANDROID ?? null)
+            : null,
+    };
+  }
+
   /** Signs a phone of the person out (this one, or another of theirs). */
   async signOut(ctx: RequestContext, sessionId?: string) {
     const id = sessionId ?? ctx.user.mobileSessionId;

@@ -1,3 +1,4 @@
+import { ApiError } from '@edupro/bff';
 import { PageHeader } from '@edupro/ui';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { FileLinks } from '@/components/FileLinks';
@@ -25,7 +26,11 @@ export default async function MyProfilePage({
   const sp = await searchParams;
   const lang = await currentLang();
   const [p, exp] = await Promise.all([
-    bff.api.fetch<MyProfile>('/me/employee-profile'),
+    // a sign-in with no staff record (a school administrator who is not an employee) has no profile here
+    bff.api.fetch<MyProfile>('/me/employee-profile').catch((e: unknown) => {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }),
     sp.export && /^\d{1,18}$/.test(sp.export)
       ? bff.api
           .fetch<{
@@ -35,6 +40,18 @@ export default async function MyProfilePage({
           .catch(() => null)
       : Promise.resolve(null),
   ]);
+  if (!p)
+    return (
+      <main>
+        <PageHeader kicker={t(lang, 'My profile')} title={t(lang, 'My profile')} />
+        <div className="ep-alert ep-alert--info" role="status">
+          {t(
+            lang,
+            'Your sign-in is not linked to a staff record. Please contact the school office.',
+          )}
+        </div>
+      </main>
+    );
   const waiting = p.requests.filter((r) => r.status === 'pending').length;
   return (
     <main>

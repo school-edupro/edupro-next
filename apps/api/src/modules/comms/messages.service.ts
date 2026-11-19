@@ -177,6 +177,7 @@ export class MessagesService {
     {
       const template = await this.resolveTemplate(tenant, dto, c);
       const channel = template.channel;
+      if (channel === 'push') return this.pushTemplate(c, ctx, dto, template);
       const { userId, address, name } = await this.resolveRecipient(c, dto, channel);
 
       const body = renderTemplate(template.body, dto.variables);
@@ -215,17 +216,15 @@ export class MessagesService {
       );
       const row = await this.get(tenant, id, c);
       // automatic alerts (attendance, fees, transport, queries...) also reach the person's app
-      if (channel !== 'push') {
-        const users = userId ? [userId] : await this.push.usersOfAddresses(c, [address]);
-        await this.push.send(c, ctx, {
-          userIds: users,
-          title: template.name,
-          body: (template.format === 'html' ? htmlToText(body.text) : body.text).slice(0, 300),
-          link: '/messages',
-          event: eventOfTemplate(template.code),
-          dedupe: true,
-        });
-      }
+      const users = userId ? [userId] : await this.push.usersOfAddresses(c, [address]);
+      await this.push.send(c, ctx, {
+        userIds: users,
+        title: template.name,
+        body: (template.format === 'html' ? htmlToText(body.text) : body.text).slice(0, 300),
+        link: '/messages',
+        event: eventOfTemplate(template.code),
+        dedupe: true,
+      });
       await this.audit.stage(ctx, c, {
         action: 'comms.message.send',
         entityType: 'comms_messages',
@@ -290,6 +289,48 @@ export class MessagesService {
         'No active template with that code and channel',
       );
     return this.templates.get(tenant, r.rows[0].id, c);
+  }
+
+  /**
+   * A template on the push channel (certificate requests, staff leave's app messages) goes to the person's phones and
+   * browsers through the push sender — their devices, a link and the kind of push — not to a mobile number.
+   */
+  private async pushTemplate(
+    c: PoolClient,
+    ctx: RequestContext,
+    dto: SendMessageDto,
+    template: {
+      id: string;
+      code: string;
+      name: string;
+      subject: string | null;
+      body: string;
+      format?: string | null;
+    },
+  ): Promise<MessageRow> {
+    const users = dto.recipientUserId
+      ? [dto.recipientUserId]
+      : dto.recipientAddress
+        ? await this.push.usersOfAddresses(c, [dto.recipientAddress])
+        : [];
+    const body = renderTemplate(template.body, dto.variables);
+    const subject = template.subject ? renderTemplate(template.subject, dto.variables) : null;
+    const link = typeof dto.variables?.link === 'string' ? dto.variables.link : '/messages';
+    const ids = await this.push.queue(c, ctx, {
+      userIds: users,
+      title: subject?.text ?? template.name,
+      body: (template.format === 'html' ? htmlToText(body.text) : body.text).slice(0, 1000),
+      link,
+      event: eventOfTemplate(template.code),
+      templateId: template.id,
+    });
+    if (!ids.length)
+      throw new DomainError(
+        'comms.push.no_device',
+        'The person has no phone or browser that takes notifications from the school',
+        { status: 422 },
+      );
+    return this.get(requireTenant(ctx), ids[0]!, c);
   }
 
   private async resolveRecipient(

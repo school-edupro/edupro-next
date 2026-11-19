@@ -47,7 +47,8 @@ export async function notifyLeave(
           templateCode: code,
           channel,
           recipientUserId: user,
-          variables: vars,
+          // the app's notification opens the page it is about
+          variables: channel === 'push' ? { ...vars, link: leaveLink(code) } : vars,
         } as SendMessageDto);
         await c.query('RELEASE SAVEPOINT leave_msg');
       } catch (e) {
@@ -55,4 +56,11 @@ export async function notifyLeave(
         log.debug({ code, channel, error: (e as Error).message }, 'leave message not sent');
       }
     }
+}
+
+/** The staff app's page a leave or attendance message is about (a tap on the notification opens it). */
+export function leaveLink(code: string): string {
+  const correction = code.includes('correction');
+  if (/waiting/.test(code)) return correction ? '/attendance-corrections' : '/leave-approvals';
+  return correction ? '/my-attendance' : '/my-leave';
 }

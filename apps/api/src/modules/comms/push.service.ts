@@ -18,6 +18,8 @@ export type PushEvent =
 /** The event of an automatic alert, from its template code (absent_alert, fee_reminder, bus_boarded...). */
 export function eventOfTemplate(code: string | null | undefined): PushEvent {
   const c = (code ?? '').toLowerCase();
+  // something waiting for this person's decision (a colleague's leave, a correction, a pass to approve)
+  if (/waiting|to_approve|approval_pending/.test(c)) return 'approvals';
   if (/absent|attendance|late|leave/.test(c)) return 'attendance';
   if (/fee|payment|receipt|due/.test(c)) return 'fees';
   if (/bus|transport|route|board|alight/.test(c)) return 'transport';
@@ -61,6 +63,33 @@ export class PushService {
         vapidKey: p.config.vapidKey,
       };
     });
+  }
+
+  /**
+   * The kinds of push the school sends, and those this person switched off for it (docs/design/89 §5.3). Kept in
+   * the person's preferences of the school (`push.off`); `send` leaves them out.
+   */
+  async events(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const policy = await this.settings.policy(c);
+      const r = await c.query<{ value: string[] }>(
+        `SELECT value FROM user_preferences WHERE pref_key = 'push.off' AND user_id = app.current_user_id()`,
+      );
+      return { events: policy.pushEvents, off: r.rows[0]?.value ?? [] };
+    });
+  }
+
+  async setOff(ctx: RequestContext, off: PushEvent[]) {
+    const tenant = requireTenant(ctx);
+    await this.db.tenant(tenant, (c) =>
+      c.query(
+        `INSERT INTO user_preferences (school_id, user_id, pref_key, value)
+         VALUES (app.current_school_id(), app.current_user_id(), 'push.off', $1::jsonb)
+         ON CONFLICT (school_id, user_id, pref_key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+        [JSON.stringify([...new Set(off)])],
+      ),
+    );
+    return this.events(ctx);
   }
 
   async register(
@@ -134,23 +163,45 @@ export class PushService {
       event: PushEvent | null;
       /** skip people who got the same push in the last 2 minutes (an alert sent by SMS and WhatsApp) */
       dedupe?: boolean;
+      /** the child it is about: the phone opens that child's profile (docs/design/89 §5.3) */
+      studentId?: string | null;
+      /** the template a push-channel message came from (kept on its rows, as on other channels') */
+      templateId?: string | null;
     },
   ): Promise<number> {
+    return (await this.queue(c, ctx, input)).length;
+  }
+
+  /** `send`, giving the ids of the messages queued (one a device). */
+  async queue(
+    c: PoolClient,
+    ctx: RequestContext,
+    input: Parameters<PushService['send']>[2],
+  ): Promise<string[]> {
     let userIds = [...new Set(input.userIds.filter(Boolean))];
-    if (!userIds.length) return 0;
+    if (!userIds.length) return [];
     try {
       const p = await c.query<{ active: boolean; secret: string | null }>(
         `SELECT active, secret FROM comms_providers WHERE channel = 'push' AND provider = 'fcm'`,
       );
       // a school that switched push off sends none; without its own Firebase only the mobile app's phones get one
-      if (p.rows[0] && !p.rows[0].active) return 0;
+      if (p.rows[0] && !p.rows[0].active) return [];
       const keys = p.rows[0]?.secret
         ? (JSON.parse(decryptField(p.rows[0].secret) ?? '{}') as Record<string, string>)
         : {};
       const web = Boolean(keys.serviceAccount);
       if (input.event) {
         const policy = await this.settings.policy(c);
-        if (!policy.pushEvents.includes(input.event)) return 0;
+        if (!policy.pushEvents.includes(input.event)) return [];
+        // people who switched this kind off for the school (the phone's Settings → Notifications)
+        const off = await c.query<{ id: string }>(
+          `SELECT user_id::text AS id FROM user_preferences
+            WHERE pref_key = 'push.off' AND user_id = ANY($1::bigint[]) AND value ? $2`,
+          [userIds, input.event],
+        );
+        const muted = new Set(off.rows.map((x) => x.id));
+        userIds = userIds.filter((u) => !muted.has(u));
+        if (!userIds.length) return [];
       }
       if (input.dedupe) {
         const recent = await c.query<{ id: string }>(
@@ -160,21 +211,21 @@ export class PushService {
         );
         const done = new Set(recent.rows.map((x) => x.id));
         userIds = userIds.filter((u) => !done.has(u));
-        if (!userIds.length) return 0;
+        if (!userIds.length) return [];
       }
       const devices = await c.query<{ user_id: string; token: string; app: string }>(
         `SELECT user_id::text, token, app FROM push_devices
           WHERE user_id = ANY($1::bigint[]) AND revoked_at IS NULL AND (app = 'mobile' OR $2::boolean)`,
         [userIds, web],
       );
-      if (!devices.rows.length) return 0;
+      if (!devices.rows.length) return [];
       const tenant = requireTenant(ctx);
       const ids = (
         await c.query<{ id: string }>(
-          `INSERT INTO comms_messages (school_id, channel, recipient_user_id, recipient_address, subject, body, variables, request_id, created_by)
+          `INSERT INTO comms_messages (school_id, channel, recipient_user_id, recipient_address, subject, body, variables, request_id, created_by, template_id)
            SELECT app.current_school_id(), 'push', x.user_id, x.token, $3, $4,
                   $5::jsonb || CASE WHEN x.app = 'mobile' THEN jsonb_build_object('app', 'mobile') ELSE '{}'::jsonb END,
-                  app.current_request_id(), app.current_user_id()
+                  app.current_request_id(), app.current_user_id(), $7::bigint
              FROM unnest($1::bigint[], $2::text[], $6::text[]) AS x(user_id, token, app)
            RETURNING id::text`,
           [
@@ -182,8 +233,13 @@ export class PushService {
             devices.rows.map((d) => d.token),
             input.title.slice(0, 200),
             input.body.slice(0, 1000),
-            JSON.stringify({ link: input.link, event: input.event }),
+            JSON.stringify({
+              link: input.link,
+              event: input.event,
+              ...(input.studentId ? { studentId: input.studentId } : {}),
+            }),
             devices.rows.map((d) => d.app),
+            input.templateId ?? null,
           ],
         )
       ).rows.map((x) => x.id);
@@ -201,13 +257,13 @@ export class PushService {
           ids,
         ],
       );
-      return ids.length;
+      return ids;
     } catch (error) {
       this.log.warn(
         { err: error instanceof Error ? error.message : String(error) },
         'push not queued',
       );
-      return 0;
+      return [];
     }
   }
 

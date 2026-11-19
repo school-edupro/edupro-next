@@ -274,14 +274,16 @@ describe('FCM adapter', () => {
       subject: 'Leave to approve',
       body: 'Asha Rao asked for 2 days',
       link: '/approvals',
+      pushData: { event: 'approvals', schoolId: '7', studentId: null },
     });
     const sent = JSON.parse(calls.at(-1)!.body) as { message: Record<string, unknown> };
     expect(calls.at(-1)!.url).toBe(
       'https://fcm.googleapis.com/v1/projects/edupro-app/messages:send',
     );
+    // what it is about (strings, empty ones left out), so a tap opens the right profile and screen
+    expect(sent.message.data).toEqual({ link: '/approvals', event: 'approvals', schoolId: '7' });
     expect(sent.message).toMatchObject({
       token: 'phone-token',
-      data: { link: '/approvals' },
       android: { priority: 'high' },
       apns: { payload: { aps: { sound: 'default' } } },
     });

@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_transport.dart';
 import '../api/endpoints.g.dart';
 import '../app_services.dart';
 import '../profiles/profiles.dart';
+import 'cache_store.dart';
 
 /// What a screen shows: the API's answer, when it came, and whether it is the last copy kept on the phone because
 /// there is no network (docs/design/89 §5.6: every screen shows the last copy it had, with "updated at").
@@ -17,30 +17,24 @@ class Loaded<T> {
   final bool stale;
 }
 
-/// The last copies are kept in the app's own preferences under this prefix, and wiped at sign-out.
-const cachePrefix = 'cache:';
-
-Future<void> clearCache() async {
-  final prefs = await SharedPreferences.getInstance();
-  for (final k in prefs.getKeys().where((k) => k.startsWith(cachePrefix)).toList()) {
-    await prefs.remove(k);
-  }
-}
+/// The last copies are kept by [cacheStore] (a file each on a phone) and wiped at sign-out.
+Future<void> clearCache() => cacheStore.clear();
 
 /// Loads from the API and keeps a copy; with no network, gives the copy kept last time (or the error when none).
 Future<Loaded<dynamic>> cached(String key, Future<dynamic> Function() load) async {
-  final prefs = await SharedPreferences.getInstance();
   try {
     final data = await load();
     final at = DateTime.now();
-    await prefs.setString(
-      '$cachePrefix$key',
-      jsonEncode({'at': at.toIso8601String(), 'data': data}),
-    );
+    try {
+      await cacheStore.write(key, jsonEncode({'at': at.toIso8601String(), 'data': data}));
+    } catch (_) {
+      // a copy that cannot be kept (storage full) never stops the screen
+    }
     return Loaded<dynamic>(data, at);
   } on ApiException catch (e) {
-    final raw = prefs.getString('$cachePrefix$key');
-    if (!e.offline || raw == null) rethrow;
+    if (!e.offline) rethrow;
+    final raw = await cacheStore.read(key);
+    if (raw == null) rethrow;
     final j = jsonDecode(raw) as Map<String, dynamic>;
     return Loaded<dynamic>(j['data'], DateTime.parse('${j['at']}'), stale: true);
   }

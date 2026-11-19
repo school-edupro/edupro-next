@@ -1035,6 +1035,8 @@ export class CompatParityService {
     const platform = (q.platform ?? 'android').toLowerCase().includes('ios') ? 'ios' : 'android';
     let current = '1.0.0';
     let floor = '0.0.0';
+    // the school's own words (moving the old apps' users to the new EduPro app), else the old ones
+    let said = '';
     if (q.school_id) {
       const rows = await this.settings.current({
         schoolId: q.school_id,
@@ -1045,6 +1047,7 @@ export class CompatParityService {
         rows.find((s) => s.key === `compat.app_version_${platform}`)?.value ?? current,
       );
       floor = String(rows.find((s) => s.key === 'compat.app_force_below')?.value ?? floor);
+      said = String(rows.find((s) => s.key === 'compat.app_update_message')?.value ?? '');
     }
     const cmp = (a: string, b: string) => {
       const x = a.split('.').map(Number);
@@ -1061,10 +1064,10 @@ export class CompatParityService {
     return {
       isview: '1',
       version: current,
-      message: force
-        ? 'Please update the app to continue'
-        : update
-          ? 'A new version of the app is available'
+      message:
+        force || update
+          ? said ||
+            (force ? 'Please update the app to continue' : 'A new version of the app is available')
           : '',
       forceupdate: force ? '1' : '0',
       versionupdate: update ? '1' : '0',

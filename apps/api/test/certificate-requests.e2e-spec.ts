@@ -150,6 +150,16 @@ describe('certificate requests (e2e)', () => {
   });
 
   it('a parent asks for a bonafide; the office approves it in one step and issues it against the request', async () => {
+    // the parent's phone (the mobile app), where the app messages go
+    expect(
+      (
+        await post(
+          '/comms/push/devices',
+          { token: 'cert-test-phone-token', app: 'mobile', platform: 'android' },
+          parent,
+        )
+      ).statusCode,
+    ).toBeLessThan(300);
     const r = await post(
       '/certificate-requests/mine',
       { typeCode: 'BONAFIDE', studentId: kids.anu, purpose: 'Passport application', copies: 2 },
@@ -234,16 +244,28 @@ describe('certificate requests (e2e)', () => {
       achievementId: null,
     });
     // the parent is told in the app: approved, then ready
+    // (to the phone, opening the certificates page)
     const told = await withMigrator((c) =>
-      c.query<{ code: string; channel: string }>(
-        `SELECT t.code, m.channel::text AS channel FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+      c.query<{ code: string; channel: string; to: string; link: string }>(
+        `SELECT t.code, m.channel::text AS channel, m.recipient_address AS "to", m.variables->>'link' AS link
+           FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
           WHERE m.school_id = $1 AND m.recipient_user_id = $2 ORDER BY m.id`,
         [school.id, parent.id],
       ),
     );
     expect(told.rows).toEqual([
-      { code: 'certificate_request_approved', channel: 'push' },
-      { code: 'certificate_request_ready', channel: 'push' },
+      {
+        code: 'certificate_request_approved',
+        channel: 'push',
+        to: 'cert-test-phone-token',
+        link: '/certificates',
+      },
+      {
+        code: 'certificate_request_ready',
+        channel: 'push',
+        to: 'cert-test-phone-token',
+        link: '/certificates',
+      },
     ]);
     // the parent's own PDF of it
     const pdf = await post(

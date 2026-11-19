@@ -261,11 +261,16 @@ export class CertificateRequestsService implements OnModuleInit {
     if (!userId) return;
     await c.query('SAVEPOINT cert_msg');
     try {
+      // the notification opens the certificates page of the requester's app (staff, or the family)
+      const staff = await c.query(
+        `SELECT 1 FROM employees WHERE user_id = $1 AND deleted_at IS NULL LIMIT 1`,
+        [userId],
+      );
       await this.messages.sendWith(c, ctx, {
         templateCode: code,
         channel: 'push',
         recipientUserId: userId,
-        variables: vars,
+        variables: { ...vars, link: staff.rowCount ? '/my-certificates' : '/certificates' },
       } as SendMessageDto);
       await c.query('RELEASE SAVEPOINT cert_msg');
     } catch (e) {

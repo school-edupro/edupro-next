@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -38,6 +38,15 @@ const MobileRedeemSchema = z.object({
 });
 class MobileRedeemDto extends createZodDto(MobileRedeemSchema) {}
 
+const AppVersionSchema = z.object({
+  platform: z.enum(['android', 'ios', 'web']).optional(),
+  version: z
+    .string()
+    .regex(/^\d+(\.\d+){0,3}$/)
+    .optional(),
+});
+class MobileAppVersionDto extends createZodDto(AppVersionSchema) {}
+
 /**
  * The mobile app's sign-in and sessions (docs/design/89, phase A). The code itself is asked with
  * `POST /auth/otp/start` (`app: 'mobile'`); these routes turn it (or a One Auth token) into the phone's
@@ -47,6 +56,15 @@ class MobileRedeemDto extends createZodDto(MobileRedeemSchema) {}
 @Controller('auth/mobile')
 export class MobileAuthController {
   constructor(private readonly mobile: MobileAuthService) {}
+
+  @Get('app-version')
+  @Public()
+  @ApiOperation({
+    summary: 'Mobile app: whether this version must (or may) be updated, and the store link',
+  })
+  appVersion(@Query() q: MobileAppVersionDto) {
+    return this.mobile.appVersion(q.platform ?? 'android', q.version);
+  }
 
   @Post('verify')
   @Public()

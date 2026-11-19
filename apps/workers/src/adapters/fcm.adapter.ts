@@ -83,7 +83,15 @@ export class FcmAdapter implements ChannelAdapter {
           message: {
             token: message.to,
             notification: { title: message.subject ?? 'School', body: message.body },
-            data: { link },
+            // FCM data values are strings; the phone reads link, event, schoolId, studentId (lib/push/links.dart)
+            data: {
+              link,
+              ...Object.fromEntries(
+                Object.entries(this.target === 'mobile' ? (message.pushData ?? {}) : {})
+                  .filter(([, v]) => v !== null && v !== undefined && v !== '')
+                  .map(([k, v]) => [k, String(v)]),
+              ),
+            },
             ...(this.target === 'mobile'
               ? {
                   android: { priority: 'high', notification: { channel_id: 'school' } },

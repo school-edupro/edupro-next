@@ -172,6 +172,16 @@ describe('staff leave requests (e2e)', () => {
   });
 
   it('short of balance: the paid part + loss of pay, shown first; the HOD approves both; the activity log knows', async () => {
+    // the HOD's phone (the mobile app): the app message about a leave waiting goes there
+    expect(
+      (
+        await call(hod, 'POST', '/comms/push/devices', {
+          token: 'leave-test-hod-phone',
+          app: 'mobile',
+          platform: 'android',
+        })
+      ).statusCode,
+    ).toBeLessThan(300);
     const ask = await apply(t1, { leaveTypeId: ids.CL, from: W(0, 0), to: W(0, 4) });
     expect(ask.json().confirm).toMatchObject({ kind: 'split', paid: 3, lop: 2 });
     const r = (
@@ -191,7 +201,9 @@ describe('staff leave requests (e2e)', () => {
     const told = await withMigrator((c) =>
       c.query(
         `SELECT 1 FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
-          WHERE m.school_id = $1 AND t.code = 'leave_waiting' AND m.recipient_user_id = $2`,
+          WHERE m.school_id = $1 AND t.code = 'leave_waiting' AND m.recipient_user_id = $2
+            AND (m.channel <> 'push' OR (m.recipient_address = 'leave-test-hod-phone'
+                 AND m.variables->>'link' = '/leave-approvals' AND m.variables->>'event' = 'approvals'))`,
         [school.id, hod.id],
       ),
     );

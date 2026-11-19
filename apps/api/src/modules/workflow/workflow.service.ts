@@ -1404,6 +1404,16 @@ export class WorkflowService {
               WHERE s.instance_id = i.id AND i.id = $1 AND s.level = $2 AND (l.value->>'level')::int = s.level AND l.value ? 'slaHours'`,
             [step.instance_id, next.rows[0].level],
           );
+          // the next level's approvers hear of it, as the first level's did (docs/design/89 §5.4)
+          const waiting = await c.query<{ ids: string[] | null; subject: string }>(
+            `SELECT s.assignee_user_ids::text[] AS ids, i.subject
+               FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
+              WHERE s.instance_id = $1 AND s.level = $2`,
+            [step.instance_id, next.rows[0].level],
+          );
+          const fresh = (waiting.rows[0]?.ids ?? []).filter((u) => u !== ctx.user.id);
+          if (fresh.length)
+            for (const l of this.assignListeners) await l(c, ctx, fresh, waiting.rows[0]!.subject);
         } else {
           await c.query(
             `UPDATE workflow_instances SET status = 'approved', completed_at = now(), completed_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
