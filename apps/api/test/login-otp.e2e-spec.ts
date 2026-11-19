@@ -502,8 +502,10 @@ describe('sign-in with an emailed code (e2e)', () => {
   });
 
   it('a mobile number entered for two people is said so, with the way in; one person alone still signs in', async () => {
-    const shared = '9876577701';
-    const alone = '9876577702';
+    // numbers of this run only (earlier runs' made-up people stay in the database)
+    const tail = String(Date.now()).slice(-8);
+    const shared = `97${tail}`;
+    const alone = `96${tail}`;
     await withMigrator(async (c) => {
       const a = await seedUser(c, school, `${s}-shared-a`, 'accountant');
       const b = await seedUser(c, school, `${s}-shared-b`, 'accountant');
@@ -536,7 +538,34 @@ describe('sign-in with an emailed code (e2e)', () => {
     expect(single.statusCode).toBe(200);
     expect(single.json().screenCode).toMatch(/^\d{6}$/);
     // an unknown login keeps its own words
-    expect((await start('9876577709')).json().type).toBe('auth.otp_not_found');
+    expect((await start(`95${tail}`)).json().type).toBe('auth.otp_not_found');
+  });
+
+  it('a staff code is not a way in: said so, with the way in (mobile number or e-mail)', async () => {
+    const code = `Z${s.slice(-6)}`;
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO employees (school_id, employee_code, first_name, last_name) VALUES ($1, $2, 'Sample', 'Staff')`,
+        [school.id, code],
+      ),
+    );
+    const start = (login: string) =>
+      inject({
+        method: 'POST',
+        url: '/auth/otp/start',
+        headers: {},
+        json: { login, app: 'teacher' },
+      });
+    for (const typed of [code, code.toLowerCase(), ` ${code} `]) {
+      const r = await start(typed);
+      expect(r.statusCode).toBe(404);
+      expect(r.json()).toMatchObject({
+        type: 'auth.otp_staff_code',
+        detail: expect.stringContaining('mobile number or e-mail'),
+      });
+    }
+    // anything else keeps "No account was found"
+    expect((await start(`NOPE${s.slice(-6)}`)).json().type).toBe('auth.otp_not_found');
   });
 
   it('the school sees the codes shown on screen and who has no email, and can forget remembered devices', async () => {

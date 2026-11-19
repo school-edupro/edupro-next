@@ -35,8 +35,9 @@ export function CodeLoginForm({ returnTo, error }: { returnTo: string; error?: s
           autoComplete="username"
         />
         <span className="ep-field__help">
-          Parents can use the mobile or email given to the school, or their child’s admission
-          number. A 6-digit code is sent to the email the school has for you.
+          Staff: your mobile number or email (not the employee code). Parents: the mobile or email
+          given to the school, or your child’s admission number. A 6-digit code is sent to the email
+          the school has for you.
         </span>
       </div>
       <input type="hidden" name="returnTo" value={returnTo} />

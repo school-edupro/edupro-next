@@ -385,6 +385,19 @@ export class OtpService {
               'This mobile number or e-mail belongs to more than one person at the school, so it cannot sign you in on its own. Sign in with your own e-mail or your child’s admission number, or ask the school office to correct the number.',
               { status: 409 },
             );
+          // an employee code (E003) is not a way in: staff use their mobile number or e-mail (0405)
+          const staffCode = await this.db.global(async (c) => {
+            const r = await c.query<{ v: boolean }>(`SELECT app.otp_login_is_staff_code($1) AS v`, [
+              login.trim(),
+            ]);
+            return r.rows[0]?.v ?? false;
+          });
+          if (staffCode)
+            throw new DomainError(
+              'auth.otp_staff_code',
+              'This is a staff (employee) code. Staff sign in with their mobile number or e-mail, not the employee code.',
+              { status: 404 },
+            );
         }
         throw new DomainError(
           'auth.otp_not_found',

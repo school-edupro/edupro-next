@@ -17,8 +17,8 @@ class S {
   String get appName => 'EduPro';
   String get signInTitle => _t('Sign in', 'साइन इन करें');
   String get signInHelp => _t(
-    'Your mobile number, e-mail, or your child\'s admission number. We send a code to it.',
-    'अपना मोबाइल नंबर, ई-मेल, या अपने बच्चे का प्रवेश क्रमांक। हम उस पर एक कोड भेजेंगे।',
+    'Staff: your mobile number or e-mail (not the employee code). Parents: also your child\'s admission number. We send a code to it.',
+    'कर्मचारी: अपना मोबाइल नंबर या ई-मेल (कर्मचारी कोड नहीं)। अभिभावक: अपने बच्चे का प्रवेश क्रमांक भी। हम उस पर एक कोड भेजेंगे।',
   );
   String get loginLabel =>
       _t('Mobile number, e-mail or admission number', 'मोबाइल नंबर, ई-मेल या प्रवेश क्रमांक');
