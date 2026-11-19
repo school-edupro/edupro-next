@@ -4940,6 +4940,8 @@
     "whoAndWhat": "कौन और कौन-सी भूमिका",
     "person": "व्यक्ति",
     "pickPerson": "व्यक्ति चुनें",
+    "holdsNow": "अभी की भूमिकाएँ: {roles}।",
+    "holdsNone": "अभी कोई भूमिका नहीं।",
     "pickRole": "भूमिका चुनें",
     "template": "(टेम्पलेट)",
     "campusLabel": "परिसर",

@@ -115,7 +115,7 @@ const STATE_SQL = `CASE WHEN ur.revoked_at IS NOT NULL THEN 'revoked'
 const STATED = `WITH a AS (
   SELECT ur.id, ur.user_id, ur.role_id, ur.revoked_at, ${STATE_SQL} AS state,
          COALESCE((SELECT m.person_type::text FROM user_school_memberships m
-                    WHERE m.user_id = ur.user_id AND m.deleted_at IS NULL
+                    WHERE m.user_id = ur.user_id AND m.deleted_at IS NULL AND m.school_id = app.current_school_id()
                     ORDER BY (m.status = 'active') DESC, m.id LIMIT 1), 'external') AS ptype
     FROM user_roles ur)`;
 
@@ -378,7 +378,8 @@ export class AssignmentsService {
 
     const created = await this.db.tenant(tenant, async (c) => {
       const member = await c.query(
-        `SELECT 1 FROM user_school_memberships WHERE user_id = $1 AND status = 'active' AND deleted_at IS NULL LIMIT 1`,
+        `SELECT 1 FROM user_school_memberships WHERE user_id = $1 AND status = 'active' AND deleted_at IS NULL
+            AND school_id = app.current_school_id() LIMIT 1`,
         [dto.userId],
       );
       if ((member.rowCount ?? 0) === 0)

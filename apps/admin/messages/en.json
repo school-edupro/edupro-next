@@ -4940,6 +4940,8 @@
     "whoAndWhat": "Who and which role",
     "person": "Person",
     "pickPerson": "Pick a person",
+    "holdsNow": "Holds now: {roles}.",
+    "holdsNone": "Holds no role now.",
     "pickRole": "Pick a role",
     "template": "(template)",
     "campusLabel": "Campus",

@@ -63,7 +63,8 @@ export class MembershipsService {
     q: ListMembershipsQueryDto,
   ): Promise<{ rows: MembershipRow[]; total: number }> {
     return this.db.tenant(tenant, async (c) => {
-      const where: string[] = ['m.deleted_at IS NULL'];
+      // this school's members only (a person may read their own memberships in every school)
+      const where: string[] = ['m.deleted_at IS NULL', 'm.school_id = app.current_school_id()'];
       const params: unknown[] = [];
       if (q.personType) {
         params.push(q.personType);
@@ -144,7 +145,7 @@ export class MembershipsService {
     const result = await this.db.tenant(tenant, async (c) => {
       const cur = await c.query<MembershipDbRow>(
         // eslint-disable-next-line no-restricted-syntax -- column list and select constants; values are bound parameters
-        `${SELECT} WHERE m.id = $1 AND m.deleted_at IS NULL`,
+        `${SELECT} WHERE m.id = $1 AND m.deleted_at IS NULL AND m.school_id = app.current_school_id()`,
         [id],
       );
       if (!cur.rows[0]) throw new DomainError('not-found', 'Membership not found');

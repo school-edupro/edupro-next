@@ -147,7 +147,12 @@ export async function grantRole(fd: FormData) {
   } catch (error) {
     if (error instanceof ApiError && error.problem.type === 'mfa-required')
       redirect(`/step-up?returnTo=${encodeURIComponent(form)}`);
-    if (error instanceof ApiError) back(form, error.problem.type, problemDetail(error));
+    // the person and role kept, so the refusal (already held, duties that clash) can be put right
+    const again = new URL(form, 'http://edupro.local');
+    if (/^\d{1,18}$/.test(userId)) again.searchParams.set('userId', userId);
+    if (/^\d{1,18}$/.test(str(fd, 'roleId'))) again.searchParams.set('roleId', str(fd, 'roleId'));
+    if (error instanceof ApiError)
+      back(`${again.pathname}${again.search}`, error.problem.type, problemDetail(error));
     throw error;
   }
   back(`/access/assignments?userId=${userId}&people=all&status=all`, 'ok');

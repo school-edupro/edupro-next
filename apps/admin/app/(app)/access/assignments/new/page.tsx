@@ -10,7 +10,7 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { PEOPLE_GROUPS, type PeopleGroup } from '@/lib/access-assignments';
+import { PEOPLE_GROUPS, type AssignmentPeople, type PeopleGroup } from '@/lib/access-assignments';
 import { grantRole } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ClassRow, Membership, Page, Role, School, SectionRow } from '@/lib/types';
@@ -35,6 +35,7 @@ export default async function GrantRolePage({
     q?: string;
     people?: string;
     userId?: string;
+    roleId?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -47,6 +48,7 @@ export default async function GrantRolePage({
     : 'staff';
   const q = (sp.q ?? '').trim().slice(0, 100);
   const userId = /^\d{1,18}$/.test(sp.userId ?? '') ? sp.userId! : '';
+  const roleId = /^\d{1,18}$/.test(sp.roleId ?? '') ? sp.roleId! : '';
   const canManage = me.permissions.includes('access.assignment.manage');
   const find = (t: Membership['personType']) => {
     const x = new URLSearchParams({ personType: t, size: '200' });
@@ -55,9 +57,15 @@ export default async function GrantRolePage({
   };
   const [found, roles, school, classes] = await Promise.all([
     Promise.all(TYPES[people].map(find)).then((xs) =>
-      xs
-        .flat()
-        .filter((m) => m.status === 'active')
+      // each person once (several kinds of membership list them more than once)
+      [
+        ...new Map(
+          xs
+            .flat()
+            .filter((m) => m.status === 'active')
+            .map((m) => [m.userId, m]),
+        ).values(),
+      ]
         .sort((a, b) => a.displayName.localeCompare(b.displayName))
         .slice(0, 200),
     ),
@@ -75,6 +83,17 @@ export default async function GrantRolePage({
     ),
   );
   const withSections = sections.filter((x) => x.sections.length);
+  const picked = found.some((m) => m.userId === userId)
+    ? userId
+    : found.length === 1
+      ? found[0]!.userId
+      : '';
+  // the roles the person picked holds now, so a second grant of one is seen before it is refused
+  const holds = picked
+    ? await apiFetch<AssignmentPeople>(
+        `/access/assignments/people?people=all&status=active&userId=${picked}`,
+      ).then((r) => r.data[0]?.assignments ?? [])
+    : [];
   const kind = (t: Membership['personType']) => w(`kind_${t}`);
 
   return (
@@ -137,13 +156,7 @@ export default async function GrantRolePage({
                 name="userId"
                 label={w('person')}
                 required
-                defaultValue={
-                  found.some((m) => m.userId === userId)
-                    ? userId
-                    : found.length === 1
-                      ? found[0]!.userId
-                      : ''
-                }
+                defaultValue={picked}
                 options={[
                   { value: '', label: w('pickPerson') },
                   ...found.map((m) => ({
@@ -157,7 +170,7 @@ export default async function GrantRolePage({
                 name="roleId"
                 label={w('role')}
                 required
-                defaultValue=""
+                defaultValue={roles.some((r) => r.id === roleId) ? roleId : ''}
                 options={[
                   { value: '', label: w('pickRole') },
                   ...roles.map((r) => ({
@@ -176,6 +189,13 @@ export default async function GrantRolePage({
                 ]}
               />
             </FormRow>
+            {picked ? (
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                {holds.length
+                  ? w('holdsNow', { roles: holds.map((a) => a.roleName).join(', ') })
+                  : w('holdsNone')}
+              </p>
+            ) : null}
           </FormSection>
 
           <FormSection title={w('sectionsTitle')} description={w('sectionsHelp')}>

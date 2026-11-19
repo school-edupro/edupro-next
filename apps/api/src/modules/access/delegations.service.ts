@@ -113,7 +113,8 @@ export class DelegationsService {
         );
 
       const member = await c.query(
-        `SELECT 1 FROM user_school_memberships WHERE user_id = $1 AND status = 'active' AND deleted_at IS NULL LIMIT 1`,
+        `SELECT 1 FROM user_school_memberships WHERE user_id = $1 AND status = 'active' AND deleted_at IS NULL
+            AND school_id = app.current_school_id() LIMIT 1`,
         [dto.toUserId],
       );
       if ((member.rowCount ?? 0) === 0)

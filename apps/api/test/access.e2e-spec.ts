@@ -522,5 +522,34 @@ describe('access administration (e2e)', () => {
           .data.some((u: { displayName: string }) => u.displayName === 'Invited Teacher'),
       ).toBe(true);
     });
+
+    it("a member of two schools is listed once, as this school's member", async () => {
+      // the admin joins the other school too: they may read both memberships (the school switcher), the lists
+      // of this school name only this one
+      await withMigrator(async (c) => {
+        await c.query(
+          `INSERT INTO user_school_memberships (school_id, user_id, person_type) VALUES ($1, $2, 'external')`,
+          [other.id, admin.id],
+        );
+      });
+      const list = await inject({
+        method: 'GET',
+        url: `/access/memberships?q=${admin.sub}`,
+        headers: A(admin.sub),
+      });
+      expect(
+        list
+          .json()
+          .data.map((m: { userId: string; personType: string }) => [m.userId, m.personType]),
+      ).toEqual([[admin.id, 'employee']]);
+      const people = await inject({
+        method: 'GET',
+        url: `/access/assignments/people?people=all&userId=${admin.id}`,
+        headers: A(admin.sub),
+      });
+      expect(people.json().data.map((p: { personType: string }) => p.personType)).toEqual([
+        'employee',
+      ]);
+    });
   });
 });
