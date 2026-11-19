@@ -120,6 +120,31 @@ class DioTransport implements ApiTransport {
     }
   }
 
+  @override
+  Future<void> upload(
+    String url,
+    List<int> bytes, {
+    String method = 'PUT',
+    Map<String, String>? headers,
+  }) async {
+    try {
+      await Dio().request<void>(
+        url,
+        data: Stream.fromIterable([bytes]),
+        options: Options(
+          method: method,
+          headers: {...?headers, Headers.contentLengthHeader: bytes.length},
+        ),
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        e.response?.statusCode ?? 0,
+        'upload',
+        e.message ?? 'The file could not be sent.',
+      );
+    }
+  }
+
   static String? _nameOf(Headers h) {
     final d = h.value('content-disposition');
     if (d == null) return null;
@@ -155,10 +180,14 @@ class DioTransport implements ApiTransport {
     ResponseType type,
   ) async {
     final p = profile();
+    final o = currentCallOptions();
+    final school = o?.schoolId ?? p.schoolId;
+    final acting = o == null ? p.actingAs : o.actingAs;
     final headers = <String, Object>{
       if (session.accessToken != null) 'Authorization': 'Bearer ${session.accessToken}',
-      if (p.schoolId != null) 'X-School-Id': p.schoolId!,
-      if (p.actingAs != null) 'X-Acting-As': p.actingAs!,
+      'X-School-Id': ?school,
+      'X-Acting-As': ?acting,
+      if (o?.idempotencyKey != null) 'Idempotency-Key': o!.idempotencyKey!,
     };
     try {
       return await _dio.request<dynamic>(

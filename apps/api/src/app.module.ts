@@ -4,6 +4,8 @@ import { ZodValidationPipe } from 'nestjs-zod';
 // zod 3's wording for validation messages, set once for the whole API (see the file)
 import './common/validation/zod-messages';
 import { PermissionGuard } from './common/access/permission.guard';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { IdempotencyInterceptor } from './common/http/idempotency';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { AuditService } from './common/audit/audit.service';
 import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
@@ -101,6 +103,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     PeopleModule,
     CompatModule,
     OpsModule,
+    ApprovalsModule,
   ],
   controllers: [HealthController, MetricsController, MeController],
   providers: [
@@ -110,6 +113,8 @@ import { ReportsModule } from './modules/reports/reports.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
+    // outer first: a replayed write is answered before the audit interceptor sees it
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_FILTER, useClass: ProblemDetailsFilter },
   ],

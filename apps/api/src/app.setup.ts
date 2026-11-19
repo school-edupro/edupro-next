@@ -3,6 +3,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { Server } from 'node:http';
+import { isInternalCall } from './common/http/internal-calls';
 import { MetricsService } from './common/metrics/metrics.service';
 import { corsOrigins, type Env } from './config/env';
 
@@ -59,6 +60,8 @@ export async function setupApp(app: NestFastifyApplication, env: Env): Promise<v
     timeWindow: '1 minute',
     keyGenerator: (req) =>
       req.headers.authorization ? `u:${req.headers.authorization.slice(-32)}` : `ip:${req.ip}`,
+    // the API calling its own routes for one request (the approvals inbox) counts once, as that request
+    allowList: (req) => isInternalCall(req),
   });
 
   fastify.addHook('onSend', async (req, reply) => {

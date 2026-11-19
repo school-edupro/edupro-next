@@ -16,7 +16,7 @@ import {
   LEAVE_OWN,
   LockDto,
   MyMonthDto,
-  ReasonDto,
+  StaffLeaveReasonDto,
   RegisterMonthDto,
   TeamAttendanceDto,
   RegulariseDto,
@@ -27,8 +27,9 @@ import {
   TimingLogDto,
   TimingsQueryDto,
   TimingDto,
-  WithdrawDto,
+  StaffLeaveWithdrawDto,
 } from './leave.dto';
+import { Idempotent } from '../../common/http/idempotency';
 
 const check = (re: RegExp, what: string) => ({
   parse: (v: string) => {
@@ -101,6 +102,8 @@ export class StaffAttendanceController {
   }
 
   @Post('regularisations')
+  // a phone resending after a lost answer gets the first answer
+  @Idempotent()
   @ApiOperation({ summary: 'Ask for my day to be corrected (decided through Who approves)' })
   @RequirePermission(LEAVE_OWN)
   regularise(@ReqCtx() ctx: RequestContext, @Body() body: RegulariseDto) {
@@ -121,7 +124,11 @@ export class StaffAttendanceController {
 
   @Post('regularisations/:id/withdraw')
   @AuthenticatedOnly()
-  withdrawReg(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: WithdrawDto) {
+  withdrawReg(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StaffLeaveWithdrawDto,
+  ) {
     return this.att.withdrawReg(ctx, Id.parse(id), body);
   }
 
@@ -133,13 +140,17 @@ export class StaffAttendanceController {
 
   @Post('late-marks/:id/waive')
   @RequirePermission(LEAVE_OFFICE)
-  waive(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReasonDto) {
+  waive(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: StaffLeaveReasonDto) {
     return this.att.clearMark(ctx, 'late', Id.parse(id), body.reason);
   }
 
   @Post('missing-punches/:id/retire')
   @RequirePermission(LEAVE_OFFICE)
-  retire(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReasonDto) {
+  retire(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StaffLeaveReasonDto,
+  ) {
     return this.att.clearMark(ctx, 'missing', Id.parse(id), body.reason);
   }
 

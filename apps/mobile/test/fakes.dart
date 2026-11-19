@@ -30,7 +30,12 @@ class FakeTransport implements ApiTransport {
     Map<String, Object?>? body,
     Map<String, Object?>? query,
   }) async {
-    final c = Call(method, path, body, query, const {});
+    // the options of a call made inside withCall (the outbox's school and idempotency key)
+    final o = currentCallOptions();
+    final c = Call(method, path, body, query, {
+      if (o?.schoolId != null) 'X-School-Id': o!.schoolId,
+      if (o?.idempotencyKey != null) 'Idempotency-Key': o!.idempotencyKey,
+    });
     calls.add(c);
     return answer(c);
   }
@@ -48,6 +53,22 @@ class FakeTransport implements ApiTransport {
     return r is ApiFile
         ? r
         : const ApiFile(bytes: [37, 80, 68, 70], contentType: 'application/pdf', name: 'file.pdf');
+  }
+
+  /// Bytes sent to upload links, by link.
+  final Map<String, List<int>> uploads = {};
+
+  @override
+  Future<void> upload(
+    String url,
+    List<int> bytes, {
+    String method = 'PUT',
+    Map<String, String>? headers,
+  }) async {
+    final c = Call(method, url, null, null, {...?headers});
+    calls.add(c);
+    answer(c);
+    uploads[url] = bytes;
   }
 
   @override

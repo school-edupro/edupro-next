@@ -1,3 +1,5 @@
+import 'dart:async';
+
 /// What the generated client (endpoints.g.dart) calls: one request, its JSON answer.
 abstract interface class ApiTransport {
   Future<dynamic> send(
@@ -17,6 +19,14 @@ abstract interface class ApiTransport {
 
   /// A short-lived signed link the API gave (an attachment, a finished PDF): fetched without the session.
   Future<ApiFile> download(String url, {String? name, String? contentType});
+
+  /// Sends a file's bytes to the signed upload link the API gave (`POST /platform/files`), without the session.
+  Future<void> upload(
+    String url,
+    List<int> bytes, {
+    String method = 'PUT',
+    Map<String, String>? headers,
+  });
 }
 
 /// A file the API sent: its bytes, type and name.
@@ -44,3 +54,21 @@ class ApiException implements Exception {
   @override
   String toString() => 'ApiException($status, $type, $detail)';
 }
+
+/// Headers for the calls made inside [withCall]: a write kept on the phone and sent later goes with the school it
+/// was made in and its idempotency key (the API answers a repeat with the first answer instead of doing it twice).
+class CallOptions {
+  const CallOptions({this.schoolId, this.actingAs, this.idempotencyKey});
+  final String? schoolId;
+  final String? actingAs;
+  final String? idempotencyKey;
+}
+
+const _callOptions = #eduproCallOptions;
+
+/// Runs [body] with [options] for every API call it makes.
+Future<T> withCall<T>(CallOptions options, Future<T> Function() body) =>
+    runZoned(body, zoneValues: {_callOptions: options});
+
+/// The options of the call being made (null outside [withCall]).
+CallOptions? currentCallOptions() => Zone.current[_callOptions] as CallOptions?;

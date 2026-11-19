@@ -170,7 +170,7 @@ const ApplyFields = {
   splitOk: z.boolean().default(false),
 };
 export const ApplySchema = z.object(ApplyFields);
-export class ApplyDto extends createZodDto(ApplySchema) {}
+export class StaffLeaveApplyDto extends createZodDto(ApplySchema) {}
 
 /** The office applies for an employee: approved at once, replacing leave already on those days. */
 export const OnBehalfSchema = z.object({ ...ApplyFields, employeeId: Id });
@@ -188,10 +188,10 @@ export const DecideSchema = z
 export class DecideDto extends createZodDto(DecideSchema) {}
 
 export const ReasonSchema = z.object({ reason: z.string().trim().min(3).max(500) });
-export class ReasonDto extends createZodDto(ReasonSchema) {}
+export class StaffLeaveReasonDto extends createZodDto(ReasonSchema) {}
 
 export const WithdrawSchema = z.object({ reason: z.string().trim().max(500).default('') });
-export class WithdrawDto extends createZodDto(WithdrawSchema) {}
+export class StaffLeaveWithdrawDto extends createZodDto(WithdrawSchema) {}
 
 export const OverrideSchema = z.object({
   outcome: z.enum(['approved', 'rejected']),

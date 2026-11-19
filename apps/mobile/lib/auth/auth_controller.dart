@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_transport.dart';
 import '../api/endpoints.g.dart';
 import '../app_services.dart';
+import '../api/outbox.dart';
 import '../family/data.dart' show clearCache;
 
 /// Where sign-in stands.
@@ -70,6 +71,7 @@ class AuthController extends Notifier<AuthState> {
     ref.listen(signedOutSignalProvider, (prev, next) {
       if (prev != null && next != prev) {
         clearCache();
+        ref.read(outboxProvider.notifier).clear();
         state = const AuthSignedOut();
       }
     });
@@ -187,8 +189,9 @@ class AuthController extends Notifier<AuthState> {
       // signed out here whatever the network says
     }
     await ref.read(sessionStoreProvider).clear();
-    // the last copies of the screens belong to the person who signed out
+    // the last copies of the screens and the unsent work belong to the person who signed out
     await clearCache();
+    await ref.read(outboxProvider.notifier).clear();
     state = const AuthSignedOut();
   }
 }

@@ -13,9 +13,12 @@ import 'widgets.dart';
 /// A file from the API — a report card, a receipt, an attachment — shown in the app (PDF pages or the picture), with
 /// Save / Share in the bar (the phone's share sheet saves it to Files or sends it on).
 class FileScreen extends ConsumerStatefulWidget {
-  const FileScreen({super.key, required this.title, required this.load});
+  const FileScreen({super.key, required this.title, required this.load, this.passwordHint});
   final String title;
   final Future<ApiFile> Function() load;
+
+  /// a PDF that opens with a password (a payslip): what the password is made of, shown when it is asked for
+  final String? passwordHint;
 
   @override
   ConsumerState<FileScreen> createState() => _FileScreenState();
@@ -30,6 +33,34 @@ class _FileScreenState extends ConsumerState<FileScreen> {
       fileNameOverrides: [f.name],
     ),
   );
+
+  Future<String?> _password(BuildContext context, S s) {
+    final c = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text(s.pdfPassword),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.passwordHint != null) Text(widget.passwordHint!),
+            TextField(
+              key: const Key('pdfPassword'),
+              controller: c,
+              obscureText: true,
+              autofocus: true,
+              decoration: InputDecoration(labelText: s.pdfPassword),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(d).pop(), child: Text(s.cancel)),
+          FilledButton(onPressed: () => Navigator.of(d).pop(c.text), child: Text(s.open)),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +104,7 @@ class _FileScreenState extends ConsumerState<FileScreen> {
             AsyncSnapshot(hasData: true) when f!.isPdf => PdfViewer.data(
               Uint8List.fromList(f.bytes),
               sourceName: f.name,
+              passwordProvider: () => _password(context, s),
             ),
             AsyncSnapshot(hasData: true) when f!.isImage => InteractiveViewer(
               child: Center(child: Image.memory(Uint8List.fromList(f.bytes))),

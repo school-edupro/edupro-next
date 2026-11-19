@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../api/outbox.dart';
 import '../auth/auth_controller.dart';
 import '../config.dart';
 import '../l10n/strings.dart';
@@ -28,6 +29,28 @@ class SettingsScreen extends ConsumerWidget {
             icon: const Icon(Icons.logout),
             label: Text(s.signOut),
             onPressed: () async {
+              // unsent work belongs to the person: say so before it goes
+              final waiting = ref.read(outboxProvider).length;
+              if (waiting > 0) {
+                final go = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    content: Text(s.signOutLoses(waiting)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(c).pop(false),
+                        child: Text(s.cancel),
+                      ),
+                      FilledButton(
+                        key: const Key('confirmSignOut'),
+                        onPressed: () => Navigator.of(c).pop(true),
+                        child: Text(s.signOut),
+                      ),
+                    ],
+                  ),
+                );
+                if (go != true) return;
+              }
               await ref.read(authProvider.notifier).signOut();
               if (context.mounted) Navigator.of(context).popUntil((r) => r.isFirst);
             },

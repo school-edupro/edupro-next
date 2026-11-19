@@ -334,3 +334,82 @@ app opens (fees, tax certificate, queries, leave) come up signed in for the righ
 **Not done in phase B**: as in phase A, no run on Android / iOS devices yet (no Android Studio / Xcode on this Mac),
 so the payment's return inside a real WebView and the share sheet are checked on a phone in phase E's internal test
 builds; native gateway SDKs (Razorpay) stay for later (§5.5).
+
+## As built — phase C, staff and the approvals inbox (19 Nov 2026)
+
+**App** (`apps/mobile/lib/staff/`)
+
+- **Tabs** (§5.2): My day, Attendance, Classes, Messages, More; the bar carries **Approvals** with the count.
+- **My day** (`my_day.dart`): the figures first — periods today, classes still to mark, marks to enter, approvals
+  waiting — then today's periods (with substitutions), the day sections the person marks that have no attendance yet
+  (their own class-teacher sections only, not every section they may see), and the marks waiting. Today's rolls are
+  fetched here so they can be marked later with no network.
+- **Mark a class** (`class_attendance.dart`): the class from the person's assignments (day attendance where they may
+  mark it, or a subject they teach), the day (up to today), the roll with Present / Absent / Late at a tap and the other
+  codes in a menu, "All present"; a pupil on approved leave stays on leave. **Saved through the outbox**: sent at once
+  with a key, or — with no network — kept on the phone and sent when the network is back (§5.6).
+- **My attendance** (`my_attendance.dart`): the month from the school's punch machines and the corrections asked for;
+  **ask for a correction** (in / out time or what the day should be, and why) and withdraw one waiting. EduPro has no
+  check-in from a phone — staff days come only from the biometric punches — so the planned "my attendance check-in"
+  write is not there; the correction request is the staff member's own write.
+- **My leave** (`my_leave.dart`): balances, requests (withdraw one waiting, ask to cancel one approved), **apply** with
+  the kind (type to search), half day, dates and reason; when the school asks to confirm (a leave over a holiday, a
+  split with loss of pay) the person reads its words and goes ahead. A kind that needs a document goes to the web page.
+- **Classes** (`classes.dart`): **post homework / classwork / an assignment** for a class and subject with a due date,
+  "ask families to say they have seen it", and photos (camera) or files (PDF, pictures) uploaded the way the web does
+  (register, send the bytes, complete); **marks entry** (`marks.dart`: the exams with sheets waiting, a sheet's box a
+  pupil or Absent, the maximum checked, saved, then sent for checking; a subject entered in parts goes to the web
+  page); **my timetable** a day at a time; **my payslips** by financial year, each opening as its password-protected PDF
+  with the password hint.
+- **Approvals** (`approvals.dart`): every kind waiting for the person, the oldest first, filtered by kind; an item opens
+  with what it is, who asked, when and the amount, "Open the full page" (a staff page inside the app; an admin page in
+  the browser), and Approve / Reject (Acknowledge, Sign or Send back where that is the kind's word) with the reason the
+  kind needs. A kind that needs more than a yes or no says so and opens its page.
+- **More**: an item with a native screen opens it (family and staff alike), the rest open their web page.
+- **Outbox** (`lib/api/outbox.dart`, `ui/outbox_view.dart`): writes recorded from the generated client, kept in order
+  on the phone, sent with their own `Idempotency-Key` and school; retried every minute, when the app comes back and on
+  "Send now"; a refusal is kept with its reason until removed; signing out warns about unsent work and clears it.
+- Online writes that may be retried after a lost answer (homework post, leave application, correction request) carry a
+  key too. Texts in English and Hindi; accessibility checked in light, dark and Hindi and at twice the text size (the
+  count badge became white with navy figures; every type-to-search arrow is named for screen readers).
+
+**API**
+
+- **Idempotency keys** (migration 0402 `api_idempotency`, definer functions; `common/http/idempotency.ts`): a route
+  marked `@Idempotent()` given `Idempotency-Key` runs once per person and key — a repeat gets the first answer
+  (`Idempotent-Replayed: true`, no second audit row or alert), the key with another request is refused (422), a repeat
+  while the first runs is told to try again (409 `idempotency.in_progress`), a failed request frees its key; kept two
+  days. Marked: class attendance, homework post, staff leave application, attendance correction request.
+- **Approvals inbox** (`modules/approvals`): `GET /approvals/inbox` gathers **33 kinds, 27 of them decided in the inbox** — the admin Approvals page's 26 (fee adjustments and requests, staff leave and its cancellations each as two)
+  (workflow steps, profile changes, purchase indents / orders / requisitions / comparative statements / receipts /
+  issues / counts / rate corrections / condemnations / vendors / assets, fee adjustments and requests, withdrawals,
+  transfers, gate passes, vacancies, ACRs, transport, file movement, lessons, student leave, staff leave and its
+  cancellations, attendance corrections, registrations) and the staff app's own (staff profile changes, exits, no-dues,
+  consent answers, hostel visits) — in one shape (kind, id, title, detail, who, when, amount, page, how it is decided).
+  `POST /approvals/{kind}/{id}/decision` sends a decision to that kind's own route. Both call the existing routes
+  **in-process as the person** (`InternalCalls`, Fastify inject with their sign-in; not rate-limited), so permissions,
+  scope, segregation of duties, second factor, validation and audit stay exactly where they are; the inbox writes no
+  audit row of its own. Kinds that are not a yes / no (inspection line by line, clearances, accepting a transfer, an ACR,
+  no-dues, condemnations) are listed and opened on their page. A list that fails shows as "unavailable", not as nothing.
+- More request classes renamed for unique OpenAPI names (`StaffLeaveApplyDto`, `StaffLeaveWithdrawDto`,
+  `StaffLeaveReasonDto`), caught by the generator's check.
+
+**Tests**: API e2e `idempotency` (3: replay without a second marking, alert or audit row; key reused; bad key; per
+person; a failed request frees its key), `approvals-inbox` (6: an administrator's inbox reads every list route; a class
+teacher sees and decides a pupil's leave in the one shape, with one audit row; the reason rule; the kind's own refusals
+passed on; own-page and unknown kinds; every kind's list and decision routes exist and accept the inbox's request —
+checked against a known bad body), `mobile-staff` (5: a teacher's phone session reads every endpoint the staff screens
+use; marks and homework sent twice done once; the approvals inbox from the phone). Flutter 44 (outbox 7: kept, in order,
+same key, refusals kept, in-progress retried, cleared at sign-out; the transport's per-call headers; staff 12: My day's
+figures and sections, marking, offline marking sent later, approvals with the reason, leave with the bridge
+confirmation, a correction, marks over the maximum and sent for checking, homework with a key, payslips, More opening the
+native screen, accessibility in light / dark / Hindi, twice the text size). Full API e2e 196 files: all pass but one
+consent-forms test that passes on its own (timing under load). Lint, types, unit 88, permissions, database 151, script
+checks. Checked in a browser on a test school: a made-up teacher signs in on the web build and every staff screen reads
+the real API without an error.
+
+**Not done in phase C**: a push to the approver when something new waits (needs the EduPro Firebase project — phase D
+with push), devices (as before). Found on the way and left for separate work: the admin Approvals page reads
+`createdAt` for workflow items (the API sends `requestedAt`), checks other permissions than the fee and withdrawal list
+routes need, and counts pages rather than totals for some kinds; fee requests routed through approval levels are decided
+on `/workflow/steps`, which does not ask for the second factor their own route asks for.

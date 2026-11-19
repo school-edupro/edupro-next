@@ -136,3 +136,7 @@ class AsyncBody<T> extends ConsumerWidget {
     );
   }
 }
+
+/// The arrow of a type-to-search list, named for screen readers (the list's own arrow button has no name).
+Widget dropArrow(String label, {bool open = false}) =>
+    Icon(open ? Icons.arrow_drop_up : Icons.arrow_drop_down, semanticLabel: label);

@@ -167,6 +167,114 @@ class EduProApi {
   /// GET /fees/mine/bill/file — The fee bill of one of the family's children as a PDF
   Future<ApiFile> feesMyBillFile({required String studentId, String? ledger}) =>
       _t.file('GET', '/fees/mine/bill/file', query: {'studentId': studentId, if (ledger != null) 'ledger': ledger});
+
+  /// GET /academics/teacher-assignments/mine — My own assignments (teacher app)
+  Future<dynamic> teacherAssignmentsMine() =>
+      _t.send('GET', '/academics/teacher-assignments/mine');
+
+  /// GET /academics/timetable/mine — My own week (teacher app)
+  Future<dynamic> timetableMine() =>
+      _t.send('GET', '/academics/timetable/mine');
+
+  /// GET /academics/substitutions/mine
+  Future<dynamic> substitutionsMine() =>
+      _t.send('GET', '/academics/substitutions/mine');
+
+  /// GET /attendance/summary — Per-section counts for a day (dashboard)
+  Future<dynamic> attendanceSummary({String? date}) =>
+      _t.send('GET', '/attendance/summary', query: {if (date != null) 'date': date});
+
+  /// GET /attendance/session — Roster of a section for a date with any marks recorded (scoped)
+  Future<dynamic> attendanceSession({required String classSectionId, required String date, String? kind, String? subjectId, String? periodId}) =>
+      _t.send('GET', '/attendance/session', query: {'classSectionId': classSectionId, 'date': date, if (kind != null) 'kind': kind, if (subjectId != null) 'subjectId': subjectId, if (periodId != null) 'periodId': periodId});
+
+  /// POST /attendance/sessions — Mark a session (day or subject); absent alerts go to guardians
+  Future<dynamic> attendanceMark({required MarkSessionDto body}) =>
+      _t.send('POST', '/attendance/sessions', body: body.toJson());
+
+  /// GET /exams/my-entry — The signed-in teacher's entry not done yet, per open exam (docs/design/71)
+  Future<dynamic> examEntryToEnter() =>
+      _t.send('GET', '/exams/my-entry');
+
+  /// GET /exams/{id}/entry/sections — Sections and subjects of this exam the caller may enter
+  Future<dynamic> examEntrySections({required String id}) =>
+      _t.send('GET', '/exams/${Uri.encodeComponent(id)}/entry/sections');
+
+  /// GET /exams/{id}/marks
+  Future<dynamic> examEntryMarks({required String id, required String classSectionId, String? subjectId}) =>
+      _t.send('GET', '/exams/${Uri.encodeComponent(id)}/marks', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// PUT /exams/{id}/marks — Enter marks for one section and subject (app.enter_marks)
+  Future<dynamic> examEntryPutMarks({required PutMarksDto body, required String id}) =>
+      _t.send('PUT', '/exams/${Uri.encodeComponent(id)}/marks', body: body.toJson());
+
+  /// POST /exams/{id}/entry-status/submit — Submit a section’s marks of a subject for verification
+  Future<dynamic> examStatusSubmit({required EntryStatusActionDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/entry-status/submit', body: body.toJson());
+
+  /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
+  Future<dynamic> dailyWorkSheetOptions() =>
+      _t.send('GET', '/academics/daily-work/sheet/options');
+
+  /// POST /academics/daily-work — Post homework, classwork or an assignment with optional files
+  Future<dynamic> dailyWorkCreate({required CreateDailyWorkDto body}) =>
+      _t.send('POST', '/academics/daily-work', body: body.toJson());
+
+  /// POST /platform/files — Register a file and obtain a signed upload URL
+  Future<dynamic> filesCreate({required CreateUploadDto body}) =>
+      _t.send('POST', '/platform/files', body: body.toJson());
+
+  /// POST /platform/files/{id}/complete — Confirm an upload (object storage drivers)
+  Future<dynamic> filesComplete({required String id}) =>
+      _t.send('POST', '/platform/files/${Uri.encodeComponent(id)}/complete');
+
+  /// GET /staff-attendance/mine
+  Future<dynamic> staffAttendanceMine({String? month}) =>
+      _t.send('GET', '/staff-attendance/mine', query: {if (month != null) 'month': month});
+
+  /// POST /staff-attendance/regularisations — Ask for my day to be corrected (decided through Who approves)
+  Future<dynamic> staffAttendanceRegularise({required RegulariseDto body}) =>
+      _t.send('POST', '/staff-attendance/regularisations', body: body.toJson());
+
+  /// POST /staff-attendance/regularisations/{id}/withdraw
+  Future<dynamic> staffAttendanceWithdrawReg({required StaffLeaveWithdrawDto body, required String id}) =>
+      _t.send('POST', '/staff-attendance/regularisations/${Uri.encodeComponent(id)}/withdraw', body: body.toJson());
+
+  /// GET /leave/mine — My balances, the types I may apply for, my leave, what waits for me
+  Future<dynamic> staffLeaveMine({int? page, int? size, String? from, String? to}) =>
+      _t.send('GET', '/leave/mine', query: {if (page != null) 'page': page, if (size != null) 'size': size, if (from != null) 'from': from, if (to != null) 'to': to});
+
+  /// GET /leave/requests/{id}
+  Future<dynamic> staffLeaveGet({required String id}) =>
+      _t.send('GET', '/leave/requests/${Uri.encodeComponent(id)}');
+
+  /// POST /leave/apply — Apply for my leave (may answer with a question: the sandwich, the split)
+  Future<dynamic> staffLeaveApply({required StaffLeaveApplyDto body}) =>
+      _t.send('POST', '/leave/apply', body: body.toJson());
+
+  /// POST /leave/requests/{id}/withdraw
+  Future<dynamic> staffLeaveWithdraw({required StaffLeaveWithdrawDto body, required String id}) =>
+      _t.send('POST', '/leave/requests/${Uri.encodeComponent(id)}/withdraw', body: body.toJson());
+
+  /// POST /leave/requests/{id}/cancel-request
+  Future<dynamic> staffLeaveRequestCancel({required StaffLeaveReasonDto body, required String id}) =>
+      _t.send('POST', '/leave/requests/${Uri.encodeComponent(id)}/cancel-request', body: body.toJson());
+
+  /// GET /payroll/me/payslips — My payslips of a financial year, with the year so far
+  Future<dynamic> payrollPayslipMine({required String fy}) =>
+      _t.send('GET', '/payroll/me/payslips', query: {'fy': fy});
+
+  /// GET /payroll/me/payslips/{recordId} — One of my payslips as a PDF (locked with my password)
+  Future<ApiFile> payrollPayslipMinePdf({required String recordId}) =>
+      _t.file('GET', '/payroll/me/payslips/${Uri.encodeComponent(recordId)}');
+
+  /// GET /approvals/inbox — Everything waiting for my decision, every kind, one shape
+  Future<dynamic> approvalsInbox({String? kind}) =>
+      _t.send('GET', '/approvals/inbox', query: {if (kind != null) 'kind': kind});
+
+  /// POST /approvals/{kind}/{id}/decision — Approve or reject one item through its own route
+  Future<dynamic> approvalsDecide({required ApprovalDecisionDto body, required String kind, required String id}) =>
+      _t.send('POST', '/approvals/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/decision', body: body.toJson());
 }
 
 /** The OtpStartDto the API takes. */
@@ -330,5 +438,203 @@ class CommsInboxReadDto {
   final List<String> ids;
   Map<String, Object?> toJson() => {
         'ids': ids,
+      };
+}
+
+/** The MarkSessionDto the API takes. */
+class MarkSessionDto {
+  const MarkSessionDto({required this.classSectionId, required this.date, this.kind, this.subjectId, this.periodId, required this.marks, this.notes});
+  final String classSectionId;
+  final String date;
+  final String? kind;
+  final String? subjectId;
+  final String? periodId;
+  final List<MarkSessionDtoMarksItem> marks;
+  final String? notes;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'date': date,
+        if (kind != null) 'kind': kind,
+        if (subjectId != null) 'subjectId': subjectId,
+        if (periodId != null) 'periodId': periodId,
+        'marks': marks.map((x) => x.toJson()).toList(),
+        if (notes != null) 'notes': notes,
+      };
+}
+
+/** The MarkSessionDtoMarksItem the API takes. */
+class MarkSessionDtoMarksItem {
+  const MarkSessionDtoMarksItem({required this.studentId, required this.code, this.remarks});
+  final String studentId;
+  final String code;
+  final String? remarks;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'code': code,
+        if (remarks != null) 'remarks': remarks,
+      };
+}
+
+/** The PutMarksDto the API takes. */
+class PutMarksDto {
+  const PutMarksDto({required this.classSectionId, required this.subjectId, required this.rows});
+  final String classSectionId;
+  final String subjectId;
+  final List<PutMarksDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'subjectId': subjectId,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutMarksDtoRowsItem the API takes. */
+class PutMarksDtoRowsItem {
+  const PutMarksDtoRowsItem({required this.studentId, this.marks, this.absent, this.exempt, this.code, this.grade});
+  final String studentId;
+  final num? marks;
+  final bool? absent;
+  final bool? exempt;
+  final String? code;
+  final String? grade;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        if (marks != null) 'marks': marks,
+        if (absent != null) 'absent': absent,
+        if (exempt != null) 'exempt': exempt,
+        if (code != null) 'code': code,
+        if (grade != null) 'grade': grade,
+      };
+}
+
+/** The EntryStatusActionDto the API takes. */
+class EntryStatusActionDto {
+  const EntryStatusActionDto({required this.classSectionId, required this.subjectId, this.remark});
+  final String classSectionId;
+  final String subjectId;
+  final String? remark;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'subjectId': subjectId,
+        if (remark != null) 'remark': remark,
+      };
+}
+
+/** The CreateDailyWorkDto the API takes. */
+class CreateDailyWorkDto {
+  const CreateDailyWorkDto({required this.classSectionId, this.subjectId, required this.kind, required this.title, this.body, this.assignedOn, this.dueOn, this.fileIds, this.publishAt, this.ackRequired});
+  final String classSectionId;
+  final String? subjectId;
+  final String kind;
+  final String title;
+  final String? body;
+  final String? assignedOn;
+  final String? dueOn;
+  final List<String>? fileIds;
+  final String? publishAt;
+  final bool? ackRequired;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        if (subjectId != null) 'subjectId': subjectId,
+        'kind': kind,
+        'title': title,
+        if (body != null) 'body': body,
+        if (assignedOn != null) 'assignedOn': assignedOn,
+        if (dueOn != null) 'dueOn': dueOn,
+        if (fileIds != null) 'fileIds': fileIds,
+        if (publishAt != null) 'publishAt': publishAt,
+        if (ackRequired != null) 'ackRequired': ackRequired,
+      };
+}
+
+/** The CreateUploadDto the API takes. */
+class CreateUploadDto {
+  const CreateUploadDto({required this.fileName, required this.contentType, required this.sizeBytes, this.classification, this.ownerEntityType, this.ownerEntityId});
+  final String fileName;
+  final String contentType;
+  final int sizeBytes;
+  final String? classification;
+  final String? ownerEntityType;
+  final String? ownerEntityId;
+  Map<String, Object?> toJson() => {
+        'fileName': fileName,
+        'contentType': contentType,
+        'sizeBytes': sizeBytes,
+        if (classification != null) 'classification': classification,
+        if (ownerEntityType != null) 'ownerEntityType': ownerEntityType,
+        if (ownerEntityId != null) 'ownerEntityId': ownerEntityId,
+      };
+}
+
+/** The RegulariseDto the API takes. */
+class RegulariseDto {
+  const RegulariseDto({required this.day, this.in_, this.out, this.dayType, required this.reason, this.documentFileId});
+  final String day;
+  final String? in_;
+  final String? out;
+  final String? dayType;
+  final String reason;
+  final String? documentFileId;
+  Map<String, Object?> toJson() => {
+        'day': day,
+        if (in_ != null) 'in': in_,
+        if (out != null) 'out': out,
+        if (dayType != null) 'dayType': dayType,
+        'reason': reason,
+        if (documentFileId != null) 'documentFileId': documentFileId,
+      };
+}
+
+/** The StaffLeaveWithdrawDto the API takes. */
+class StaffLeaveWithdrawDto {
+  const StaffLeaveWithdrawDto({this.reason});
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        if (reason != null) 'reason': reason,
+      };
+}
+
+/** The StaffLeaveApplyDto the API takes. */
+class StaffLeaveApplyDto {
+  const StaffLeaveApplyDto({required this.leaveTypeId, required this.from, required this.to, this.halfDay, this.session, required this.reason, this.documentFileId, this.bridgeOk, this.splitOk});
+  final String leaveTypeId;
+  final String from;
+  final String to;
+  final bool? halfDay;
+  final String? session;
+  final String reason;
+  final String? documentFileId;
+  final bool? bridgeOk;
+  final bool? splitOk;
+  Map<String, Object?> toJson() => {
+        'leaveTypeId': leaveTypeId,
+        'from': from,
+        'to': to,
+        if (halfDay != null) 'halfDay': halfDay,
+        if (session != null) 'session': session,
+        'reason': reason,
+        if (documentFileId != null) 'documentFileId': documentFileId,
+        if (bridgeOk != null) 'bridgeOk': bridgeOk,
+        if (splitOk != null) 'splitOk': splitOk,
+      };
+}
+
+/** The StaffLeaveReasonDto the API takes. */
+class StaffLeaveReasonDto {
+  const StaffLeaveReasonDto({required this.reason});
+  final String reason;
+  Map<String, Object?> toJson() => {
+        'reason': reason,
+      };
+}
+
+/** The ApprovalDecisionDto the API takes. */
+class ApprovalDecisionDto {
+  const ApprovalDecisionDto({required this.decision, this.reason});
+  final String decision;
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        'decision': decision,
+        if (reason != null) 'reason': reason,
       };
 }

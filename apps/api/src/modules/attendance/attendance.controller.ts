@@ -24,6 +24,7 @@ import { BusService } from './bus.service';
 import { PunchService } from './punch.service';
 import { RfidService } from './rfid.service';
 import { RulesService } from './rules.service';
+import { Idempotent } from '../../common/http/idempotency';
 
 @ApiTags('attendance')
 @ApiBearerAuth()
@@ -41,6 +42,8 @@ export class AttendanceController {
   }
 
   @Post('sessions')
+  // the phone keeps a class's attendance with no network and sends it later: a repeat must not mark (or alert) twice
+  @Idempotent()
   @ApiOperation({ summary: 'Mark a session (day or subject); absent alerts go to guardians' })
   @RequirePermission(ATTENDANCE.mark, {
     description: 'Mark or edit attendance (scope: class_section)',

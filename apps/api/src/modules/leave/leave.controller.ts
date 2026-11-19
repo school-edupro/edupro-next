@@ -10,7 +10,7 @@ import { LeaveSelfService } from './leave-self.service';
 import { LeaveService } from './leave.service';
 import {
   AdjustDto,
-  ApplyDto,
+  StaffLeaveApplyDto,
   BalanceImportDto,
   BalanceDetailDto,
   LeaveApprovalsDto,
@@ -21,11 +21,12 @@ import {
   MineQueryDto,
   OnBehalfDto,
   OverrideDto,
-  ReasonDto,
+  StaffLeaveReasonDto,
   RegisterQueryDto,
   TrimDto,
-  WithdrawDto,
+  StaffLeaveWithdrawDto,
 } from './leave.dto';
+import { Idempotent } from '../../common/http/idempotency';
 
 /** Staff leave (docs/design/85, phase B). */
 @ApiTags('leave')
@@ -66,11 +67,13 @@ export class StaffLeaveController {
   }
 
   @Post('apply')
+  // a phone resending after a lost answer gets the first answer (not an overlap refusal)
+  @Idempotent()
   @ApiOperation({
     summary: 'Apply for my leave (may answer with a question: the sandwich, the split)',
   })
   @RequirePermission(LEAVE_OWN)
-  apply(@ReqCtx() ctx: RequestContext, @Body() body: ApplyDto) {
+  apply(@ReqCtx() ctx: RequestContext, @Body() body: StaffLeaveApplyDto) {
     return this.leave.apply(ctx, body);
   }
 
@@ -155,19 +158,31 @@ export class StaffLeaveController {
 
   @Post('requests/:id/withdraw')
   @AuthenticatedOnly()
-  withdraw(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: WithdrawDto) {
+  withdraw(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StaffLeaveWithdrawDto,
+  ) {
     return this.leave.withdraw(ctx, id, body);
   }
 
   @Post('requests/:id/cancel')
   @RequirePermission(LEAVE_OFFICE)
-  cancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReasonDto) {
+  cancel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StaffLeaveReasonDto,
+  ) {
     return this.leave.cancel(ctx, id, body);
   }
 
   @Post('requests/:id/cancel-request')
   @AuthenticatedOnly()
-  requestCancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReasonDto) {
+  requestCancel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StaffLeaveReasonDto,
+  ) {
     return this.leave.requestCancel(ctx, id, body);
   }
 

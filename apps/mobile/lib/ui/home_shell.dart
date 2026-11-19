@@ -9,7 +9,15 @@ import '../theme/tokens.g.dart';
 import '../family/academics.dart';
 import '../family/fees.dart';
 import '../family/messages.dart';
+import '../family/common.dart';
 import '../family/today.dart';
+import '../staff/approvals.dart';
+import '../staff/class_attendance.dart';
+import '../staff/classes.dart';
+import '../staff/marks.dart';
+import '../staff/my_attendance.dart';
+import '../staff/my_day.dart';
+import '../staff/my_leave.dart';
 import 'widgets.dart';
 
 /// A tab of the app's bottom bar.
@@ -38,10 +46,43 @@ List<AppTab> tabsFor(Profile p, S s) => switch (p.kind) {
     AppTab(Icons.apps, s.more, (p) => _More(profile: p)),
   ],
   _ => [
-    AppTab(Icons.home_outlined, s.home, (p) => _Home(profile: p)),
+    AppTab(Icons.today_outlined, s.myDay, (p) => MyDayScreen(profile: p)),
+    AppTab(Icons.fact_check_outlined, s.attendance, (p) => StaffAttendanceTab(profile: p)),
+    AppTab(Icons.class_outlined, s.classes, (p) => ClassesTab(profile: p)),
+    AppTab(Icons.chat_bubble_outline, s.messages, (p) => MessagesScreen(profile: p)),
     AppTab(Icons.apps, s.more, (p) => _More(profile: p)),
   ],
 };
+
+/// A web page of the menu that has a screen in the app: More opens that instead (docs/design/89 §5.5).
+Widget? nativeScreen(Profile p, String href, S s) {
+  final path = href.split('?').first;
+  if (p.isStaff) {
+    return switch (path) {
+      '/attendance' => MarkClassScreen(profile: p),
+      '/my-attendance' => MyAttendanceScreen(profile: p),
+      '/my-leave' => MyLeaveScreen(profile: p),
+      '/my-payslips' => PayslipsScreen(profile: p),
+      '/daily-work' => PostWorkScreen(profile: p),
+      '/marks' => MarksHome(profile: p),
+      '/timetable' => StaffTimetable(profile: p),
+      '/messages' => MessagesScreen(profile: p),
+      _ => null,
+    };
+  }
+  return switch (path) {
+    '/attendance' => AttendanceScreen(profile: p),
+    '/homework' => HomeworkScreen(profile: p),
+    '/timetable' => TimetableScreen(profile: p),
+    '/calendar' => CalendarScreen(profile: p),
+    '/date-sheet' => DateSheetScreen(profile: p),
+    '/results' => ResultsScreen(profile: p),
+    '/fees' when p.kind == 'parent' => FeesScreen(profile: p),
+    '/messages' => MessagesScreen(profile: p),
+    '/notices' => NoticesList(profile: p),
+    _ => null,
+  };
+}
 
 /// The signed-in app: the profile in the bar (a tap switches) and the profile's tabs.
 class HomeShell extends ConsumerStatefulWidget {
@@ -107,6 +148,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               ),
             ),
             actions: [
+              if (p.isStaff) ApprovalsButton(profile: p),
               IconButton(
                 tooltip: s.settings,
                 icon: const Icon(Icons.settings_outlined),
@@ -165,28 +207,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 }
 
-class _Home extends ConsumerWidget {
-  const _Home({required this.profile});
-  final Profile profile;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(stringsProvider);
-    return ListView(
-      padding: const EdgeInsets.all(Tokens.sp4),
-      children: [
-        Text(s.welcome(profile.name), style: Theme.of(context).textTheme.titleLarge),
-        if (profile.detail != null)
-          Text(profile.detail!, style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: Tokens.sp4),
-        Card(
-          child: Padding(padding: const EdgeInsets.all(Tokens.sp4), child: Text(s.todayComing)),
-        ),
-      ],
-    );
-  }
-}
-
 /// Every screen of the profile's menu; one without a native screen opens its web page inside the app.
 class _More extends ConsumerWidget {
   const _More({required this.profile});
@@ -222,12 +242,19 @@ class _More extends ConsumerWidget {
                 title: Text(s.menu(i.label)),
                 subtitle: i.help == null ? null : Text(s.menu(i.help!)),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(
-                  Uri(
-                    path: '/web',
-                    queryParameters: {'app': m.app, 'to': i.href, 'title': s.menu(i.label)},
-                  ).toString(),
-                ),
+                onTap: () {
+                  final native = nativeScreen(profile, i.href, s);
+                  if (native != null) {
+                    pushPage(context, s.menu(i.label), native);
+                    return;
+                  }
+                  context.push(
+                    Uri(
+                      path: '/web',
+                      queryParameters: {'app': m.app, 'to': i.href, 'title': s.menu(i.label)},
+                    ).toString(),
+                  );
+                },
               ),
           ],
         ],

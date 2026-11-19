@@ -50,7 +50,11 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
                 onPressed: () => context.push(
                   Uri(
                     path: '/web',
-                    queryParameters: {'app': 'parent', 'to': '/queries', 'title': s.queries},
+                    queryParameters: {
+                      'app': widget.profile.app,
+                      'to': '/queries',
+                      'title': s.queries,
+                    },
                   ).toString(),
                 ),
               ),
@@ -305,8 +309,10 @@ class _NoticeDetailState extends ConsumerState<NoticeDetail> {
       children: (n) {
         final files = asList(n['files']);
         final body = '${n['body'] ?? ''}';
-        final seen =
-            n['ackedFor'] is List && (n['ackedFor'] as List).contains(widget.profile.studentId);
+        // a family acknowledges for a child; staff for themselves
+        final seen = widget.profile.studentId == null
+            ? n['ackedByMe'] == true
+            : n['ackedFor'] is List && (n['ackedFor'] as List).contains(widget.profile.studentId);
         return [
           Semantics(
             header: true,

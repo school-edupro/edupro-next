@@ -49,3 +49,33 @@ FamilyResultsController_status
 FeesController_mine
 FeesController_myReceiptFile !file
 FeesController_myBillFile !file
+
+# phase C — staff: my day, class attendance (kept on the phone with no network), my attendance, homework, marks,
+# my leave, payslips, the approvals inbox
+TeacherAssignmentsController_mine
+TimetableController_mine
+SubstitutionsController_mine
+AttendanceController_summary
+AttendanceController_session
+AttendanceController_mark
+ExamEntryController_toEnter
+ExamEntryController_sections
+ExamEntryController_marks
+ExamEntryController_putMarks
+ExamStatusController_submit
+DailyWorkController_sheetOptions
+DailyWorkController_create
+FilesController_create
+FilesController_complete
+StaffAttendanceController_mine
+StaffAttendanceController_regularise
+StaffAttendanceController_withdrawReg
+StaffLeaveController_mine
+StaffLeaveController_get
+StaffLeaveController_apply
+StaffLeaveController_withdraw
+StaffLeaveController_requestCancel
+PayrollPayslipController_mine
+PayrollPayslipController_minePdf !file
+ApprovalsController_inbox
+ApprovalsController_decide

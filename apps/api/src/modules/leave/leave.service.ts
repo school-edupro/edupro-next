@@ -41,14 +41,14 @@ import {
 import {
   LEAVE_OFFICE,
   LEAVE_OWN,
-  type ApplyDto,
+  type StaffLeaveApplyDto,
   type DecideDto,
   type MineQueryDto,
   type OnBehalfDto,
   type OverrideDto,
-  type ReasonDto,
+  type StaffLeaveReasonDto,
   type TrimDto,
-  type WithdrawDto,
+  type StaffLeaveWithdrawDto,
 } from './leave.dto';
 
 const MY_STEP = `SELECT s.id::text FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
@@ -935,7 +935,7 @@ export class LeaveService implements OnModuleInit {
   }
 
   // ---- the endpoints --------------------------------------------------------------------------------
-  async apply(ctx: RequestContext, dto: ApplyDto) {
+  async apply(ctx: RequestContext, dto: StaffLeaveApplyDto) {
     if (!this.has(ctx, LEAVE_OWN))
       throw new DomainError('permission-denied', 'Applying for leave is not open to you', {
         status: 403,
@@ -1046,7 +1046,7 @@ export class LeaveService implements OnModuleInit {
   }
 
   /** The employee takes back a leave still waiting (the office: cancels it). */
-  async withdraw(ctx: RequestContext, id: string, dto: WithdrawDto) {
+  async withdraw(ctx: RequestContext, id: string, dto: StaffLeaveWithdrawDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await this.load(c, id, true);
       const me = await this.meIn(c);
@@ -1084,7 +1084,7 @@ export class LeaveService implements OnModuleInit {
   }
 
   /** The office cancels a leave at once (pending or approved); an approved one's days are open again. */
-  async cancel(ctx: RequestContext, id: string, dto: ReasonDto) {
+  async cancel(ctx: RequestContext, id: string, dto: StaffLeaveReasonDto) {
     this.mustOffice(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await this.load(c, id, true);
@@ -1117,7 +1117,7 @@ export class LeaveService implements OnModuleInit {
   }
 
   /** The employee asks to cancel an approved leave: decided by the approvers of Who approves today. */
-  async requestCancel(ctx: RequestContext, id: string, dto: ReasonDto) {
+  async requestCancel(ctx: RequestContext, id: string, dto: StaffLeaveReasonDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await this.load(c, id, true);
       const me = await this.meIn(c);

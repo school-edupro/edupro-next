@@ -50,6 +50,7 @@ import { DocumentsService } from './documents.service';
 import { GalleryService } from './gallery.service';
 import { NoticesService } from './notices.service';
 import { ViewerService } from './viewer.service';
+import { Idempotent } from '../../../common/http/idempotency';
 
 @ApiTags('academics')
 @ApiBearerAuth()
@@ -138,6 +139,8 @@ export class DailyWorkController {
   }
 
   @Post()
+  // a phone resending after a lost answer gets the first answer, not a second post
+  @Idempotent()
   @ApiOperation({ summary: 'Post homework, classwork or an assignment with optional files' })
   @RequirePermission(DAILY.workPost, {
     description: 'Post and edit homework, classwork and assignments (scope: class_section)',

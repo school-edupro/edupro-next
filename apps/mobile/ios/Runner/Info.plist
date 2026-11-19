@@ -6,6 +6,10 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo to attach to homework or a notice.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a photo to attach to homework or a notice.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Face ID opens EduPro without typing your PIN.</string>
 	<key>CFBundleDisplayName</key>

@@ -40,7 +40,7 @@ import {
   type TimingLogDto,
   type TimingsQueryDto,
   type TimingDto,
-  type WithdrawDto,
+  type StaffLeaveWithdrawDto,
 } from './leave.dto';
 
 const MY_STEP = `SELECT s.id::text FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
@@ -1736,7 +1736,7 @@ export class AttendanceService implements OnModuleInit {
     });
   }
 
-  async withdrawReg(ctx: RequestContext, id: string, dto: WithdrawDto) {
+  async withdrawReg(ctx: RequestContext, id: string, dto: StaffLeaveWithdrawDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const g = (
         await c.query<{ status: string; wf: string | null; employee_id: string }>(

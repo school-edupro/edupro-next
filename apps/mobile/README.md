@@ -47,5 +47,10 @@ flutter analyze && flutter test
   timetable, calendar, date sheet, results and report cards, fees (paid online through the web fee page in the web
   view), messages and notices. They call the parent web app's own endpoints; each keeps its last copy on the phone
   (`family/data.dart`, wiped at sign-out) and shows it when there is no network.
+- Staff screens (`lib/staff/`, phase C): My day, mark a class, my attendance and corrections, my leave, homework,
+  marks, timetable, payslips, and the Approvals inbox (`GET /approvals/inbox`) in the bar.
+- Writes that must not be lost go through the outbox (`lib/api/outbox.dart`): kept on the phone with no network and
+  sent later with an `Idempotency-Key` (the API answers a repeat with the first answer). Other online writes that may be
+  retried pass a key with `withCall(CallOptions(idempotencyKey: …), …)`.
 - An API operation used by the app must have an id and a request class name of its own in the OpenAPI description;
   the generator stops when one is shared (rename the controller or DTO class).

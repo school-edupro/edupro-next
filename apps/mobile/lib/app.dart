@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'api/outbox.dart';
 import 'auth/auth_controller.dart';
 import 'l10n/strings.dart';
 import 'theme/theme.dart';
@@ -66,10 +67,24 @@ class EduProApp extends ConsumerStatefulWidget {
 }
 
 class _EduProAppState extends ConsumerState<EduProApp> {
+  late final AppLifecycleListener _life;
+
   @override
   void initState() {
     super.initState();
     ref.read(authProvider.notifier).init();
+    // back in the app: send the work kept while there was no network
+    _life = AppLifecycleListener(
+      onResume: () {
+        if (ref.read(authProvider) is AuthSignedIn) ref.read(outboxProvider.notifier).flush();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _life.dispose();
+    super.dispose();
   }
 
   @override

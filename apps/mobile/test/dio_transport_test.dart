@@ -55,6 +55,23 @@ void main() {
     expect(f.refresh.requests, isEmpty);
   });
 
+  test('a call made with its own options goes with its school and idempotency key', () async {
+    final f = build(api: (_) => (201, {'ok': true}), refresh: renewed);
+    await withCall(
+      const CallOptions(schoolId: '9', idempotencyKey: 'phone-key-0001'),
+      () => f.t.send('POST', '/attendance/sessions', body: {'a': 1}),
+    );
+    final h = f.api.requests.single.headers;
+    expect(h['X-School-Id'], '9');
+    expect(h['Idempotency-Key'], 'phone-key-0001');
+    // the profile in use acts as the family; the kept write was made as staff
+    expect(h.containsKey('X-Acting-As'), isFalse);
+    // outside, the profile's own headers again
+    await f.t.send('GET', '/me');
+    expect(f.api.requests.last.headers['X-School-Id'], '7');
+    expect(f.api.requests.last.headers.containsKey('Idempotency-Key'), isFalse);
+  });
+
   test('renews a token about to end first, once for calls made together', () async {
     await session.save(accessToken: 'otp.old', expiresAt: now() + 10, refreshToken: 'r1');
     final f = build(api: (_) => (200, {}), refresh: renewed);

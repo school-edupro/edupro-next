@@ -396,6 +396,8 @@ class _LeaveFormState extends ConsumerState<LeaveForm> {
         DropdownMenu<String>(
           key: const Key('leaveType'),
           label: Text(s.leaveType),
+          trailingIcon: dropArrow(s.leaveType),
+          selectedTrailingIcon: dropArrow(s.leaveType, open: true),
           expandedInsets: EdgeInsets.zero,
           enableFilter: true,
           enableSearch: true,

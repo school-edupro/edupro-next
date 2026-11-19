@@ -228,6 +228,157 @@ class S {
   String get noFees =>
       _t('No fee statement for this year yet.', 'इस वर्ष का शुल्क विवरण अभी नहीं है।');
 
+  // the phone's unsent work (phase C)
+  String get unsent => _t('Not sent yet', 'अभी नहीं भेजा गया');
+  String unsentN(int n) => _t(
+    n == 1 ? '1 piece of work waits for the network' : '$n pieces of work wait for the network',
+    '$n काम नेटवर्क की प्रतीक्षा में',
+  );
+  String get unsentHelp => _t(
+    'Kept on this phone and sent by itself when the internet is back.',
+    'इस फ़ोन पर रखा है और इंटरनेट आने पर अपने आप भेजा जाएगा।',
+  );
+  String get sendNow => _t('Send now', 'अभी भेजें');
+  String get refusedKept => _t('Not accepted by the school:', 'विद्यालय ने स्वीकार नहीं किया:');
+  String get remove => _t('Remove', 'हटाएँ');
+  String get savedOffline => _t(
+    'Saved on the phone. It is sent when the internet is back.',
+    'फ़ोन पर सहेजा गया। इंटरनेट आने पर भेजा जाएगा।',
+  );
+  String signOutLoses(int n) => _t(
+    '$n piece(s) of work not sent yet will be lost if you sign out now.',
+    'अभी साइन आउट करने पर $n न भेजे गए काम खो जाएँगे।',
+  );
+
+  // ---- phase C: staff
+  String get pdfPassword => _t('Password of the file', 'फ़ाइल का पासवर्ड');
+  String get open => _t('Open', 'खोलें');
+  String get myDay => _t('My day', 'मेरा दिन');
+  String get classes => _t('Classes', 'कक्षाएँ');
+  String get approvals => _t('Approvals', 'स्वीकृतियाँ');
+  String approvalsWaiting(int n) => _t('Approvals: $n waiting', 'स्वीकृतियाँ: $n प्रतीक्षा में');
+  String get todaysPeriods => _t('Today\'s periods', 'आज के पीरियड');
+  String get noPeriods => _t('No periods for you today.', 'आज आपके कोई पीरियड नहीं।');
+  String substitution(String forWhom) => _t('Substitution for $forWhom', '$forWhom के स्थान पर');
+  String get toMark => _t('Attendance to mark', 'दर्ज करनी उपस्थिति');
+  String get allMarked =>
+      _t('All your classes are marked.', 'आपकी सभी कक्षाओं की उपस्थिति दर्ज है।');
+  String get toEnter => _t('Marks to enter', 'दर्ज करने हैं अंक');
+  String get nothingToEnter => _t('No marks waiting.', 'कोई अंक बाकी नहीं।');
+  String enteredOf(int done, int total) =>
+      _t('$done of $total entered', '$total में से $done दर्ज');
+  String get markClass => _t('Mark a class', 'कक्षा की उपस्थिति');
+  String get dayAttendance => _t('Day attendance', 'दिन की उपस्थिति');
+  String get section => _t('Class and section', 'कक्षा और वर्ग');
+  String get dateLabel => _t('Date', 'तारीख');
+  String get allPresent => _t('All present', 'सब उपस्थित');
+  String get save => _t('Save', 'सहेजें');
+  String get saved => _t('Saved.', 'सहेजा गया।');
+  String get locked =>
+      _t('Locked: it can no longer be changed here.', 'बंद: इसे यहाँ बदला नहीं जा सकता।');
+  String markedBy(String who) => _t('Marked by $who', '$who ने दर्ज की');
+  String presentAbsent(int p, int a, int n) =>
+      _t('Present $p · Absent $a · of $n', 'उपस्थित $p · अनुपस्थित $a · कुल $n');
+  String get onLeaveLocked => _t('On approved leave', 'स्वीकृत छुट्टी पर');
+  String get myAttendance => _t('My attendance', 'मेरी उपस्थिति');
+  String get myLeave => _t('My leave', 'मेरी छुट्टी');
+  String get payslips => _t('My payslips', 'मेरी वेतन पर्चियाँ');
+  String get askCorrection => _t('Ask for a correction', 'सुधार का अनुरोध');
+  String get inTime => _t('In', 'आगमन');
+  String get outTime => _t('Out', 'प्रस्थान');
+  String get correctionSent => _t('Correction asked for.', 'सुधार का अनुरोध भेजा गया।');
+  String get correctionNeeds => _t(
+    'Give the in or out time, or what the day should be.',
+    'आगमन या प्रस्थान का समय, या दिन क्या होना चाहिए, बताएँ।',
+  );
+  String get withdraw => _t('Withdraw', 'वापस लें');
+  String get noPunches => _t('No punch', 'कोई पंच नहीं');
+  String dayType(String code) => switch (code) {
+    'P' => _t('Present', 'उपस्थित'),
+    'HD' => _t('Half day', 'आधा दिन'),
+    'A' => _t('Absent', 'अनुपस्थित'),
+    'WO' => _t('Weekly off', 'साप्ताहिक अवकाश'),
+    'H' => _t('Holiday', 'छुट्टी'),
+    'LV' => _t('On leave', 'छुट्टी पर'),
+    'HOLD' => _t('On hold', 'रोका गया'),
+    _ => code,
+  };
+  String get balances => _t('Leave balance', 'छुट्टी शेष');
+  String available(String n) => _t('$n available', '$n उपलब्ध');
+  String get halfDay => _t('Half day', 'आधा दिन');
+  String get firstHalf => _t('First half', 'पहला भाग');
+  String get secondHalf => _t('Second half', 'दूसरा भाग');
+  String get confirm => _t('Go ahead', 'आगे बढ़ें');
+  String get documentNeeded => _t(
+    'This leave needs a document. Apply on the web page to attach it.',
+    'इस छुट्टी के लिए दस्तावेज़ चाहिए। उसे लगाने के लिए वेब पेज पर आवेदन करें।',
+  );
+  String get askCancel => _t('Ask to cancel', 'रद्द करने का अनुरोध');
+  String staffLeaveStatus(String status) => switch (status) {
+    'pending' => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा'),
+    'approved' => _t('Approved', 'स्वीकृत'),
+    'rejected' => _t('Not approved', 'अस्वीकृत'),
+    'withdrawn' => _t('Withdrawn', 'वापस लिया'),
+    'cancelled' => _t('Cancelled', 'रद्द'),
+    _ => status,
+  };
+  String get postWork => _t('Post homework', 'गृहकार्य दें');
+  String get workTitle => _t('Title', 'शीर्षक');
+  String get workBody => _t('What to do', 'क्या करना है');
+  String get subject => _t('Subject', 'विषय');
+  String get noSubject => _t('No subject (class note)', 'कोई विषय नहीं (कक्षा सूचना)');
+  String get dueDate => _t('Due date', 'जमा करने की तारीख');
+  String get askAck =>
+      _t('Ask families to say they have seen it', 'परिवारों से देख लेने की पुष्टि माँगें');
+  String get addFile => _t('Add a file', 'फ़ाइल जोड़ें');
+  String get takePhoto => _t('Take a photo', 'फ़ोटो लें');
+  String get posted => _t('Posted.', 'भेज दिया गया।');
+  String get titleNeeded => _t('Write a title.', 'शीर्षक लिखें।');
+  String get chooseSection => _t('Choose the class.', 'कक्षा चुनें।');
+  String get marksEntry => _t('Marks entry', 'अंक प्रविष्टि');
+  String maxMarks(String n) => _t('out of $n', '$n में से');
+  String get absentShort => _t('Absent', 'अनुपस्थित');
+  String get submitForCheck => _t('Send for checking', 'जाँच के लिए भेजें');
+  String get submitted => _t('Sent for checking.', 'जाँच के लिए भेजा गया।');
+  String get enterOnWeb => _t(
+    'This subject is entered in parts. Enter it on the web page.',
+    'यह विषय भागों में दर्ज होता है। इसे वेब पेज पर दर्ज करें।',
+  );
+  String get sheetClosed =>
+      _t('This sheet is closed for entry.', 'यह पत्रक प्रविष्टि के लिए बंद है।');
+  String marksOver(String max) => _t('Marks can be at most $max.', 'अंक अधिकतम $max हो सकते हैं।');
+  String get myTimetable => _t('My timetable', 'मेरी समय-सारणी');
+  String get net => _t('Net pay', 'शुद्ध वेतन');
+  String get financialYearLabel => _t('Financial year', 'वित्तीय वर्ष');
+  String fy(String start) {
+    final y = int.tryParse(start) ?? 0;
+    return '$start-${((y + 1) % 100).toString().padLeft(2, '0')}';
+  }
+
+  // approvals
+  String get nothingToApprove => _t('Nothing waits for you.', 'आपके लिए कुछ प्रतीक्षा में नहीं।');
+  String get all => _t('All', 'सभी');
+  String get approve => _t('Approve', 'स्वीकृत करें');
+  String get reject => _t('Reject', 'अस्वीकार करें');
+  String get sendBack => _t('Send back', 'वापस भेजें');
+  String get acknowledgeIt => _t('Acknowledge', 'पावती दें');
+  String get sign => _t('Sign', 'हस्ताक्षर करें');
+  String get openPage => _t('Open the full page', 'पूरा पेज खोलें');
+  String get decideOnPage => _t(
+    'This is decided on its own page (it needs more than a yes or no).',
+    'इसका निर्णय इसके अपने पेज पर होता है (इसमें हाँ या ना से अधिक चाहिए)।',
+  );
+  String get reasonNeeded =>
+      _t('Write the reason (at least 3 letters).', 'कारण लिखें (कम से कम 3 अक्षर)।');
+  String get reasonOptional => _t('Note (optional)', 'टिप्पणी (वैकल्पिक)');
+  String get done => _t('Done.', 'हो गया।');
+  String get secondFactor => _t(
+    'This needs a recent second sign-in check. Decide it on the web page.',
+    'इसके लिए हाल की दूसरी साइन-इन जाँच चाहिए। वेब पेज पर निर्णय लें।',
+  );
+  String someUnavailable(String kinds) =>
+      _t('Could not be read just now: $kinds', 'अभी पढ़ा नहीं जा सका: $kinds');
+
   // dates and money
   static const _monEn = [
     'Jan',
