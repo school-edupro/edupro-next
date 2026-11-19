@@ -532,7 +532,9 @@ student home, staff My day, a list, a detail) before the app was rebuilt.
 band goes on with the date and a greeting and the figures card sits half over it (`HomeBand`, `FigureGrid(raised)`:
 one white card, cells with lines between, a coloured dot for a status). Buttons are cyan with navy words (4.8:1);
 the bottom bar is navy with a cyan pill on the open tab and the unread count on Messages; the profile bar on the band
-has round buttons for approvals (staff) and settings. Home adds a row of shortcut pills and **today's classes** (the
+has round buttons for approvals (staff) and settings. Home adds the **shortcuts**, four a row as on the design's look A
+(Attendance, Homework, Timetable, Results, Calendar, Date sheet, Notices, and Queries when the parent's menu has it,
+else Messages; an icon on a light tile, its name under it), and **today's classes** (the
 section's periods for today, the one on now tagged, the ones over ticked; staff: the teacher's periods with
 substitutions tagged). Staff classes still to mark are tinted cards with **Mark now**.
 

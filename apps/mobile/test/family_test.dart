@@ -34,6 +34,9 @@ Map<String, Object?> profile(String kind) => {
 class School {
   bool offline = false;
   String kind = 'parent';
+
+  /// the school takes queries from this parent: the menu has the Queries page
+  bool queries = false;
   int statusPolls = 0;
   final leaves = <Map<String, Object?>>[
     {
@@ -81,7 +84,19 @@ class School {
           'data': [profile(kind)],
         };
       case 'GET /me/menu':
-        return {'app': 'parent', 'groups': []};
+        return {
+          'app': 'parent',
+          'groups': [
+            if (queries)
+              {
+                'label': 'Home',
+                'icon': 'home',
+                'items': [
+                  {'href': '/queries', 'label': 'Queries', 'help': null, 'icon': 'inbox'},
+                ],
+              },
+          ],
+        };
       case 'GET /attendance/mine':
         return {
           'month': c.query?['month'],
@@ -419,12 +434,14 @@ Future<(FakeTransport, School)> pumpFamily(
   WidgetTester tester, {
   String kind = 'parent',
   bool hindi = false,
+  School? school,
 }) async {
   SharedPreferences.setMockInitialValues({
     'profile': kind == 'parent' ? 'parent:7:41' : 'student:7:41',
     'hindi': hindi,
   });
-  final school = School()..kind = kind;
+  school ??= School();
+  school.kind = kind;
   final t = FakeTransport(school.answer);
   final mem = MemorySecureStore();
   final s = SessionStore(mem);
@@ -473,6 +490,49 @@ Future<void> scrollTo(WidgetTester tester, Finder f) async {
 }
 
 void main() {
+  testWidgets(
+    'Home\'s shortcuts: eight tiles four a row; Messages when the school takes no queries',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await pumpFamily(tester);
+      final keys = [
+        'attendance',
+        'homework',
+        'timetable',
+        'results',
+        'calendar',
+        'dateSheet',
+        'notices',
+        'messages',
+      ];
+      for (final k in keys) {
+        expect(find.byKey(Key('shortcut-$k')), findsOneWidget, reason: k);
+      }
+      expect(find.byKey(const Key('shortcut-queries')), findsNothing);
+      // four a row: the fifth starts the second row under the first
+      final first = tester.getTopLeft(find.byKey(const Key('shortcut-attendance')));
+      final fifth = tester.getTopLeft(find.byKey(const Key('shortcut-calendar')));
+      expect(fifth.dx, first.dx);
+      expect(fifth.dy, greaterThan(first.dy));
+      expect(tester.getTopLeft(find.byKey(const Key('shortcut-results'))).dy, first.dy);
+      await tester.tap(find.byKey(const Key('shortcut-homework')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('work-501')), findsWidgets);
+    },
+  );
+
+  testWidgets('Home\'s shortcuts: Queries in place of Messages when the school takes queries', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final school = School()..queries = true;
+    await pumpFamily(tester, school: school);
+    expect(find.byKey(const Key('shortcut-queries')), findsOneWidget);
+    expect(find.byKey(const Key('shortcut-messages')), findsNothing);
+  });
+
   testWidgets(
     'a parent\'s Home: the figures, today\'s attendance, homework due, next exam, notices',
     (tester) async {

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/strings.dart';
@@ -58,6 +59,11 @@ class TodayScreen extends ConsumerWidget {
     };
 
     final first = p.name.split(RegExp(r'\s+')).first;
+    final menu = ref.watch(menuProvider(p.id)).value;
+    final queries = menu?.groups
+        .expand((g) => g.items)
+        .where((i) => i.href == '/queries')
+        .firstOrNull;
     void open(String title, Widget screen) => pushPage(context, title, screen);
 
     return RefreshIndicator(
@@ -131,43 +137,79 @@ class TodayScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            const SizedBox(height: Tokens.sp4),
-            ShortcutRow(
+            const SizedBox(height: Tokens.sp3),
+            ShortcutGrid(
               label: s.shortcuts,
               items: [
                 (
+                  'attendance',
+                  s.attendance,
+                  Icons.how_to_reg_outlined,
+                  () => open(s.attendance, AttendanceScreen(profile: p)),
+                ),
+                (
+                  'homework',
                   s.homework,
                   Icons.menu_book_outlined,
                   () => open(s.homework, HomeworkScreen(profile: p)),
                 ),
                 (
-                  s.attendance,
-                  Icons.fact_check_outlined,
-                  () => open(s.attendance, AttendanceScreen(profile: p)),
+                  'timetable',
+                  s.timetable,
+                  Icons.schedule,
+                  () => open(s.timetable, TimetableScreen(profile: p)),
                 ),
-                (s.timetable, Icons.schedule, () => open(s.timetable, TimetableScreen(profile: p))),
                 (
+                  'results',
                   s.results,
-                  Icons.insert_chart_outlined,
+                  Icons.bar_chart,
                   () => open(s.results, ResultsScreen(profile: p)),
                 ),
                 (
+                  'calendar',
                   s.calendar,
-                  Icons.calendar_month_outlined,
+                  Icons.calendar_today_outlined,
                   () => open(s.calendar, CalendarScreen(profile: p)),
                 ),
                 (
+                  'dateSheet',
                   s.dateSheet,
-                  Icons.edit_calendar_outlined,
+                  Icons.description_outlined,
                   () => open(s.dateSheet, DateSheetScreen(profile: p)),
                 ),
                 (
+                  'notices',
                   s.notices,
                   Icons.campaign_outlined,
                   () => open(s.notices, NoticesList(profile: p)),
                 ),
+                // Queries when the school takes them from this parent (the menu has the page), else Messages
+                if (queries != null)
+                  (
+                    'queries',
+                    s.menu(queries.label),
+                    Icons.help_outline,
+                    () => context.push(
+                      Uri(
+                        path: '/web',
+                        queryParameters: {
+                          'app': menu!.app,
+                          'to': queries.href,
+                          'title': s.menu(queries.label),
+                        },
+                      ).toString(),
+                    ),
+                  )
+                else
+                  (
+                    'messages',
+                    s.messages,
+                    Icons.chat_bubble_outline,
+                    () => open(s.messages, MessagesScreen(profile: p)),
+                  ),
               ],
             ),
+            const SizedBox(height: Tokens.sp2),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Tokens.sp4),
               child: Column(

@@ -451,39 +451,74 @@ class HomeBand extends StatelessWidget {
   }
 }
 
-/// A row of shortcut pills under the figures (scrolls sideways).
-class ShortcutRow extends StatelessWidget {
-  const ShortcutRow({super.key, required this.label, required this.items});
+/// The shortcuts under the figures: four a row, each an icon on a light tile with its name under it.
+class ShortcutGrid extends StatelessWidget {
+  const ShortcutGrid({super.key, required this.label, required this.items});
   final String label;
-  final List<(String, IconData, VoidCallback)> items;
+
+  /// (key, name, icon, open)
+  final List<(String, String, IconData, VoidCallback)> items;
 
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    Widget tile((String, String, IconData, VoidCallback) x) {
+      final (key, text, icon, onTap) = x;
+      return Semantics(
+        button: true,
+        label: text,
+        excludeSemantics: true,
+        child: InkWell(
+          key: Key('shortcut-$key'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(Tokens.radiusLg),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Tokens.sp2, horizontal: 2),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: dark ? Tokens.mobNavy700 : Tokens.mobNavy50,
+                    borderRadius: BorderRadius.circular(Tokens.radiusLg),
+                  ),
+                  child: Icon(icon, size: 26, color: dark ? Tokens.mobWhite : Tokens.mobNavy800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: dark ? Tokens.mobGray100 : Tokens.mobGray700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Semantics(
       label: label,
       container: true,
       explicitChildNodes: true,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: Tokens.sp4),
-        child: Row(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Tokens.sp2),
+        child: Column(
           children: [
-            for (final (text, icon, onTap) in items)
-              Padding(
-                padding: const EdgeInsets.only(right: Tokens.sp2),
-                child: OutlinedButton.icon(
-                  onPressed: onTap,
-                  style: OutlinedButton.styleFrom(
-                    shape: const StadiumBorder(),
-                    backgroundColor: dark ? Tokens.mobGray900 : Tokens.mobWhite,
-                    side: BorderSide(color: dark ? Tokens.mobGray700 : Tokens.mobGray200),
-                    padding: const EdgeInsets.fromLTRB(12, 0, 16, 0),
-                    textStyle: const TextStyle(fontWeight: Tokens.fwSemibold, fontSize: 15),
-                  ),
-                  icon: Icon(icon, size: 20, color: dark ? Tokens.mobCyan500 : Tokens.mobCyan700),
-                  label: Text(text),
-                ),
+            for (var i = 0; i < items.length; i += 4)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var j = i; j < i + 4; j++)
+                    Expanded(child: j < items.length ? tile(items[j]) : const SizedBox()),
+                ],
               ),
           ],
         ),
