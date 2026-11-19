@@ -287,6 +287,10 @@ class EduProApi {
   /// GET /auth/mobile/app-version — Mobile app: whether this version must (or may) be updated, and the store link
   Future<dynamic> mobileAuthAppVersion({String? platform, String? version}) =>
       _t.send('GET', '/auth/mobile/app-version', query: {if (platform != null) 'platform': platform, if (version != null) 'version': version});
+
+  /// GET /public/schools/{schoolCode}/logo — The school’s logo (base64)
+  Future<dynamic> publicSchoolLogo({required String schoolCode}) =>
+      _t.send('GET', '/public/schools/${Uri.encodeComponent(schoolCode)}/logo');
 }
 
 /** The OtpStartDto the API takes. */

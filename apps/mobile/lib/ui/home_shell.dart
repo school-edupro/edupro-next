@@ -10,6 +10,7 @@ import '../family/academics.dart';
 import '../family/fees.dart';
 import '../family/messages.dart';
 import '../family/common.dart';
+import '../family/data.dart' show unreadProvider;
 import '../family/today.dart';
 import '../staff/approvals.dart';
 import '../staff/class_attendance.dart';
@@ -18,6 +19,7 @@ import '../staff/marks.dart';
 import '../staff/my_attendance.dart';
 import '../staff/my_day.dart';
 import '../staff/my_leave.dart';
+import 'brand.dart';
 import 'widgets.dart';
 
 /// A tab of the app's bottom bar.
@@ -96,6 +98,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   int _tab = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // the school of the profile in use: its logo and name on the sign-in and PIN screens from now on
+    ref.listenManual(profilesProvider, (_, next) {
+      final p = next.value?.current;
+      if (p != null) {
+        ref.read(schoolBrandProvider.notifier).remember(code: p.schoolCode, name: p.schoolName);
+      }
+    }, fireImmediately: true);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final profiles = ref.watch(profilesProvider);
@@ -111,57 +125,45 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           );
         }
         final tabs = tabsFor(p, s);
+        final i = _tab.clamp(0, tabs.length - 1);
+        final unread = ref.watch(unreadProvider(p)).value ?? 0;
         return Scaffold(
-          appBar: AppBar(
-            titleSpacing: Tokens.sp3,
-            title: InkWell(
-              key: const Key('profileSwitch'),
-              onTap: st.all.length > 1 ? () => _switch(context, st) : null,
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Tokens.mobCyan600,
-                    child: Text(
-                      p.name.isEmpty ? '?' : p.name[0].toUpperCase(),
-                      style: const TextStyle(color: Tokens.mobWhite),
-                    ),
-                  ),
-                  const SizedBox(width: Tokens.sp3),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(p.name, overflow: TextOverflow.ellipsis),
-                        Text(
-                          '${_kind(s, p)} · ${p.schoolName}',
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Tokens.mobNavy100),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (st.all.length > 1)
-                    Semantics(label: s.profiles, child: const Icon(Icons.expand_more)),
-                ],
-              ),
+          backgroundColor: Tokens.mobNavy800,
+          body: SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _ProfileBar(
+                  profile: p,
+                  kind: _kind(s, p),
+                  canSwitch: st.all.length > 1,
+                  onSwitch: () => _switch(context, st),
+                ),
+                Expanded(
+                  // Home goes on from the band (its figures sit half over it); the other tabs are a sheet
+                  child: i == 0
+                      ? tabs[0].build(p)
+                      : BandSheet(title: tabs[i].label, child: tabs[i].build(p)),
+                ),
+              ],
             ),
-            actions: [
-              if (p.isStaff) ApprovalsButton(profile: p),
-              IconButton(
-                tooltip: s.settings,
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () => context.push('/settings'),
-              ),
-            ],
           ),
-          body: tabs[_tab.clamp(0, tabs.length - 1)].build(p),
           bottomNavigationBar: NavigationBar(
-            selectedIndex: _tab.clamp(0, tabs.length - 1),
+            selectedIndex: i,
             onDestinationSelected: (i) => setState(() => _tab = i),
             destinations: [
-              for (final t in tabs) NavigationDestination(icon: Icon(t.icon), label: t.label),
+              for (final t in tabs)
+                NavigationDestination(
+                  icon: Badge(
+                    isLabelVisible: t.label == s.messages && unread > 0,
+                    backgroundColor: Tokens.mobWhite,
+                    textColor: Tokens.mobNavy800,
+                    label: Text(unread > 99 ? '99+' : '$unread'),
+                    child: Icon(t.icon),
+                  ),
+                  label: t.label,
+                ),
             ],
           ),
         );
@@ -204,6 +206,96 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       await ref.read(profilesProvider.notifier).choose(chosen);
       setState(() => _tab = 0);
     }
+  }
+}
+
+/// The navy bar of the signed-in app: who (a tap switches profile), then approvals (staff) and settings.
+class _ProfileBar extends ConsumerWidget {
+  const _ProfileBar({
+    required this.profile,
+    required this.kind,
+    required this.canSwitch,
+    required this.onSwitch,
+  });
+  final Profile profile;
+  final String kind;
+  final bool canSwitch;
+  final VoidCallback onSwitch;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final p = profile;
+    final initials = p.name
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w[0].toUpperCase())
+        .join();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Tokens.sp3, Tokens.sp2, Tokens.sp3, Tokens.sp2),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              key: const Key('profileSwitch'),
+              borderRadius: BorderRadius.circular(Tokens.radiusMd),
+              onTap: canSwitch ? onSwitch : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Tokens.sp1, vertical: Tokens.sp1),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: Tokens.mobCyan600,
+                      child: Text(
+                        initials.isEmpty ? '?' : initials,
+                        style: TextStyle(
+                          color: Tokens.mobNavy800,
+                          fontWeight: Tokens.fwSemibold,
+                          fontFamily: Theme.of(context).textTheme.titleLarge?.fontFamily,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: Tokens.sp3),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(color: Tokens.mobWhite, fontWeight: Tokens.fwSemibold),
+                          ),
+                          Text(
+                            '$kind · ${p.schoolName}',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Tokens.mobNavy100, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (canSwitch)
+                      Semantics(
+                        label: s.profiles,
+                        child: const Icon(Icons.expand_more, color: Tokens.mobWhite),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (p.isStaff) ...[const SizedBox(width: Tokens.sp2), ApprovalsButton(profile: p)],
+          const SizedBox(width: Tokens.sp2),
+          BandIconButton(
+            icon: Icons.settings_outlined,
+            tooltip: s.settings,
+            onPressed: () => context.push('/settings'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

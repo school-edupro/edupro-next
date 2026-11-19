@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../family/common.dart';
+import '../family/today.dart' show ClassesCard;
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
@@ -40,8 +41,9 @@ List<Json> periodsToday(Json week, DateTime today) {
   return rows..sort((a, b) => order(a).compareTo(order(b)));
 }
 
-/// A staff member's Home (docs/design/89 §5.2): the figures first — periods today, classes to mark, marks to enter,
-/// approvals waiting — then today's periods, the classes still to mark and the marks waiting. Each part loads on its
+/// A staff member's Home (docs/design/89 §5.2; look B): the navy band goes on with the date and "My day", the
+/// figures card sits half over it — periods today, classes to mark, marks to enter, approvals waiting — then the
+/// classes still to mark (Mark now), today's periods (now marked) and the marks waiting. Each part loads on its
 /// own. Today's rolls are fetched here too, so they can be marked later with no network.
 class MyDayScreen extends ConsumerStatefulWidget {
   const MyDayScreen({super.key, required this.profile});
@@ -91,6 +93,24 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
 
     String fig(Object? v) => v == null ? '…' : '$v';
 
+    final now = DateTime.now();
+    final rows = [
+      for (final x in periods ?? const <Json>[])
+        {
+          'startsAt': asJson(x['period'])['startsAt'],
+          'endsAt': asJson(x['period'])['endsAt'],
+          'title': [
+            if (x['classCode'] != null) '${x['classCode']}-${x['section']}' else x['section'],
+            x['subjectName'] ?? x['subject'],
+          ].whereType<Object>().join(' · '),
+          'subtitle': [
+            if (x['substitute'] == true) s.substitution('${x['absentTeacher']}'),
+            if (x['room'] != null) '${x['room']}',
+          ].join(' · '),
+          'substitute': x['substitute'] == true,
+        },
+    ].map((r) => {...r, if (r['subtitle'] == '') 'subtitle': null}).toList();
+
     return RefreshIndicator(
       onRefresh: () {
         ref.invalidate(myWeekProvider(p));
@@ -100,113 +120,158 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
         _warmed = false;
         return ref.refresh(daySummaryProvider((p, day)).future);
       },
-      child: ListView(
-        key: const Key('myDay'),
-        padding: const EdgeInsets.all(Tokens.sp4),
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          const OutboxBanner(),
-          if (stale.isNotEmpty) ...[
-            StaleLine(at: stale.first.at),
-            const SizedBox(height: Tokens.sp3),
+      child: Material(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: ListView(
+          key: const Key('myDay'),
+          padding: const EdgeInsets.only(bottom: Tokens.sp6),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            HomeBand(
+              date: s.dayLong(now),
+              heading: s.myDay,
+              detail: p.detail,
+              figures: FigureGrid(
+                raised: true,
+                tiles: [
+                  FigureTile(
+                    key: const Key('figPeriods'),
+                    label: s.todaysPeriods,
+                    value: fig(periods?.length),
+                    icon: Icons.view_week_outlined,
+                  ),
+                  FigureTile(
+                    key: const Key('figToMark'),
+                    label: s.toMark,
+                    value: fig(toMark?.length),
+                    icon: Icons.fact_check_outlined,
+                    tone: (toMark?.length ?? 0) > 0 ? Tokens.statusWarning : null,
+                    onTap: () => pushPage(context, s.markClass, MarkClassScreen(profile: p)),
+                  ),
+                  FigureTile(
+                    key: const Key('figToEnter'),
+                    label: s.toEnter,
+                    value: fig(marks?.length),
+                    icon: Icons.edit_note,
+                    onTap: () => pushPage(context, s.marksEntry, MarksHome(profile: p)),
+                  ),
+                  FigureTile(
+                    key: const Key('figApprovals'),
+                    label: s.approvals,
+                    value: fig(waiting),
+                    icon: Icons.fact_check_outlined,
+                    onTap: () => pushPage(context, s.approvals, ApprovalsScreen(profile: p)),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Tokens.sp4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: Tokens.sp3),
+                  const OutboxBanner(),
+                  if (stale.isNotEmpty) ...[
+                    const SizedBox(height: Tokens.sp3),
+                    StaleLine(at: stale.first.at),
+                  ],
+                  if (toMark == null && !(assignments.hasError || summary.hasError)) ...[
+                    const SizedBox(height: Tokens.sp4),
+                    const LinearProgressIndicator(),
+                  ],
+                  for (final x in toMark ?? const <Json>[]) ...[
+                    const SizedBox(height: Tokens.sp3),
+                    _ToMarkCard(
+                      key: Key('toMark-${x['classSectionId']}'),
+                      section: '${x['section']}',
+                      onOpen: () => pushPage(
+                        context,
+                        s.markClass,
+                        MarkClassScreen(profile: p, sectionId: '${x['classSectionId']}'),
+                      ),
+                    ),
+                  ],
+                  SectionTitle(s.todaysPeriods),
+                  if (periods == null && !week.hasError) const LinearProgressIndicator(),
+                  if (periods != null && periods.isEmpty) EmptyLine(s.noPeriods),
+                  if (rows.isNotEmpty) ClassesCard(rows: rows, now: now),
+                  if (toMark != null && toMark.isEmpty) ...[
+                    SectionTitle(s.toMark),
+                    EmptyLine(s.allMarked),
+                  ],
+                  SectionTitle(s.toEnter),
+                  if (marks != null && marks.isEmpty) EmptyLine(s.nothingToEnter),
+                  for (final x in marks?.take(5) ?? const <Json>[])
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.edit_note),
+                        title: Text('${x['exam']} · ${x['section']}'),
+                        subtitle: Text(
+                          '${x['what']} · ${s.enteredOf((x['done'] as num? ?? 0).toInt(), (x['total'] as num? ?? 0).toInt())}',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => pushPage(context, s.marksEntry, MarksHome(profile: p)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
-          Text(s.welcome(p.name), style: Theme.of(context).textTheme.titleLarge),
-          if (p.detail != null) Text(p.detail!, style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: Tokens.sp4),
-          FigureGrid(
-            tiles: [
-              FigureTile(
-                key: const Key('figPeriods'),
-                label: s.todaysPeriods,
-                value: fig(periods?.length),
-                icon: Icons.view_week_outlined,
-              ),
-              FigureTile(
-                key: const Key('figToMark'),
-                label: s.toMark,
-                value: fig(toMark?.length),
-                icon: Icons.fact_check_outlined,
-                tone: (toMark?.length ?? 0) > 0 ? Tokens.statusWarning : null,
-                onTap: () => pushPage(context, s.markClass, MarkClassScreen(profile: p)),
-              ),
-              FigureTile(
-                key: const Key('figToEnter'),
-                label: s.toEnter,
-                value: fig(marks?.length),
-                icon: Icons.edit_note,
-                onTap: () => pushPage(context, s.marksEntry, MarksHome(profile: p)),
-              ),
-              FigureTile(
-                key: const Key('figApprovals'),
-                label: s.approvals,
-                value: fig(waiting),
-                icon: Icons.fact_check_outlined,
-                onTap: () => pushPage(context, s.approvals, ApprovalsScreen(profile: p)),
-              ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A class whose day attendance is not marked yet: a tinted card with "Mark now".
+class _ToMarkCard extends ConsumerWidget {
+  const _ToMarkCard({super.key, required this.section, required this.onOpen});
+  final String section;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final big = MediaQuery.textScalerOf(context).scale(10) > 13;
+    final words = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(section, style: const TextStyle(fontWeight: Tokens.fwBold, fontSize: 16)),
+        Text(s.notMarkedToday, style: const TextStyle(fontSize: 14)),
+      ],
+    );
+    final button = FilledButton(
+      onPressed: onOpen,
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(48, 44),
+        padding: const EdgeInsets.symmetric(horizontal: Tokens.sp4),
+      ),
+      child: Text(s.markNow),
+    );
+    return Material(
+      color: dark ? Tokens.mobNavy700 : Tokens.statusInfoBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Tokens.radiusLg),
+        side: BorderSide(color: dark ? Tokens.mobNavy600 : Tokens.mobCyan100),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Tokens.radiusLg),
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Tokens.sp4, 14, Tokens.sp3, 14),
+          // large text: the button goes under the words (beside them it leaves the words no room)
+          child: Flex(
+            direction: big ? Axis.vertical : Axis.horizontal,
+            crossAxisAlignment: big ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+            children: [
+              if (big) words else Expanded(child: words),
+              const SizedBox(width: Tokens.sp2, height: Tokens.sp2),
+              button,
             ],
           ),
-          SectionTitle(s.todaysPeriods),
-          if (periods == null && !week.hasError) const LinearProgressIndicator(),
-          if (periods != null && periods.isEmpty) EmptyLine(s.noPeriods),
-          for (final x in periods ?? const <Json>[])
-            Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  child: Text('${x['periodNumber'] ?? asJson(x['period'])['number'] ?? ''}'),
-                ),
-                title: Text(
-                  [
-                    if (x['classCode'] != null)
-                      '${x['classCode']}-${x['section']}'
-                    else
-                      x['section'],
-                    x['subjectName'] ?? x['subject'],
-                  ].whereType<Object>().join(' · '),
-                ),
-                subtitle: Text(
-                  [
-                    if (x['substitute'] == true) s.substitution('${x['absentTeacher']}'),
-                    if (x['room'] != null) '${x['room']}',
-                    if (x['period'] != null)
-                      '${s.time(asJson(x['period'])['startsAt'] as String?)}–${s.time(asJson(x['period'])['endsAt'] as String?)}',
-                  ].join(' · '),
-                ),
-              ),
-            ),
-          SectionTitle(s.toMark),
-          if (toMark == null && !(assignments.hasError || summary.hasError))
-            const LinearProgressIndicator(),
-          if (toMark != null && toMark.isEmpty) EmptyLine(s.allMarked),
-          for (final x in toMark ?? const <Json>[])
-            Card(
-              child: ListTile(
-                key: Key('toMark-${x['classSectionId']}'),
-                leading: const Icon(Icons.fact_check_outlined),
-                title: Text('${x['section']}'),
-                subtitle: Text(s.dayAttendance),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => pushPage(
-                  context,
-                  s.markClass,
-                  MarkClassScreen(profile: p, sectionId: '${x['classSectionId']}'),
-                ),
-              ),
-            ),
-          SectionTitle(s.toEnter),
-          if (marks != null && marks.isEmpty) EmptyLine(s.nothingToEnter),
-          for (final x in marks?.take(5) ?? const <Json>[])
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.edit_note),
-                title: Text('${x['exam']} · ${x['section']}'),
-                subtitle: Text(
-                  '${x['what']} · ${s.enteredOf((x['done'] as num? ?? 0).toInt(), (x['total'] as num? ?? 0).toInt())}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => pushPage(context, s.marksEntry, MarksHome(profile: p)),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

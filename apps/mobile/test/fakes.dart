@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:edupro/api/api_transport.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A recorded call to the API.
 class Call {
@@ -111,4 +113,13 @@ class FakeAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+/// Types an app PIN on the PIN screen's number pad (it opens, or goes on, by itself on the last digit).
+Future<void> enterPin(WidgetTester tester, String pin) async {
+  for (final d in pin.split('')) {
+    await tester.tap(find.byKey(Key('pinKey-$d')));
+    await tester.pump();
+  }
+  await tester.pumpAndSettle();
 }

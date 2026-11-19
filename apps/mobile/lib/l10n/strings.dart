@@ -22,6 +22,9 @@ class S {
   );
   String get loginLabel =>
       _t('Mobile number, e-mail or admission number', 'मोबाइल नंबर, ई-मेल या प्रवेश क्रमांक');
+
+  /// the field's own label (short: it sits inside the field on one line)
+  String get loginField => _t('Mobile, e-mail or admission no.', 'मोबाइल, ई-मेल या प्रवेश क्रमांक');
   String get sendCode => _t('Send the code', 'कोड भेजें');
   String get codeTitle => _t('Enter the code', 'कोड दर्ज करें');
   String codeSentTo(String to) =>
@@ -64,6 +67,37 @@ class S {
     'आपके खाते में अभी कोई विद्यालय प्रोफ़ाइल नहीं है। कृपया विद्यालय कार्यालय से संपर्क करें।',
   );
   String welcome(String name) => _t('Welcome, $name', 'स्वागत है, $name');
+
+  // ---- the redesign (look B, navy band): sign-in, code, PIN and the homes ----
+  String get tagline => _t('Your school, on your phone', 'आपका विद्यालय, आपके फ़ोन पर');
+  String get poweredBy => _t('Powered by', 'संचालन');
+  String get signInWelcome => _t('Welcome', 'स्वागत है');
+  String get signInLead =>
+      _t('Sign in to see your day at school.', 'विद्यालय में अपना दिन देखने के लिए साइन इन करें।');
+  String schoolLogo(String school) => _t('$school logo', '$school का लोगो');
+  String get otherLanguage => _t('हिन्दी', 'English');
+  String get otherLanguageHelp => _t('Show the app in Hindi', 'ऐप अंग्रेज़ी में दिखाएँ');
+  String get pinChoose => _t('Choose 4 to 6 digits.', '4 से 6 अंक चुनें।');
+  String get pinEnter => _t('Enter your app PIN', 'अपना ऐप पिन दर्ज करें');
+  String pinDots(int n, int of) => _t('$n of $of digits entered', '$of में से $n अंक दर्ज');
+  String get deleteDigit => _t('Delete the last digit', 'आखिरी अंक मिटाएँ');
+  String get numberPad => _t('Number pad', 'अंक पैड');
+  String get startAgain => _t('Choose another PIN', 'दूसरा पिन चुनें');
+
+  /// Good morning / afternoon / evening (by the phone's clock).
+  String greeting(DateTime now) => now.hour < 12
+      ? _t('Good morning', 'सुप्रभात')
+      : now.hour < 17
+      ? _t('Good afternoon', 'नमस्कार')
+      : _t('Good evening', 'शुभ संध्या');
+  String get shortcuts => _t('Shortcuts', 'शॉर्टकट');
+  String get todaysClasses => _t('Today\'s classes', 'आज की कक्षाएँ');
+  String get nowTag => _t('Now', 'अभी');
+  String get doneTag => _t('Done', 'हो गया');
+  String get substitutionTag => _t('Substitution', 'स्थानापन्न');
+  String get markNow => _t('Mark now', 'अभी दर्ज करें');
+  String get notMarkedToday =>
+      _t('Today\'s attendance is not marked yet', 'आज की उपस्थिति अभी दर्ज नहीं हुई');
   String get todayComing => _t(
     'Today\'s screens arrive in the next update. Everything is under More meanwhile.',
     'आज की स्क्रीन अगले अपडेट में आएँगी। तब तक सब कुछ "और" में है।',
@@ -489,6 +523,28 @@ class S {
     final year = x.year == DateTime.now().year ? '' : ' ${x.year}';
     return '${(hindi ? _dayHi : _dayEn)[x.weekday - 1]}, ${x.day} ${(hindi ? _monHi : _monEn)[x.month - 1]}$year';
   }
+
+  /// Thursday, 19 November
+  String dayLong(DateTime x) =>
+      '${(hindi ? _dayLongHi : _dayLongEn)[x.weekday - 1]}, ${x.day} ${(hindi ? _monthHi : _monthEn)[x.month - 1]}';
+  static const _dayLongEn = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  static const _dayLongHi = [
+    'सोमवार',
+    'मंगलवार',
+    'बुधवार',
+    'गुरुवार',
+    'शुक्रवार',
+    'शनिवार',
+    'रविवार',
+  ];
 
   /// 19 Nov 2026, 10:42
   String dateTime(DateTime x) {

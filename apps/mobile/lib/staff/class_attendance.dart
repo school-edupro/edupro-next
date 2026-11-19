@@ -270,7 +270,8 @@ class _MarkClassScreenState extends ConsumerState<MarkClassScreen> {
                   child: Text('${r['rollNo'] ?? ''}', style: Theme.of(context).textTheme.bodySmall),
                 ),
                 Expanded(child: Text('${r['name']}')),
-                StatusChip(s.attendanceCode(code), attendanceTone(code)),
+                // large text: the word wraps rather than running off the card
+                Flexible(child: StatusChip(s.attendanceCode(code), attendanceTone(code))),
               ],
             ),
             if (onLeave) Text(s.onLeaveLocked, style: Theme.of(context).textTheme.bodySmall),

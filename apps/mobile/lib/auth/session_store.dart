@@ -44,6 +44,7 @@ class SessionStore {
   static const _session = 'session_id';
   static const _name = 'display_name';
   static const _pin = 'pin';
+  static const _pinLength = 'pin_length';
   static const _deviceId = 'device_id';
 
   String? accessToken;
@@ -71,7 +72,7 @@ class SessionStore {
   Future<void> clear() async {
     accessToken = null;
     accessExpiresAt = 0;
-    for (final k in [_refresh, _session, _name, _pin]) {
+    for (final k in [_refresh, _session, _name, _pin, _pinLength]) {
       await _store.delete(k);
     }
   }
@@ -92,7 +93,12 @@ class SessionStore {
   Future<void> setPin(String pin) async {
     final salt = base64Url.encode(List<int>.generate(16, (_) => Random.secure().nextInt(256)));
     await _store.write(_pin, '$salt:${_hash(salt, pin)}');
+    await _store.write(_pinLength, '${pin.length}');
   }
+
+  /// How many digits the PIN has (the unlock screen's dots; it opens on the last digit). Null for a PIN set
+  /// before the length was kept: the screen then has an Open button.
+  Future<int?> get pinLength async => int.tryParse(await _store.read(_pinLength) ?? '');
 
   Future<bool> checkPin(String pin) async {
     final stored = await _store.read(_pin);

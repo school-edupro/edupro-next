@@ -449,14 +449,26 @@ Future<(FakeTransport, School)> pumpFamily(
     ),
   );
   await tester.pumpAndSettle();
-  await tester.enterText(find.byKey(const Key('pin')), '2468');
-  await tester.tap(find.byKey(const Key('pinSubmit')));
-  await tester.pumpAndSettle();
+  await enterPin(tester, '2468');
   return (t, school);
 }
 
 Future<void> scrollTo(WidgetTester tester, Finder f) async {
-  await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).last);
+  // built is not enough (a list builds a little past the screen): bring it into view
+  if (f.evaluate().isEmpty) {
+    // up first (back on a list scrolled down), then down
+    try {
+      await tester.scrollUntilVisible(
+        f,
+        -200,
+        scrollable: find.byType(Scrollable).last,
+        maxScrolls: 20,
+      );
+    } on StateError {
+      await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).last);
+    }
+  }
+  await tester.ensureVisible(f);
   await tester.pumpAndSettle();
 }
 
@@ -467,7 +479,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(420, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final (t, _) = await pumpFamily(tester);
-      expect(find.text('Welcome, Kid Sample'), findsOneWidget);
+      expect(find.text('Kid Sample'), findsOneWidget);
       for (final tab in ['Home', 'Academics', 'Fees', 'Messages', 'More']) {
         expect(
           find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)),
@@ -773,6 +785,7 @@ void main() {
       'Results',
       'Calendar',
     ]) {
+      await scrollTo(tester, find.text(screen));
       await tester.tap(find.text(screen).last);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: screen);
@@ -780,6 +793,7 @@ void main() {
       await tester.pumpAndSettle();
     }
     // the detail pages and the leave form
+    await scrollTo(tester, find.text('Homework'));
     await tester.tap(find.text('Homework').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('work-501')).first);
@@ -789,6 +803,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Attendance'));
     await tester.tap(find.text('Attendance').last);
     await tester.pumpAndSettle();
     await scrollTo(tester, find.byKey(const Key('applyLeave')));

@@ -153,9 +153,7 @@ Future<(FakeTransport, Server, WidgetRef)> pumpPhone(
   );
   await tester.pumpAndSettle();
   if (!mustUpdate) {
-    await tester.enterText(find.byKey(const Key('pin')), '2468');
-    await tester.tap(find.byKey(const Key('pinSubmit')));
-    await tester.pumpAndSettle();
+    await enterPin(tester, '2468');
   }
   return (t, server, ref);
 }

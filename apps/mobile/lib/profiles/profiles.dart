@@ -14,6 +14,7 @@ class Profile {
     required this.schoolName,
     required this.name,
     required this.app,
+    this.schoolCode,
     this.detail,
     this.studentId,
     this.actingAs,
@@ -24,6 +25,7 @@ class Profile {
     kind: '${j['kind']}',
     schoolId: '${j['schoolId']}',
     schoolName: '${j['schoolName']}',
+    schoolCode: j['schoolCode'] as String?,
     name: '${j['name']}',
     app: '${j['app']}',
     detail: j['detail'] as String?,
@@ -37,6 +39,9 @@ class Profile {
   final String kind;
   final String schoolId;
   final String schoolName;
+
+  /// the school's code: its public logo (shown on the sign-in screens once the phone knows the school)
+  final String? schoolCode;
   final String name;
 
   /// the web app its pages belong to: teacher · parent

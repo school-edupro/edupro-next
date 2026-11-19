@@ -4,62 +4,6 @@ import 'package:material_ui/material_ui.dart';
 import '../l10n/strings.dart';
 import '../theme/tokens.g.dart';
 
-/// The sign-in and lock pages: the EduPro band on top, the form in a card.
-class BrandedPage extends StatelessWidget {
-  const BrandedPage({super.key, required this.title, required this.children});
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(Tokens.sp5),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      'EduPro',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: Tokens.fwBold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: Tokens.sp5),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(Tokens.sp5),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Semantics(
-                            header: true,
-                            child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-                          ),
-                          const SizedBox(height: Tokens.sp3),
-                          ...children,
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class ErrorText extends StatelessWidget {
   const ErrorText(this.text, {super.key});
   final String text;

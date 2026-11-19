@@ -81,6 +81,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Mobilise's logo under "Powered by" on the sign-in, code and PIN screens (packages/ui/assets)
+  assets:
+    - assets/brand/mobilise-logo.png
+
   # the brand's fonts in the app (docs/design/89 phase D): the same look offline and on a first launch
   # (SIL Open Font License; the licences sit beside the files)
   fonts:

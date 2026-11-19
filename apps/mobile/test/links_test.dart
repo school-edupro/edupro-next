@@ -6,7 +6,6 @@ import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/push/links.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes.dart';
@@ -140,9 +139,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('pin')), '2468');
-    await tester.tap(find.byKey(const Key('pinSubmit')));
-    await tester.pumpAndSettle();
+    await enterPin(tester, '2468');
     ref.read(routerProvider).push('/open?link=%2Fhomework&schoolId=7&studentId=41');
     await tester.pumpAndSettle();
     expect(find.text('Plant a seed'), findsOneWidget);

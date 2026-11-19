@@ -335,14 +335,26 @@ Future<(FakeTransport, School)> pumpStaff(
     ),
   );
   await tester.pumpAndSettle();
-  await tester.enterText(find.byKey(const Key('pin')), '2468');
-  await tester.tap(find.byKey(const Key('pinSubmit')));
-  await tester.pumpAndSettle();
+  await enterPin(tester, '2468');
   return (t, school);
 }
 
 Future<void> scrollTo(WidgetTester tester, Finder f) async {
-  await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).first);
+  // built is not enough (a list builds a little past the screen): bring it into view
+  if (f.evaluate().isEmpty) {
+    // up first (back on a list scrolled down), then down
+    try {
+      await tester.scrollUntilVisible(
+        f,
+        -200,
+        scrollable: find.byType(Scrollable).first,
+        maxScrolls: 20,
+      );
+    } on StateError {
+      await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).first);
+    }
+  }
+  await tester.ensureVisible(f);
   await tester.pumpAndSettle();
 }
 
@@ -681,6 +693,7 @@ void main() {
     await tester.tap(find.text('Attendance').last);
     await tester.pumpAndSettle();
     for (final screen in ['My attendance', 'My leave']) {
+      await scrollTo(tester, find.text(screen));
       await tester.tap(find.text(screen));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: screen);
@@ -690,6 +703,7 @@ void main() {
     await tester.tap(find.text('Classes').last);
     await tester.pumpAndSettle();
     for (final screen in ['Post homework', 'Marks entry', 'My timetable', 'My payslips']) {
+      await scrollTo(tester, find.text(screen));
       await tester.tap(find.text(screen));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: screen);

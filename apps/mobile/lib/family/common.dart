@@ -114,19 +114,27 @@ class SectionTitle extends StatelessWidget {
             header: true,
             child: Text(
               text,
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: Tokens.fwSemibold),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: Tokens.fwSemibold,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Tokens.mobWhite
+                    : Tokens.mobNavy800,
+              ),
             ),
           ),
         ),
         // a long action (large text) takes what is left and wraps rather than running off the screen
-        if (action != null) Flexible(child: action!),
+        if (action != null)
+          Flexible(
+            child: Align(alignment: AlignmentDirectional.centerEnd, child: action!),
+          ),
       ],
     ),
   );
 }
 
-/// A figure on Home: the number, what it is, a tap to its screen.
+/// A figure on Home: what it is, the number, a tap to its screen (a cell of [FigureGrid]). A [tone] puts a
+/// coloured dot by the number (the status colours are too light for the number itself).
 class FigureTile extends StatelessWidget {
   const FigureTile({
     super.key,
@@ -138,66 +146,120 @@ class FigureTile extends StatelessWidget {
   });
   final String label;
   final String value;
+
+  /// kept for screens that show it; the figure card itself is words and numbers
   final IconData icon;
   final VoidCallback? onTap;
   final Color? tone;
 
   @override
-  Widget build(BuildContext context) => Card(
-    margin: EdgeInsets.zero,
-    child: InkWell(
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(Tokens.radiusMd),
       child: Semantics(
         button: onTap != null,
         label: '$label: $value',
         excludeSemantics: true,
         child: Padding(
-          padding: const EdgeInsets.all(Tokens.sp3),
+          padding: const EdgeInsets.fromLTRB(Tokens.sp4, 14, Tokens.sp3, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: tone ?? Theme.of(context).colorScheme.primary),
-              const SizedBox(height: Tokens.sp2),
               Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: Tokens.fwBold),
+                label,
+                maxLines: 2,
+                style: t.bodySmall?.copyWith(color: dark ? Tokens.mobGray300 : Tokens.textMuted),
               ),
-              Text(label, maxLines: 2, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  if (tone != null) ...[
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(color: tone, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        style: t.titleLarge?.copyWith(
+                          fontWeight: Tokens.fwSemibold,
+                          fontSize: 24,
+                          color: dark ? Tokens.mobWhite : Tokens.mobNavy800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-/// Two figures a row (an even number of tiles, as on the web dashboards).
+/// The figures in one card, two a row with lines between (an even number, as on the web dashboards).
 class FigureGrid extends StatelessWidget {
-  const FigureGrid({super.key, required this.tiles});
+  const FigureGrid({super.key, required this.tiles, this.raised = false});
   final List<Widget> tiles;
 
+  /// with a shadow: the card that sits over the navy band on Home
+  final bool raised;
+
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      for (var i = 0; i < tiles.length; i += 2)
-        Padding(
-          padding: const EdgeInsets.only(bottom: Tokens.sp3),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: tiles[i]),
-                const SizedBox(width: Tokens.sp3),
-                Expanded(child: i + 1 < tiles.length ? tiles[i + 1] : const SizedBox()),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final line = BorderSide(color: dark ? Tokens.mobGray700 : Tokens.mobGray100);
+    return Container(
+      decoration: BoxDecoration(
+        color: dark ? Tokens.mobGray900 : Tokens.mobWhite,
+        borderRadius: BorderRadius.circular(Tokens.radiusLg),
+        border: raised ? null : Border.all(color: dark ? Tokens.mobGray700 : Tokens.mobGray200),
+        boxShadow: raised
+            ? const [BoxShadow(color: Color(0x1A00265D), blurRadius: 20, offset: Offset(0, 6))]
+            : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          children: [
+            for (var i = 0; i < tiles.length; i += 2)
+              Container(
+                decoration: BoxDecoration(
+                  border: i + 2 < tiles.length ? Border(bottom: line) : null,
+                ),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(border: Border(right: line)),
+                          child: tiles[i],
+                        ),
+                      ),
+                      Expanded(child: i + 1 < tiles.length ? tiles[i + 1] : const SizedBox()),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
-    ],
-  );
+      ),
+    );
+  }
 }
 
 enum Tone { success, danger, warning, info, neutral }
@@ -258,7 +320,8 @@ class EmptyLine extends StatelessWidget {
   );
 }
 
-/// A screen of its own (pushed over the tabs) with the title in the bar.
+/// A screen of its own (pushed over the tabs): the navy band with the back button and the title, the page on a
+/// light sheet over it (look B).
 class FamilyPage extends StatelessWidget {
   const FamilyPage({super.key, required this.title, required this.child, this.actions});
   final String title;
@@ -267,8 +330,182 @@ class FamilyPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(title), actions: actions),
-    body: child,
+    backgroundColor: Tokens.mobNavy800,
+    appBar: AppBar(actions: actions, toolbarHeight: 52),
+    body: BandSheet(title: title, child: child),
+  );
+}
+
+/// A big title on the navy band and the content on a light sheet with rounded top corners.
+class BandSheet extends StatelessWidget {
+  const BandSheet({super.key, required this.title, required this.child});
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Tokens.sp4, 0, Tokens.sp4, Tokens.sp5),
+        child: Semantics(
+          header: true,
+          child: Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(color: Tokens.mobWhite, fontWeight: Tokens.fwSemibold),
+          ),
+        ),
+      ),
+      Expanded(
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          // a Material, not a coloured box: list rows paint their ink on it
+          child: Material(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: Padding(
+              padding: const EdgeInsets.only(top: Tokens.sp2),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+/// The top of a Home: the navy band goes on with the date and the greeting, and the figures card sits half over it.
+class HomeBand extends StatelessWidget {
+  const HomeBand({
+    super.key,
+    required this.date,
+    required this.heading,
+    required this.figures,
+    this.detail,
+    this.badge,
+  });
+  final String date;
+  final String heading;
+  final String? detail;
+
+  /// a short word on the band's right (staff: in since 8:02)
+  final Widget? badge;
+  final Widget figures;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          color: Tokens.mobNavy800,
+          padding: const EdgeInsets.fromLTRB(Tokens.sp4, Tokens.sp1, Tokens.sp4, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(date, style: const TextStyle(color: Tokens.mobNavy100, fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        heading,
+                        style: t.headlineSmall?.copyWith(
+                          color: Tokens.mobWhite,
+                          fontWeight: Tokens.fwSemibold,
+                        ),
+                      ),
+                    ),
+                    if (detail != null)
+                      Text(detail!, style: const TextStyle(color: Tokens.mobNavy100, fontSize: 14)),
+                  ],
+                ),
+              ),
+              ?badge,
+            ],
+          ),
+        ),
+        Stack(
+          children: [
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 56,
+              child: ColoredBox(color: Tokens.mobNavy800),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Tokens.sp4, Tokens.sp5, Tokens.sp4, 0),
+              child: figures,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// A row of shortcut pills under the figures (scrolls sideways).
+class ShortcutRow extends StatelessWidget {
+  const ShortcutRow({super.key, required this.label, required this.items});
+  final String label;
+  final List<(String, IconData, VoidCallback)> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Semantics(
+      label: label,
+      container: true,
+      explicitChildNodes: true,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: Tokens.sp4),
+        child: Row(
+          children: [
+            for (final (text, icon, onTap) in items)
+              Padding(
+                padding: const EdgeInsets.only(right: Tokens.sp2),
+                child: OutlinedButton.icon(
+                  onPressed: onTap,
+                  style: OutlinedButton.styleFrom(
+                    shape: const StadiumBorder(),
+                    backgroundColor: dark ? Tokens.mobGray900 : Tokens.mobWhite,
+                    side: BorderSide(color: dark ? Tokens.mobGray700 : Tokens.mobGray200),
+                    padding: const EdgeInsets.fromLTRB(12, 0, 16, 0),
+                    textStyle: const TextStyle(fontWeight: Tokens.fwSemibold, fontSize: 15),
+                  ),
+                  icon: Icon(icon, size: 20, color: dark ? Tokens.mobCyan500 : Tokens.mobCyan700),
+                  label: Text(text),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A small word on a tint: Now, Done, Substitution (body text; the tint carries the meaning).
+class Tag extends StatelessWidget {
+  const Tag(this.text, {super.key, this.color = Tokens.mobCyan100});
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+    child: Text(
+      text,
+      style: const TextStyle(color: Tokens.mobNavy800, fontWeight: Tokens.fwBold, fontSize: 12),
+    ),
   );
 }
 

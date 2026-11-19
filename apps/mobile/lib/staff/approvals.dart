@@ -25,6 +25,11 @@ class ApprovalsButton extends ConsumerWidget {
     return IconButton(
       key: const Key('approvalsButton'),
       tooltip: n > 0 ? s.approvalsWaiting(n) : s.approvals,
+      style: IconButton.styleFrom(
+        backgroundColor: Tokens.mobNavy700,
+        foregroundColor: Tokens.mobWhite,
+        minimumSize: const Size(48, 48),
+      ),
       icon: Badge(
         isLabelVisible: n > 0,
         // white with navy figures on the navy bar (the default red is too light for small text)

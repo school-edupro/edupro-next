@@ -519,3 +519,42 @@ teacher's Settings, Notifications (switches saved) and Phones read the real API 
 **Not done in phase D (needs the company / this Mac)**: measuring on a low-end Android phone, pushes end to end (the
 EduPro Firebase project), the store links (the listings). Phase E: internal test builds, a pilot school, the store
 listings and reviews, then all schools.
+
+## As built — the redesign, look B "navy band" (19 Nov 2026)
+
+The user found the first look plain and asked for a new design for the student/parent/staff app, with the school's
+logo on the sign-in screen and "Powered by Mobilise" with Mobilise's logo at its foot. Three looks were drawn on a
+design canvas (sign-in and home each); the user chose **B · navy band** and approved its other screens (code, PIN,
+student home, staff My day, a list, a detail) before the app was rebuilt.
+
+**The look**: a navy band at the top of every screen and a light sheet with 24 px rounded corners over it
+(`BandScaffold` for sign-in, code and PIN; `BandSheet` for the tabs and every pushed page, `FamilyPage`); on Home the
+band goes on with the date and a greeting and the figures card sits half over it (`HomeBand`, `FigureGrid(raised)`:
+one white card, cells with lines between, a coloured dot for a status). Buttons are cyan with navy words (4.8:1);
+the bottom bar is navy with a cyan pill on the open tab and the unread count on Messages; the profile bar on the band
+has round buttons for approvals (staff) and settings. Home adds a row of shortcut pills and **today's classes** (the
+section's periods for today, the one on now tagged, the ones over ticked; staff: the teacher's periods with
+substitutions tagged). Staff classes still to mark are tinted cards with **Mark now**.
+
+**The school's logo**: after a sign-in the phone keeps the school of the profile in use (`schoolBrandProvider`, in
+the phone's preferences): its name and its public logo (`GET /public/schools/{code}/logo`, asked once; a school with
+no logo is asked again only for another school; logos over 512 KB are not kept). The sign-in, code and PIN screens
+show it from then on, also after signing out; a phone that has never signed in shows the EduPro mark and "Your school,
+on your phone". The code screen of a first sign-in does not name the school: a number typed in must not tell a
+stranger which school it belongs to (so the school's logo appears once the phone has signed in, not after the number
+is typed). `/me/profiles` already carried `schoolCode`; no API change.
+
+**"Powered by" + Mobilise's logo** at the foot of the sign-in, code and PIN sheets (`PoweredBy`, the PNG from
+`packages/ui/assets`, on a white chip in dark mode; a wrap, so large text puts the logo under the words).
+
+**Sign-in**: the code is six boxes over one real field (autofill, keyboard and screen reader use the field); a full
+code is sent on its own. **PIN**: a number pad with dots; choosing is 4 to 6 digits then **Next**, then the same
+again (it saves on the last digit; "Choose another PIN" starts over); unlocking opens on the PIN's last digit (the
+length is kept beside the PIN; a PIN set before that has an **Open** button), with the fingerprint / face key on the
+pad when the phone has one. A computer's keyboard types into the pad too (the web build).
+
+**Checks**: `flutter analyze` clean; 65 tests (new: the remembered school and its logo, the old-PIN Open button, the
+PIN steps, today's classes, sign-in/code/PIN accessibility in light and dark — tap targets, labels, contrast; the
+existing family and staff accessibility and large-text checks pass on the new screens). A headless run of the web
+build on the test schools (parent, student, staff) matched the design; with a test logo the unlock screen showed the
+school's crest and name.

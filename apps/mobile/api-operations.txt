@@ -84,3 +84,7 @@ ApprovalsController_decide
 CommsPushController_events
 CommsPushController_setEvents
 MobileAuthController_appVersion
+
+# the redesign: the school's logo on the sign-in, code and PIN screens, fetched after a sign-in and kept on the phone
+# (the school's public logo, by its code from /me/profiles)
+PublicSchoolController_logo
