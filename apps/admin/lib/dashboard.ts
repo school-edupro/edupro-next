@@ -151,7 +151,9 @@ export async function loadWidgets(layout: Layout, permissions: string[]) {
           ).then((r) => r.holidays.filter((h) => h.kind !== 'working_day')),
         )
       : null,
-    need('approvals', 'today') ? quiet(myApprovals(permissions)) : null,
+    need('approvals', 'today')
+      ? quiet(myApprovals(permissions, { items: false }).then((r) => r.groups))
+      : null,
     need('birthdays_staff')
       ? quiet(
           apiFetch<{ today: Person[]; upcoming: Person[] }>(

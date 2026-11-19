@@ -1498,7 +1498,16 @@ export class TransportDeskService {
         `${REQUEST} WHERE EXISTS (SELECT 1 FROM transport_request_approvals a WHERE a.request_id = q.id AND a.acted_by = app.current_user_id())
           ORDER BY q.requested_at DESC LIMIT 30`,
       );
-      return { data: r.rows.map(toRequest), decided: done.rows.map(toRequest) };
+      // how many wait on me in all (the list stops at 200)
+      const waiting = await c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM transport_requests q WHERE q.status = 'pending' AND EXISTS (SELECT 1 FROM transport_request_approvals a
+            WHERE a.request_id = q.id AND a.status = 'pending' AND app.current_user_id() = ANY(a.approver_user_ids))`,
+      );
+      return {
+        data: r.rows.map(toRequest),
+        waiting: waiting.rows[0]!.n,
+        decided: done.rows.map(toRequest),
+      };
     });
   }
 

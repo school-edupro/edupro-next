@@ -1635,8 +1635,21 @@ export class PurchaseStoresService implements OnModuleInit {
           ORDER BY (r.status = 'submitted') DESC, r.created_at DESC LIMIT 100`,
         [q.status ?? null, q.storeId ?? null, all],
       );
+      // how many I may decide in all (the list stops at 100): as can.decide below
+      const waiting = await c.query<{ n: number }>(
+        // eslint-disable-next-line no-restricted-syntax -- MAY_ACT is a fixed fragment; values are bound
+        `SELECT count(*)::int AS n FROM stock_revaluations r
+          WHERE r.status = 'submitted' AND ($1::bigint IS NULL OR r.store_id = $1)
+            AND r.created_by IS DISTINCT FROM app.current_user_id()
+            AND CASE WHEN r.workflow_instance_id IS NULL THEN $2
+                     ELSE EXISTS (SELECT 1 FROM workflow_steps s JOIN workflow_instances wi ON wi.id = s.instance_id
+                                   WHERE wi.id = r.workflow_instance_id AND wi.status = 'pending' AND s.level = wi.current_level
+                                     AND s.status = 'pending' AND ${WorkflowService.MAY_ACT}) END`,
+        [q.storeId ?? null, this.has(ctx, PURCHASE.countApprove)],
+      );
       const me = String(ctx.user.id);
       return {
+        waitingForMe: waiting.rows[0]!.n,
         rows: r.rows.map((x) => ({
           id: x.id,
           number: x.number,

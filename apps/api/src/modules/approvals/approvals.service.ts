@@ -12,8 +12,11 @@ import type { ApprovalItem, Decision } from './approval-source';
 import { APPROVAL_SOURCES } from './sources';
 
 export interface Inbox {
+  /** everything waiting, every kind (the kinds' counts added up) */
   total: number;
+  /** each kind with something waiting: how many in all (a long list's items may stop at its route's page) */
   kinds: Array<{ kind: string; label: string; count: number }>;
+  /** the items read (none when only the counts were asked for) */
   items: ApprovalItem[];
   /** kinds whose list could not be read just now (shown as such, not as nothing waiting) */
   unavailable: Array<{ kind: string; label: string }>;
@@ -33,20 +36,31 @@ export class ApprovalsService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  async inbox(ctx: RequestContext, req: ContextualRequest, kind?: string): Promise<Inbox> {
+  async inbox(
+    ctx: RequestContext,
+    req: ContextualRequest,
+    kind?: string,
+    view: 'items' | 'counts' = 'items',
+  ): Promise<Inbox> {
     const permissions = await this.access.effectivePermissions(requireTenant(ctx));
     const sources = APPROVAL_SOURCES.filter(
       (s) =>
         (!kind || s.kind === kind) &&
-        (s.permissions.length === 0 || s.permissions.some((p) => permissions.has(p))),
+        (s.permissions.length === 0 || s.permissions.some((p) => permissions.has(p))) &&
+        (s.needsAll ?? []).every((p) => permissions.has(p)),
     );
     const read = await Promise.all(
       sources.map(async (s) => {
         try {
           const r = await this.calls.call(req, s.list.method, s.list.url, s.list.body);
-          if (r.status === 403 || r.status === 404) return { s, items: [] as ApprovalItem[] };
+          if (r.status === 403 || r.status === 404) {
+            // a kind asked only of those holding its rights should not be refused: its rights and its route disagree
+            if (r.status === 403 && (s.permissions.length > 0 || s.needsAll?.length))
+              this.logger.warn(`approvals inbox: ${s.kind} list refused (${s.list.url})`);
+            return { s, items: [] as ApprovalItem[], count: 0 };
+          }
           if (r.status >= 400) throw new Error(`${s.list.url} answered ${r.status}`);
-          const items: ApprovalItem[] = s.items(r.body).map((i) => ({
+          const items: ApprovalItem[] = s.items(r.body).map(({ adminHref, ...i }) => ({
             ...i,
             kind: s.kind,
             app: s.app,
@@ -56,23 +70,31 @@ export class ApprovalsService {
             approveAs: s.approveAs ?? 'approve',
             rejectAs: s.rejectAs === undefined ? 'reject' : s.rejectAs,
             url: s.app === 'admin' ? `${this.env.ADMIN_APP_URL}${i.href}` : null,
+            adminHref: s.app === 'admin' ? i.href : (adminHref ?? null),
+            staffUrl: s.app === 'teacher' ? `${this.env.TEACHER_APP_URL}${i.href}` : null,
           }));
-          return { s, items };
+          // the route's own count of everything waiting, never fewer than the items read
+          const count = Math.max(s.total?.(r.body) ?? items.length, items.length);
+          return { s, items, count };
         } catch (error) {
           this.logger.warn(`approvals inbox: ${s.kind} unavailable (${String(error)})`);
-          return { s, items: null };
+          return { s, items: null, count: 0 };
         }
       }),
     );
-    const items = read
-      .flatMap((r) => r.items ?? [])
-      // the oldest waiting first
-      .sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''));
+    const items =
+      view === 'counts'
+        ? []
+        : read
+            .flatMap((r) => r.items ?? [])
+            // the oldest waiting first
+            .sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''));
+    const kinds = read
+      .filter((r) => r.items !== null && r.count > 0)
+      .map((r) => ({ kind: r.s.kind, label: r.s.label, count: r.count }));
     return {
-      total: items.length,
-      kinds: read
-        .filter((r) => r.items !== null && r.items.length > 0)
-        .map((r) => ({ kind: r.s.kind, label: r.s.label, count: r.items!.length })),
+      total: kinds.reduce((n, k) => n + k.count, 0),
+      kinds,
       items,
       unavailable: read
         .filter((r) => r.items === null)

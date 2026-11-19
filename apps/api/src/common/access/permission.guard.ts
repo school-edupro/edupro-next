@@ -12,6 +12,7 @@ import { ENV, type Env } from '../../config/env';
 import { AccessService } from '../../modules/access/access.service';
 import { AUTHENTICATED_ONLY, IS_PUBLIC } from '../auth/decorators';
 import type { ContextualRequest } from '../http/request-context';
+import { isFreshMfa } from './fresh-mfa';
 import { REQUIRE_PERMISSION, type PermissionRequirement } from './require-permission.decorator';
 
 /**
@@ -90,7 +91,7 @@ export class PermissionGuard implements CanActivate {
         permission: requirement.code,
       });
     }
-    if (needsMfa && !this.isFreshMfa(ctx.user.mfa, ctx.user.authTime)) {
+    if (needsMfa && !isFreshMfa(ctx.user, this.env.MFA_FRESHNESS_MINUTES)) {
       this.security.record('mfa_required', {
         schoolId: ctx.tenant.schoolId,
         userId: ctx.user.id,
@@ -113,12 +114,5 @@ export class PermissionGuard implements CanActivate {
     }
 
     return true;
-  }
-
-  private isFreshMfa(mfa: boolean, authTime?: number): boolean {
-    if (!mfa) return false;
-    if (authTime === undefined) return true; // IdP did not provide auth_time; MFA claim alone is accepted
-    const ageSeconds = Math.floor(Date.now() / 1000) - authTime;
-    return ageSeconds <= this.env.MFA_FRESHNESS_MINUTES * 60;
   }
 }

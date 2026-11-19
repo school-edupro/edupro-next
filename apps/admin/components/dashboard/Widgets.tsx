@@ -296,8 +296,8 @@ export function renderWidget(
           {groups.length ? (
             <ul className="db-list">
               {groups.map((g) => (
-                <li key={g.href} className="db-list__row">
-                  <a className="db-list__main" href={g.href}>
+                <li key={g.kind} className="db-list__row">
+                  <a className="db-list__main" href={g.href ?? '/approvals'}>
                     <strong>{g.title}</strong>
                   </a>
                   <span className="ep-badge ep-badge--warning">{g.count}</span>

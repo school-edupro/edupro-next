@@ -10,7 +10,11 @@ import {
 } from '../../common/http/request-context';
 import { ApprovalsService } from './approvals.service';
 
-const InboxQuerySchema = z.object({ kind: z.string().trim().max(40).optional() });
+const InboxQuerySchema = z.object({
+  kind: z.string().trim().max(40).optional(),
+  /** counts: the counts alone, no items (a header badge) */
+  view: z.enum(['items', 'counts']).optional(),
+});
 class ApprovalsInboxQueryDto extends createZodDto(InboxQuerySchema) {}
 
 const DecisionSchema = z.object({
@@ -38,7 +42,7 @@ export class ApprovalsController {
     @Req() req: ContextualRequest,
     @Query() q: ApprovalsInboxQueryDto,
   ) {
-    return this.approvals.inbox(ctx, req, q.kind);
+    return this.approvals.inbox(ctx, req, q.kind, q.view);
   }
 
   @Post(':kind/:id/decision')

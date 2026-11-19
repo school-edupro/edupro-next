@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { FeeAdjustmentsService } from './fee-adjustments.service';
+import { mustReadFeeRequests } from './fee-request-readers';
 import { FeeDemandsService } from './fee-demands.service';
 import { FeeLedgerService } from './fee-ledger.service';
 import { FeeMastersService } from './fee-masters.service';
@@ -662,8 +664,10 @@ export class FeesController {
   @ApiOperation({
     summary: 'Waivers, cancelled receipts and bounced cheques: filters, totals, pages',
   })
-  @RequirePermission(FEES.adjustmentRequest)
+  // those who raise adjustments and those who decide them
+  @AuthenticatedOnly()
   async adjustmentRegister(@ReqCtx() ctx: RequestContext, @Query() q: AdjustmentRegisterQueryDto) {
+    mustReadFeeRequests(ctx);
     const { rows, total, totals } = await this.adj.adjustmentRegister(ctx, q);
     return { data: rows, totals, page: { number: q.page, size: q.size, total } };
   }
@@ -681,10 +685,10 @@ export class FeesController {
   }
 
   @Get('adjustments')
-  @RequirePermission(FEES.adjustmentRequest, {
-    description: 'Request a waiver, a receipt reversal or a cheque bounce',
-  })
+  // those who raise adjustments and those who decide them (the approvals inbox reads it for approvers)
+  @AuthenticatedOnly()
   async adjustments(@ReqCtx() ctx: RequestContext, @Query() q: ListAdjustmentsQueryDto) {
+    mustReadFeeRequests(ctx);
     return { data: await this.adj.adjustments(ctx, q) };
   }
 
@@ -692,7 +696,9 @@ export class FeesController {
   @ApiOperation({
     summary: 'Request a waiver of a demand row, a receipt reversal or a cheque bounce',
   })
-  @RequirePermission(FEES.adjustmentRequest)
+  @RequirePermission(FEES.adjustmentRequest, {
+    description: 'Request a waiver, a receipt reversal or a cheque bounce',
+  })
   requestAdjustment(@ReqCtx() ctx: RequestContext, @Body() body: RequestAdjustmentDto) {
     return this.adj.requestAdjustment(ctx, body);
   }

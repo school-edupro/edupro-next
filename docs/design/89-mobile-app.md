@@ -413,3 +413,39 @@ with push), devices (as before). Found on the way and left for separate work: th
 `createdAt` for workflow items (the API sends `requestedAt`), checks other permissions than the fee and withdrawal list
 routes need, and counts pages rather than totals for some kinds; fee requests routed through approval levels are decided
 on `/workflow/steps`, which does not ask for the second factor their own route asks for.
+
+## As built — approvals fixes after phase C (19 Nov 2026)
+
+The problems found in phase C (above, "Found on the way") are fixed.
+
+- **Second factor for fee steps** (`WorkflowService.act`, `stepUp`): a step of a fee request riding the approval levels
+  — entity types `fee_*` (waivers and their undoing, receipt cancellations and cheque bounces, date corrections and
+  the other fee requests, fee profile changes, opening balances, refunds) and `misc_fee_request` — asks what its own
+  route asks (`fees.adjustment.approve` / `fees.refund.approve`, step-up): a recent second factor (403 `mfa-required`,
+  the admin sends the person to step-up) and never while impersonating. Checked in `act()`, so the general step
+  routes, the approvals inbox and any other caller are covered. The freshness rule is shared with the permission
+  guard (`common/access/fresh-mfa.ts`). Admission refunds (`admission_refund`) are not a fee type and keep their rule.
+- **Counts are totals**: each kind of the inbox counts what waits in all from its list route (`ApprovalSource.total`),
+  while the items stop at the route's page. Routes that had no count now give one: purchase counts and rate
+  corrections (`waitingForMe`), gate passes and transport requests (`waiting`), attendance corrections (`total`);
+  staff leave and its cancellations are read separately (`kind=leave` / `kind=cancellation`) with their own `total`.
+  `total` is the kinds' counts added up; `GET /approvals/inbox?view=counts` gives the counts without items.
+- **Rights match the list routes**: the fee adjustment and fee request lists (and the adjustments register) open to
+  those who decide them (`fees.adjustment.approve`) as well as those who raise them; the withdrawal kind is asked of
+  those who clear (`people.withdrawal.clear`) and see withdrawals (`people.withdrawal.view`, the list's and the
+  page's right) — `ApprovalSource.needsAll`; hostel visits likewise need `hostel.visit.view` with `.decide`, and read
+  the list's own fields (`rows`, `pupil`, `visitorName`, `createdAt`: before, nothing showed). A kind asked only of
+  those holding its rights that is still refused is logged as a warning.
+- **Admin Approvals page, header count and dashboard** read `GET /approvals/inbox` (`apps/admin/lib/approvals.ts`):
+  one source of truth with the mobile app, so the "since" of workflow steps is their `requestedAt`. Each item carries
+  `adminHref` (its page in the admin app) and `staffUrl` (a staff app page as a full address); the staff app's own
+  kinds (exits, no-dues, consent answers, hostel visits) now show too, opening in the staff app. A kind without a
+  list page for everyone (assets handed to you; vacancies for those without `people.recruitment.view`) has no
+  "Open" button and shows every item, each opening its own page — no group link to the first item. A long group
+  says "Showing 10 of N"; kinds that could not be read are named.
+
+**Tests**: API e2e `fee-approval` (+1: a fee step refused without a second factor or with one two days old, approve
+and reject, directly and through the inbox; nothing decided; then approved with a fresh one) and `approvals-inbox`
+(+1: a person holding exactly the rights the inbox asks each kind by is refused by no list; the counts add up and
+`view=counts`); unit `approvals.service.spec` (a kind counted by its route's total; counts alone) and
+`workflow-step-up.spec` (which entity types ask for the second factor).

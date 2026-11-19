@@ -423,6 +423,82 @@ describe('fee changes through two approval levels (e2e)', () => {
     expect(view.json().status).toBe('reversed');
   });
 
+  it("a fee request's approval step asks for a recent second factor, as its own route does", async () => {
+    const paid = await inject({
+      method: 'POST',
+      url: '/payments/receipts',
+      headers: h(accountant),
+      json: { studentId, amount: 400, mode: 'cash' },
+    });
+    expect(paid.statusCode).toBe(201);
+    const req = await inject({
+      method: 'POST',
+      url: '/fees/adjustments',
+      headers: h(accountant),
+      json: { kind: 'reversal', paymentId: paid.json().paymentId, reason: 'Wrong pupil' },
+    });
+    expect(req.statusCode).toBe(201);
+    const instanceId = req.json().workflowInstanceId as string;
+    const step = await pendingStep(instanceId);
+    expect(step.level).toBe(2);
+    const stale = (opt: string) => headersFor(`${admin.sub};${opt}`, school.id);
+    const longAgo = Math.floor(Date.now() / 1000) - 2 * 86400;
+    for (const [how, headers] of [
+      ['no second factor', stale('mfa=false')],
+      ['a second factor two days old', stale(`auth_time=${String(longAgo)}`)],
+    ] as const)
+      for (const d of ['approve', 'reject'] as const) {
+        const r = await inject({
+          method: 'POST',
+          url: `/workflow/steps/${step.id}/${d}`,
+          headers,
+          json: { note: 'Checked' },
+        });
+        expect({ how, d, status: r.statusCode, type: r.json().type }).toEqual({
+          how,
+          d,
+          status: 403,
+          type: 'mfa-required',
+        });
+      }
+    // the approvals inbox lists it among the approval steps; deciding there calls the same route as the person
+    const box = await inject({ method: 'GET', url: '/approvals/inbox', headers: h() });
+    const listed = (
+      box.json().items as Array<{ kind: string; id: string; at: string | null; adminHref: string }>
+    ).find((x) => x.kind === 'workflow' && x.id === step.id);
+    // when it was asked, and its page in the admin app
+    expect(listed).toMatchObject({
+      at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      adminHref: `/workflow/instances/${instanceId}`,
+    });
+    const viaInbox = await inject({
+      method: 'POST',
+      url: `/approvals/workflow/${step.id}/decision`,
+      headers: stale('mfa=false'),
+      json: { decision: 'approve' },
+    });
+    expect(viaInbox.statusCode).toBe(403);
+    expect(viaInbox.json().type).toBe('mfa-required');
+    // nothing was decided
+    expect((await pendingStep(instanceId)).id).toBe(step.id);
+    const view = () =>
+      inject({
+        method: 'GET',
+        url: `/fees/payments/${paid.json().paymentId}/receipt-view`,
+        headers: h(),
+      });
+    expect((await view()).json().status).not.toBe('reversed');
+    // a recent second factor decides it
+    const ok = await inject({
+      method: 'POST',
+      url: `/workflow/steps/${step.id}/approve`,
+      headers: h(),
+      json: { note: 'Cancel it' },
+    });
+    expect([200, 201]).toContain(ok.statusCode);
+    expect((await view()).json().status).toBe('reversed');
+  });
+
   it('a refund rides the same levels and is paid, with its voucher, on the last approval', async () => {
     const paid = await inject({
       method: 'POST',

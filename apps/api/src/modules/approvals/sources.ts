@@ -1,5 +1,5 @@
 import type { ApprovalSource, Decision, ListedItem } from './approval-source';
-import { rows, str } from './approval-source';
+import { count, rows, str } from './approval-source';
 
 /**
  * Every kind of approval the inbox gathers: the admin app's Approvals page (apps/admin/lib/approvals.ts, 26 kinds)
@@ -64,6 +64,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: ['engagement.change_request.approve'],
     app: 'admin',
     list: { method: 'GET', url: '/engagement/profile-approvals?box=mine&size=100' },
+    total: (a) => count(a, 'page', 'total'),
     items: (a) =>
       rows(a).map((x) =>
         item({
@@ -90,6 +91,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/people/staff-profile-approvals?box=mine&size=100' },
+    total: (a) => count(a, 'total'),
     items: (a) =>
       rows(a)
         .filter((x) => x.canAct !== false && x.status === 'pending')
@@ -105,6 +107,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
             at: str(x.createdAt),
             amount: null,
             href: '/profile/approvals',
+            adminHref: '/people/staff-profile-approvals',
           });
         }),
     decide: (id, d, r) => ({
@@ -119,6 +122,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/indents?view=waiting&status=submitted&size=100' },
+    total: (a) => count(a, 'total'),
     items: (a) =>
       rows(a).map((x) =>
         item({
@@ -129,6 +133,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.submittedAt ?? x.createdAt),
           amount: str(x.estimate),
           href: `/purchase/indents/${String(x.id)}`,
+          adminHref: `/purchase/indents/${String(x.id)}`,
         }),
       ),
     decide: (id, d, r) => ({
@@ -143,6 +148,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/orders?view=waiting&status=submitted&size=100' },
+    total: (a) => count(a, 'waitingForMe'),
     items: (a) =>
       rows(a).map((x) =>
         item({
@@ -153,6 +159,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.submittedAt ?? x.createdAt),
           amount: str(x.total),
           href: `/purchase/orders/${String(x.id)}`,
+          adminHref: `/purchase/orders/${String(x.id)}`,
         }),
       ),
     decide: (id, d, r) => ({
@@ -167,6 +174,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/receipts?mine=1' },
+    total: (a) => count(a, 'total'),
     // quantities line by line: on its own page
     items: (a) =>
       rows(a, 'rows').map((x) =>
@@ -178,6 +186,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.receivedOn),
           amount: null,
           href: `/purchase/receipts/${String(x.id)}`,
+          adminHref: `/purchase/receipts/${String(x.id)}`,
         }),
       ),
   },
@@ -187,6 +196,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/issues?mine=1' },
+    total: (a) => count(a, 'toAcknowledge'),
     approveAs: 'acknowledge',
     rejectAs: null,
     reasonOnReject: false,
@@ -202,6 +212,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
             at: str(x.issuedOn),
             amount: str(x.value),
             href: `/purchase/issues/${String(x.id)}`,
+            adminHref: `/purchase/issues/${String(x.id)}`,
           }),
         ),
     decide: (id, _d, r) => ({
@@ -216,6 +227,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'admin',
     list: { method: 'GET', url: '/purchase/counts?mine=1' },
+    total: (a) => count(a, 'waitingForMe'),
     rejectAs: 'send_back',
     items: (a) =>
       rows(a, 'rows').map((x) =>
@@ -241,6 +253,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'admin',
     list: { method: 'GET', url: '/purchase/revaluations?status=submitted' },
+    total: (a) => count(a, 'waitingForMe'),
     reasonOnReject: false,
     items: (a) =>
       rows(a, 'rows')
@@ -332,6 +345,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.movedOn),
           amount: null,
           href: `/purchase/my-assets`,
+          adminHref: x.assetId == null ? null : `/purchase/assets/${String(x.assetId)}`,
         }),
       ),
     decide: (id, _d, r) => ({
@@ -346,6 +360,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/requisitions?view=waiting&status=submitted&size=100' },
+    total: (a) => count(a, 'waitingForMe'),
     items: (a) =>
       rows(a).map((x) =>
         item({
@@ -356,6 +371,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.submittedAt ?? x.createdAt),
           amount: str(x.estimate),
           href: `/purchase/requisitions/${String(x.id)}`,
+          adminHref: `/purchase/requisitions/${String(x.id)}`,
         }),
       ),
     decide: (id, d, r) => ({
@@ -370,6 +386,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/requisitions?view=sign&size=100' },
+    total: (a) => count(a, 'total'),
     approveAs: 'sign',
     rejectAs: null,
     reasonOnReject: false,
@@ -383,6 +400,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.submittedAt ?? x.createdAt),
           amount: str(x.estimate),
           href: `/purchase/requisitions/${String(x.id)}`,
+          adminHref: `/purchase/requisitions/${String(x.id)}`,
         }),
       ),
     decide: (id, _d, r) => ({
@@ -394,6 +412,8 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
   {
     kind: 'fee_adjustment',
     label: 'Fee adjustments',
+    // those who decide them (the list is open to them as to those who raise them); the ones riding approval
+    // levels come as workflow steps
     permissions: ['fees.adjustment.approve'],
     app: 'admin',
     list: { method: 'GET', url: '/fees/adjustments?status=pending' },
@@ -450,8 +470,11 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     kind: 'withdrawal',
     label: 'Withdrawal clearances',
     permissions: ['people.withdrawal.clear'],
+    // the list and the withdrawal's page, where the clearance is recorded, are for those who see withdrawals
+    needsAll: ['people.withdrawal.view'],
     app: 'admin',
     list: { method: 'GET', url: '/people/withdrawals?mine=true&size=100' },
+    total: (a) => count(a, 'page', 'total'),
     // a department's clearance with its dues: on its own page
     items: (a) =>
       rows(a).map((x) =>
@@ -495,6 +518,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/gate-passes/inbox' },
+    total: (a) => count(a, 'waiting'),
     items: (a) =>
       rows(a).map((x) =>
         item({
@@ -505,6 +529,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.createdAt),
           amount: null,
           href: `/gate-passes`,
+          adminHref: `/engagement/gate-passes/${String(x.id)}`,
         }),
       ),
     decide: (id, d, r) => ({
@@ -556,6 +581,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.updatedAt),
           amount: null,
           href: `/acr`,
+          adminHref: `/me/acr/${String(x.id)}`,
         });
       }),
   },
@@ -565,6 +591,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'admin',
     list: { method: 'GET', url: '/transport/requests/inbox' },
+    total: (a) => count(a, 'waiting'),
     items: (a) =>
       rows(a).map((x) =>
         item({
@@ -613,6 +640,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: ['academics.lesson_plan.view'],
     app: 'teacher',
     list: { method: 'GET', url: '/academics/lessons?mine=approve&size=100' },
+    total: (a) => count(a, 'page', 'total'),
     approveAs: 'acknowledge',
     items: (a) =>
       rows(a).map((x) =>
@@ -624,6 +652,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.requestedAt),
           amount: null,
           href: `/lesson-plans`,
+          adminHref: `/academics/lesson-plans/${String(x.id)}`,
         }),
       ),
     decide: (id, d, r) => ({
@@ -638,6 +667,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/attendance/leaves?tab=inbox' },
+    total: (a) => count(a, 'inbox'),
     items: (a) =>
       rows(a).map((x) =>
         item({
@@ -648,6 +678,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.appliedAt),
           amount: null,
           href: `/leaves?tab=inbox&open=${String(x.id)}`,
+          adminHref: `/attendance/leaves?tab=inbox&open=${String(x.id)}`,
         }),
       ),
     decide: (id, d, r) => ({
@@ -661,7 +692,8 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     label: 'Staff leave',
     permissions: [],
     app: 'teacher',
-    list: { method: 'GET', url: '/leave/approvals?view=waiting&size=100' },
+    list: { method: 'GET', url: '/leave/approvals?view=waiting&kind=leave&size=100' },
+    total: (a) => count(a, 'total'),
     items: (a) =>
       rows(a, 'rows')
         .filter((x) => (x.what ?? 'leave') === 'leave')
@@ -677,7 +709,8 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     label: 'Staff leave cancellations',
     permissions: [],
     app: 'teacher',
-    list: { method: 'GET', url: '/leave/approvals?view=waiting&size=100' },
+    list: { method: 'GET', url: '/leave/approvals?view=waiting&kind=cancellation&size=100' },
+    total: (a) => count(a, 'total'),
     items: (a) =>
       rows(a, 'rows')
         .filter((x) => x.what === 'cancellation')
@@ -694,6 +727,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/staff-attendance/regularisations/approvals?view=waiting' },
+    total: (a) => count(a, 'total'),
     items: (a) =>
       rows(a, 'rows')
         .filter((x) => x.mayDecide !== false)
@@ -713,6 +747,10 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
             at: str(x.since),
             amount: null,
             href: `/attendance-corrections`,
+            adminHref:
+              x.employee_id == null || x.day == null
+                ? '/leave/attendance/approvals'
+                : `/leave/attendance/day?emp=${String(x.employee_id)}&day=${String(x.day)}`,
           }),
         ),
     decide: (id, d, r) => ({
@@ -727,6 +765,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/admissions/approvals?tab=waiting&size=100' },
+    total: (a) => count(a, 'total'),
     reasonOnApprove: true,
     items: (a) =>
       rows(a).map((x) =>
@@ -738,6 +777,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           at: str(x.since),
           amount: null,
           href: `/admission-approvals/${String(x.id)}`,
+          adminHref: `/admissions/approvals/${String(x.id)}`,
         }),
       ),
     decide: (id, d, r) => ({
@@ -824,16 +864,19 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     kind: 'hostel_visit',
     label: 'Hostel visits',
     permissions: ['hostel.visit.decide'],
+    // the list is the hostel visitors' book
+    needsAll: ['hostel.visit.view'],
     app: 'teacher',
     list: { method: 'GET', url: '/hostel/visits?show=waiting' },
+    total: (a) => count(a, 'total'),
     items: (a) =>
-      rows(a).map((x) =>
+      rows(a, 'rows').map((x) =>
         item({
           id: String(x.id),
-          title: join(name(x.student), x.hostel) ?? 'Hostel visit',
-          detail: join(x.visitor ?? x.visitorName, x.onDate ?? x.visitOn),
+          title: join(x.pupil, x.hostel) ?? 'Hostel visit',
+          detail: join(x.visitorName, x.purpose),
           by: null,
-          at: str(x.requestedAt ?? x.createdAt),
+          at: str(x.createdAt),
           amount: null,
           href: `/hostel`,
         }),
@@ -857,5 +900,6 @@ function staffLeave(x: Record<string, unknown>) {
     at: str(x.since ?? x.appliedAt),
     amount: null,
     href: `/my-leave/${String(x.id)}`,
+    adminHref: `/leave/requests/${String(x.id)}`,
   });
 }

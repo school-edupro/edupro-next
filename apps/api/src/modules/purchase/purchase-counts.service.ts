@@ -265,8 +265,25 @@ export class PurchaseCountsService implements OnModuleInit {
           ORDER BY (k.status IN ('counting', 'submitted')) DESC, k.counted_on DESC, k.id DESC LIMIT 50 OFFSET $3`,
         [q.status ?? null, q.storeId ?? null, (q.page - 1) * 50, q.mine],
       );
-      if (q.mine)
-        return { rows: r.rows.map((x) => this.shape(x)), page: q.page, stores: [], categories: [] };
+      if (q.mine) {
+        // how many wait at my level in all (the list is a page of 50)
+        const waiting = await c.query<{ n: number }>(
+          // eslint-disable-next-line no-restricted-syntax -- MAY_ACT is a fixed fragment; values are bound
+          `SELECT count(*)::int AS n FROM stock_counts k
+            WHERE k.status = 'submitted' AND ($1::bigint IS NULL OR k.store_id = $1)
+              AND EXISTS (SELECT 1 FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
+                  WHERE i.id = k.workflow_instance_id AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending'
+                    AND ${WorkflowService.MAY_ACT})`,
+          [q.storeId ?? null],
+        );
+        return {
+          rows: r.rows.map((x) => this.shape(x)),
+          page: q.page,
+          waitingForMe: waiting.rows[0]!.n,
+          stores: [],
+          categories: [],
+        };
+      }
       const stores = await c.query<{
         id: string;
         name: string;

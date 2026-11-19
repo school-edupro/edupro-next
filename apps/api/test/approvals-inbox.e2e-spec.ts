@@ -41,6 +41,8 @@ describe('approvals inbox (e2e)', () => {
   let teacher: SeededUser;
   let other: SeededUser;
   let parent: SeededUser;
+  /** holds every right a kind of the inbox is asked by, and nothing else */
+  let rights: SeededUser;
   let section = '';
   let kid = '';
   const s = stamp('APX');
@@ -76,6 +78,22 @@ describe('approvals inbox (e2e)', () => {
       teacher = await seedUser(c, school, `${s}-teacher`);
       other = await seedUser(c, school, `${s}-other`, 'class_teacher');
       parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
+      rights = await seedUser(c, school, `${s}-rights`);
+      const role = await c.query<{ id: string }>(
+        `INSERT INTO roles (school_id, code, name, kind) VALUES ($1, 'zz_inbox_rights', 'Inbox rights', 'module') RETURNING id::text`,
+        [school.id],
+      );
+      const codes = [
+        ...new Set(APPROVAL_SOURCES.flatMap((x) => [...x.permissions, ...(x.needsAll ?? [])])),
+      ];
+      await c.query(
+        `INSERT INTO role_permissions (role_id, permission_code) SELECT $1, unnest($2::text[])`,
+        [role.rows[0]!.id, codes],
+      );
+      await c.query(
+        `INSERT INTO user_roles (school_id, user_id, role_id, reason) VALUES ($1, $2, $3, 'e2e')`,
+        [school.id, rights.id, role.rows[0]!.id],
+      );
       for (const [code, u] of [
         ['T1', teacher],
         ['T2', other],
@@ -148,7 +166,28 @@ describe('approvals inbox (e2e)', () => {
     const box = await inbox(admin);
     // every list route answered (a wrong address or query would show here as unavailable)
     expect(box.unavailable).toEqual([]);
-    expect(box.total).toBe(box.items.length);
+    // the kinds' counts add up to the total; the items read are never more
+    expect(box.total).toBe(box.kinds.reduce((n, k) => n + k.count, 0));
+    expect(box.items.length).toBeLessThanOrEqual(box.total);
+    // the counts alone: the same total, no items
+    const counts = await call('GET', '/approvals/inbox?view=counts', admin);
+    expect(counts.json()).toMatchObject({ total: box.total, items: [] });
+  });
+
+  it("no kind's list refuses a person who holds the rights the inbox asks that kind by", async () => {
+    // a person given exactly those rights (an approver who raises nothing: fees.adjustment.approve without
+    // .request, a department that clears withdrawals): each list they are asked must answer, not refuse
+    const refused: string[] = [];
+    for (const src of APPROVAL_SOURCES.filter((x) => x.permissions.length > 0)) {
+      const r = await call(src.list.method as 'GET', src.list.url, rights);
+      if (r.statusCode === 403) refused.push(`${src.kind}: ${src.list.url}`);
+    }
+    expect(refused).toEqual([]);
+    const box = await inbox(rights);
+    expect(box.unavailable).toEqual([]);
+    // the fee lists open to those who decide fee requests, still not to everyone
+    for (const url of ['/fees/adjustments?status=pending', '/fees/requests?status=pending'])
+      expect((await call('GET', url, other)).statusCode).toBe(403);
   });
 
   it('the class teacher sees a leave applied for a pupil, in the one shape, and approves it there', async () => {

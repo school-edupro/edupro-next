@@ -1,918 +1,222 @@
 import { apiFetch } from './api';
-import type { SchoolTransfer } from './types';
 
 /**
- * One kind of approval waiting for the signed-in user, for the header count and My approvals. Queries
- * and tickets are not approvals: they live only under the header Queries icon.
+ * What waits for the signed-in user's decision, for the header count and My approvals. Both read the server's
+ * approvals inbox (GET /approvals/inbox, docs/design/89 §5.4), which gathers every kind from its own list route as
+ * the person — the same answer the mobile app shows. Queries and tickets are not approvals: they live only under
+ * the header Queries icon.
  */
 export interface ApprovalGroup {
-  key:
-    | 'profile'
-    | 'workflow'
-    | 'withdrawal'
-    | 'transfer'
-    | 'gate_pass'
-    | 'lesson'
-    | 'transport'
-    | 'leave'
-    | 'staff_leave'
-    | 'staff_regularisation'
-    | 'fee'
-    | 'file'
-    | 'acr'
-    | 'vacancy'
-    | 'admission'
-    | 'purchase'
-    | 'requisition'
-    | 'cs_sign'
-    | 'order'
-    | 'receipt'
-    | 'issue_ack'
-    | 'count'
-    | 'revaluation'
-    | 'condemnation'
-    | 'asset_ack'
-    | 'vendor';
+  kind: string;
   title: string;
-  help: string;
-  href: string;
+  help: string | null;
+  /** the page listing all of them (null: there is none for everyone; each item opens its own page) */
+  href: string | null;
+  /** how many wait in all */
   count: number;
-  items: Array<{ id: string; title: string; detail: string; href: string; since: string | null }>;
+  items: Array<{
+    id: string;
+    title: string;
+    detail: string | null;
+    /** the item's page: in this app, or a full address in the staff app */
+    href: string | null;
+    /** the page is in the staff app */
+    external: boolean;
+    since: string | null;
+  }>;
 }
 
-interface ProfileInbox {
-  data: Array<{
-    id: string;
-    studentName: string;
-    classSection: string | null;
-    items: Array<{ label: string }>;
-    createdAt: string;
-  }>;
-  page: { total: number };
-}
-interface PurchaseOrderRow {
-  id: string;
-  label: string;
-  emergency: boolean;
-  vendor: string;
-  department: string | null;
+export interface MyApprovals {
   total: number;
-  submittedAt: string | null;
-  createdAt: string;
+  groups: ApprovalGroup[];
+  /** kinds whose list could not be read just now */
+  unavailable: string[];
 }
-interface PurchaseReceiptRow {
+
+interface InboxItem {
+  kind: string;
   id: string;
-  number: string;
-  kind: 'goods' | 'service';
-  order: string;
-  vendor: string;
-  department: string | null;
-  receivedOn: string;
-  overdue: boolean;
+  title: string;
+  detail: string | null;
+  at: string | null;
+  adminHref: string | null;
+  staffUrl: string | null;
 }
-interface PurchaseRequisitionRow {
-  id: string;
-  number: string;
-  department: string | null;
-  purpose: string | null;
-  estimate: number;
-  submittedAt: string | null;
-  createdAt: string;
+interface Inbox {
+  total: number;
+  kinds: Array<{ kind: string; label: string; count: number }>;
+  items: InboxItem[];
+  unavailable: Array<{ kind: string; label: string }>;
 }
-interface PurchaseIndentRow {
-  id: string;
-  number: string | null;
-  department: string;
-  raisedBy: string;
-  estimate: number;
-  priority: 'normal' | 'urgent';
-  submittedAt: string | null;
-}
-interface WorkflowItem {
-  id: string;
-  name: string;
-  overdue?: boolean;
-  instance: {
-    definitionName: string;
-    subject: string | null;
-    createdAt?: string;
-    entityType?: string;
-  };
+
+/** How each kind shows here: its title, a line of help and the admin page that lists them all. */
+const KINDS: Record<
+  string,
+  { title?: string; help: string; href?: string | ((has: Set<string>) => string | null) }
+> = {
+  workflow: {
+    help: 'Fee requests, admissions, messages and other requests at your step',
+    href: '/workflow/inbox',
+  },
+  profile: {
+    help: 'Changes parents and students asked for, waiting for your decision',
+    href: '/people/profile-approvals',
+  },
+  staff_profile: {
+    help: 'Changes staff asked for in their own records',
+    href: '/people/staff-profile-approvals',
+  },
+  purchase: {
+    title: 'Purchase Indents',
+    help: 'Indents of your department waiting for your approval',
+    href: '/purchase/indents?view=waiting',
+  },
+  order: {
+    title: 'Purchase Orders',
+    help: 'Orders waiting for your approval, and emergency purchases to ratify',
+    href: '/purchase/orders?tab=waiting',
+  },
+  receipt: {
+    help: 'Goods and services received against orders, waiting for your inspection or signature',
+    href: '/purchase/receipts?tab=waiting',
+  },
+  issue_ack: {
+    help: 'What the store issued to your department: confirm you received it',
+    href: '/purchase/issues?tab=mine',
+  },
+  count: {
+    title: 'Physical counts to approve',
+    help: 'Store counts waiting at your level: their differences post at the last one',
+    href: '/purchase/counts',
+  },
+  revaluation: {
+    title: 'Rate corrections to approve',
+    help: 'Stock at a wrong rate: what is left goes to the right rate when approved',
+    href: '/purchase/stores',
+  },
+  condemnation: {
+    help: 'Proposals to write off assets and stock: your signature (the committee) or approval',
+    href: '/purchase/condemnations?tab=mine',
+  },
+  vendor: {
+    help: 'New vendors and changes of a vendor’s bank account, GSTIN or PAN',
+    href: '/purchase/vendor-approvals',
+  },
+  // each asset opens on its own page, where it is acknowledged
+  asset_ack: { help: 'Confirm you have them: they are then in your care' },
+  requisition: {
+    title: 'Purchase Requisitions',
+    help: 'Requisitions waiting for your approval',
+    href: '/purchase/requisitions?view=waiting',
+  },
+  cs_sign: {
+    help: 'As the purchase committee: the quotes and the vendors chosen',
+    href: '/purchase/requisitions?view=sign',
+  },
+  fee_adjustment: {
+    help: 'Receipt cancellations, cheque bounces and waivers decided on their own page',
+    href: '/fees/adjustments',
+  },
+  fee_request: {
+    help: 'Date corrections and other fee requests decided on their own page',
+    href: '/fees/requests?tab=list',
+  },
+  withdrawal: {
+    help: 'Leaving students waiting for your department to clear them',
+    href: '/people/withdrawals?status=mine',
+  },
+  transfer: {
+    help: 'Transfers from schools of the group, waiting to be admitted here',
+    href: '/people/school-transfers',
+  },
+  gate_pass: {
+    help: 'Pupil and staff gate passes waiting for your approval',
+    href: '/engagement/gate-passes/approvals',
+  },
+  // the list of vacancies is for those who see recruitment; an approver at a level opens each one
+  vacancy: {
+    help: 'Posts raised for recruitment, waiting at your approval level',
+    href: (has) =>
+      has.has('people.recruitment.view') ? '/people/recruitment?status=pending' : null,
+  },
+  acr: {
+    help: 'Annual confidential reports at your level, waiting for your rating or review',
+    href: '/me/acr',
+  },
+  transport: {
+    help: 'New transport, changes and withdrawals waiting for your approval',
+    href: '/transport/requests/approvals',
+  },
+  file: { help: 'Files raised for approval that are with you now', href: '/workflow/files' },
+  lesson: {
+    help: 'Lessons uploaded by teachers that wait for you',
+    href: '/academics/lesson-plans?tab=report&mine=approve',
+  },
+  leave: {
+    help: 'Leave the families applied for, waiting for your approval',
+    href: '/attendance/leaves',
+  },
+  staff_leave: { help: 'Leave of staff waiting at your level', href: '/leave/approvals' },
+  staff_leave_cancel: {
+    help: 'Cancellations of approved leave waiting at your level',
+    href: '/leave/approvals',
+  },
+  staff_regularisation: {
+    help: 'Days staff say are wrong (a forgotten punch, a device that missed them), at your level',
+    href: '/leave/attendance/approvals',
+  },
+  admission: {
+    help: 'Admission registrations waiting at your level',
+    href: '/admissions/approvals',
+  },
+  exit: { help: 'Resignations and exits of staff waiting at your level (in the staff app)' },
+  no_dues: { help: 'Exits waiting for your department’s no-dues clearance (in the staff app)' },
+  consent: { help: 'Consent form answers waiting at your level (in the staff app)' },
+  hostel_visit: { help: 'Visits to hostel pupils waiting for your decision (in the staff app)' },
+};
+
+/** The header count: everything waiting, every kind (best effort: 0 when the inbox cannot be read). */
+export async function approvalsWaiting(): Promise<number> {
+  return apiFetch<Pick<Inbox, 'total'>>('/approvals/inbox?view=counts')
+    .then((r) => r.total)
+    .catch(() => 0);
 }
 
 /**
- * Everything waiting for this user to act on, grouped. Each source is asked only when the user holds
- * its permission, and a source that fails never hides the others (the count is best effort).
+ * Everything waiting, grouped by kind with a few of each (`perGroup`); a kind without a list page shows all of
+ * its items, as each opens on its own page. With `items: false` only the groups and their counts are read (the
+ * dashboard), and a kind without a list page here has no link.
  */
 export async function myApprovals(
   permissions: string[],
-  withItems = false,
-): Promise<ApprovalGroup[]> {
+  { items: withItems = true, perGroup = 10 }: { items?: boolean; perGroup?: number } = {},
+): Promise<MyApprovals> {
   const has = new Set(permissions);
-  const size = withItems ? 10 : 1;
-  const groups = await Promise.all([
-    has.has('engagement.change_request.approve')
-      ? apiFetch<ProfileInbox>(`/engagement/profile-approvals?box=mine&size=${size}`)
-          .then((r): ApprovalGroup => ({
-            key: 'profile',
-            title: 'Profile changes',
-            help: 'Changes parents and students asked for, waiting for your decision',
-            href: '/people/profile-approvals',
-            count: r.page.total,
-            items: r.data.map((x) => ({
-              id: x.id,
-              title: `${x.studentName}${x.classSection ? ` · ${x.classSection}` : ''}`,
-              detail: x.items.map((i) => i.label).join(', '),
-              href: '/people/profile-approvals',
-              since: x.createdAt,
-            })),
-          }))
-          .catch(() => null)
-      : null,
-    has.has('workflow.inbox.act')
-      ? apiFetch<{ data: WorkflowItem[] }>('/workflow/inbox')
-          // vacancies and purchase indents have their own groups below
-          .then((r) =>
-            r.data.filter(
-              (x) =>
-                x.instance.entityType !== 'vacancy' &&
-                !x.instance.entityType?.startsWith('purchase') &&
-                !x.instance.entityType?.startsWith('staff_leave') &&
-                x.instance.entityType !== 'staff_regularisation',
-            ),
-          )
-          .then((data): ApprovalGroup => ({
-            key: 'workflow',
-            title: 'Approval steps',
-            help: 'Leave, admissions, lesson plans, messages and other requests at your step',
-            href: '/workflow/inbox',
-            count: data.length,
-            items: data.slice(0, size).map((x) => ({
-              id: x.id,
-              title: x.instance.subject ?? x.instance.definitionName,
-              detail: `${x.instance.definitionName} · ${x.name}${x.overdue ? ' · overdue' : ''}`,
-              href: '/workflow/inbox',
-              since: x.instance.createdAt ?? null,
-            })),
-          }))
-          .catch(() => null)
-      : null,
-    // purchase indents wait on the department's levels by name (HOD, a designation, named staff), not
-    // on a permission: everyone is asked, and the group shows only when something waits (docs/design/83)
-    apiFetch<{ data: PurchaseIndentRow[]; total: number }>(
-      `/purchase/indents?view=waiting&status=submitted&size=${String(size)}`,
-    )
-      .then((r): ApprovalGroup | null =>
-        r.total
-          ? {
-              key: 'purchase',
-              title: 'Purchase Indents',
-              help: 'Indents of your department waiting for your approval',
-              href: '/purchase/indents?view=waiting',
-              count: r.total,
-              items: r.data.map((x) => ({
-                id: x.id,
-                title: `${x.number ?? 'Indent'} · ${x.department}`,
-                detail: `₹${x.estimate.toLocaleString('en-IN')} · ${x.raisedBy}${x.priority === 'urgent' ? ' · urgent' : ''}`,
-                href: `/purchase/indents/${x.id}`,
-                since: x.submittedAt,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // purchase orders and emergency purchases at my level (docs/design/83)
-    apiFetch<{ data: PurchaseOrderRow[]; waitingForMe: number }>(
-      `/purchase/orders?view=waiting&status=submitted&size=${String(size)}`,
-    )
-      .then((r): ApprovalGroup | null =>
-        r.waitingForMe
-          ? {
-              key: 'order',
-              title: 'Purchase Orders',
-              help: 'Orders waiting for your approval, and emergency purchases to ratify',
-              href: '/purchase/orders?tab=waiting',
-              count: r.waitingForMe,
-              items: r.data.map((x) => ({
-                id: x.id,
-                title: `${x.label}${x.emergency ? ' · emergency' : ''} · ${x.vendor}`,
-                detail: `₹${x.total.toLocaleString('en-IN')}${x.department ? ` · ${x.department}` : ''}`,
-                href: `/purchase/orders/${x.id}`,
-                since: x.submittedAt ?? x.createdAt,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // goods receipts and completion certificates to inspect (the department's levels, or the
-    // committee's signatures above its limit) — docs/design/84, part 7
-    apiFetch<{ rows: PurchaseReceiptRow[]; waitingForMe: number }>(`/purchase/receipts?mine=1`)
-      .then((r): ApprovalGroup | null =>
-        r.waitingForMe
-          ? {
-              key: 'receipt',
-              title: 'Goods received to inspect',
-              help: 'Goods and services received against orders, waiting for your inspection or signature',
-              href: '/purchase/receipts?tab=waiting',
-              count: r.waitingForMe,
-              items: r.rows.slice(0, size).map((x) => ({
-                id: x.id,
-                title: `${x.number} · ${x.vendor}`,
-                detail: `${x.order}${x.department ? ` · ${x.department}` : ''}${x.overdue ? ' · past 15 days' : ''}`,
-                href: `/purchase/receipts/${x.id}`,
-                since: x.receivedOn,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // what a store issued to my department, waiting for my acknowledgement (docs/design/84, part 8)
-    apiFetch<{
-      rows: Array<{
-        id: string;
-        number: string;
-        department: string;
-        store: string;
-        value: number;
-        issuedOn: string;
-      }>;
-      toAcknowledge: number;
-    }>(`/purchase/issues?mine=1`)
-      .then((r): ApprovalGroup | null =>
-        r.toAcknowledge
-          ? {
-              key: 'issue_ack',
-              title: 'Issues to acknowledge',
-              help: 'What the store issued to your department: confirm you received it',
-              href: '/purchase/issues?tab=mine',
-              count: r.toAcknowledge,
-              items: r.rows.slice(0, size).map((x) => ({
-                id: x.id,
-                title: `${x.number} · ${x.department}`,
-                detail: `From ${x.store} · ₹${x.value.toLocaleString('en-IN')}`,
-                href: `/purchase/issues/${x.id}`,
-                since: x.issuedOn,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // physical counts waiting at my level (Purchase → Who approves; docs/design/84, 9 Nov 2026)
-    apiFetch<{
-      rows: Array<{
-        id: string;
-        number: string;
-        store: string;
-        differences: number;
-        submittedAt: string | null;
-      }>;
-    }>(`/purchase/counts?mine=1`)
-      .then((r): ApprovalGroup | null =>
-        r.rows.length
-          ? {
-              key: 'count',
-              title: 'Physical counts to approve',
-              help: 'Store counts waiting at your level: their differences post at the last one',
-              href: '/purchase/counts',
-              count: r.rows.length,
-              items: r.rows.slice(0, size).map((x) => ({
-                id: x.id,
-                title: `${x.number} · ${x.store}`,
-                detail: `${String(x.differences)} difference${x.differences === 1 ? '' : 's'}`,
-                href: `/purchase/counts/${x.id}`,
-                since: x.submittedAt,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // rate corrections of store stock waiting at my level (Purchase → Who approves)
-    apiFetch<{
-      rows: Array<{
-        id: string;
-        number: string;
-        store: string;
-        storeId: string;
-        item: string;
-        change: number;
-        at: string;
-        can: { decide: boolean };
-      }>;
-    }>(`/purchase/revaluations?status=submitted`)
-      .then((r): ApprovalGroup | null => {
-        const mine = r.rows.filter((x) => x.can.decide);
-        return mine.length
-          ? {
-              key: 'revaluation',
-              title: 'Rate corrections to approve',
-              help: 'Stock at a wrong rate: what is left goes to the right rate when approved',
-              href: '/purchase/stores',
-              count: mine.length,
-              items: mine.slice(0, size).map((x) => ({
-                id: x.id,
-                title: `${x.number} · ${x.item}`,
-                detail: `${x.store} · value ${x.change >= 0 ? '+' : '−'}₹${Math.abs(x.change).toLocaleString('en-IN')}`,
-                href: `/purchase/stores/${x.storeId}?tab=rates`,
-                since: x.at,
-              })),
-            }
-          : null;
-      })
-      .catch(() => null),
-    // condemnations for my signature (the committee) or approval (the school admin) — doc 84, part 9
-    apiFetch<{
-      rows: Array<{
-        id: string;
-        number: string;
-        title: string;
-        status: string;
-        value: number;
-        createdAt: string;
-      }>;
-    }>(`/purchase/condemnations?mine=1`)
-      .then((r): ApprovalGroup | null =>
-        r.rows.length
-          ? {
-              key: 'condemnation',
-              title: 'Condemnations',
-              help: 'Proposals to write off assets and stock: your signature (the committee) or approval',
-              href: '/purchase/condemnations?tab=mine',
-              count: r.rows.length,
-              items: r.rows.slice(0, size).map((x) => ({
-                id: x.id,
-                title: `${x.number} · ${x.title}`,
-                detail: `₹${x.value.toLocaleString('en-IN')} · ${x.status === 'committee' ? 'to sign' : 'to approve'}`,
-                href: `/purchase/condemnations/${x.id}`,
-                since: x.createdAt,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // new vendors and bank / GSTIN / PAN changes I may decide (the vendor approvers, docs/design/83):
-    // anyone may be named an approver, so it is asked for every user (an empty answer adds nothing)
-    apiFetch<{
-      canApprove: boolean;
-      rows: Array<{
-        kind: 'vendor' | 'change';
-        id: string;
-        vendorId: string;
-        title: string;
-        detail: string;
-        since: string;
-      }>;
-    }>(`/purchase/vendor-approvals?mine=1`)
-      .then((r): ApprovalGroup | null =>
-        r.rows.length
-          ? {
-              key: 'vendor',
-              title: 'Vendors to approve',
-              help: 'New vendors and changes of a vendor’s bank account, GSTIN or PAN',
-              href: '/purchase/vendor-approvals',
-              count: r.rows.length,
-              items: r.rows.slice(0, size).map((x) => ({
-                id: `${x.kind}-${x.id}`,
-                title: x.title,
-                detail: x.detail,
-                href: `/purchase/vendors/${x.vendorId}`,
-                since: x.since,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // assets handed to me, waiting for my acknowledgement
-    apiFetch<{
-      pending: Array<{
-        movementId: string;
-        assetId: string;
-        tag: string;
-        item: string;
-        from: string | null;
-        movedOn: string;
-      }>;
-    }>(`/purchase/assets-mine`)
-      .then((r): ApprovalGroup | null =>
-        r.pending.length
-          ? {
-              key: 'asset_ack',
-              title: 'Assets handed to you',
-              help: 'Confirm you have them: they are then in your care',
-              href: `/purchase/assets/${r.pending[0]!.assetId}`,
-              count: r.pending.length,
-              items: r.pending.slice(0, size).map((x) => ({
-                id: x.movementId,
-                title: `${x.tag} · ${x.item}`,
-                detail: x.from ? `From ${x.from}` : 'To acknowledge',
-                href: `/purchase/assets/${x.assetId}`,
-                since: x.movedOn,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // purchase requisitions at my level and comparative statements for the committee (docs/design/83)
-    apiFetch<{ data: PurchaseRequisitionRow[]; waitingForMe: number; toSign: number }>(
-      `/purchase/requisitions?view=waiting&status=submitted&size=${String(size)}`,
-    )
-      .then(async (r): Promise<ApprovalGroup[]> => {
-        const out: ApprovalGroup[] = [];
-        const item = (x: PurchaseRequisitionRow) => ({
-          id: x.id,
-          title: `${x.number} · ${x.department ?? ''}`,
-          detail: `₹${x.estimate.toLocaleString('en-IN')}${x.purpose ? ` · ${x.purpose}` : ''}`,
-          href: `/purchase/requisitions/${x.id}`,
-          since: x.submittedAt ?? x.createdAt,
-        });
-        if (r.waitingForMe)
-          out.push({
-            key: 'requisition',
-            title: 'Purchase Requisitions',
-            help: 'Requisitions waiting for your approval',
-            href: '/purchase/requisitions?view=waiting',
-            count: r.waitingForMe,
-            items: r.data.map(item),
-          });
-        if (r.toSign) {
-          const sign = await apiFetch<{ data: PurchaseRequisitionRow[] }>(
-            `/purchase/requisitions?view=sign&size=${String(size)}`,
-          ).catch(() => ({ data: [] }));
-          out.push({
-            key: 'cs_sign',
-            title: 'Comparative statements to sign',
-            help: 'As the purchase committee: the quotes and the vendors chosen',
-            href: '/purchase/requisitions?view=sign',
-            count: r.toSign,
-            items: sign.data.map(item),
-          });
-        }
-        return out;
-      })
-      .catch(() => []),
-    // fee requests one approver decides on their own pages: receipt cancel, cheque bounce, date
-    // corrections (the ones that ride the approval levels come through "Approval steps")
-    has.has('fees.adjustment.approve')
-      ? Promise.all([
-          apiFetch<{
-            data: Array<{
-              id: string;
-              kind: string;
-              studentName: string;
-              receiptNo: string | null;
-              amount: string;
-              reason: string;
-              requestedAt: string;
-              workflowInstanceId: string | null;
-            }>;
-          }>('/fees/adjustments?status=pending')
-            .then((r) => r.data.filter((x) => !x.workflowInstanceId))
-            .catch(() => []),
-          apiFetch<{
-            data: Array<{
-              id: string;
-              kind: string;
-              student: string;
-              receiptNo: string | null;
-              reason: string;
-              requestedAt: string;
-              workflowInstanceId: string | null;
-            }>;
-          }>('/fees/requests?status=pending')
-            .then((r) => r.data.filter((x) => !x.workflowInstanceId))
-            .catch(() => []),
-        ]).then(([adj, req]): ApprovalGroup | null => {
-          const KIND: Record<string, string> = {
-            reversal: 'Cancel receipt',
-            bounce: 'Cheque bounced',
-            waiver: 'Fee waiver',
-            late_fee: 'Late-fee waiver',
-            transfer: 'Move receipt',
-            date_change: 'Date correction',
-            late_fee_to_fee: 'Paid late fee to fee',
-            bounce_to_fee: 'Paid bounce charge to fee',
-          };
-          const items = [
-            ...adj.map((x) => ({
-              id: `a${x.id}`,
-              title: `${KIND[x.kind] ?? x.kind}: ${x.receiptNo ?? ''} · ${x.studentName}`,
-              detail: `₹${x.amount} · ${x.reason}`,
-              href: '/fees/adjustments',
-              since: x.requestedAt,
-            })),
-            ...req.map((x) => ({
-              id: `r${x.id}`,
-              title: `${KIND[x.kind] ?? x.kind}: ${x.receiptNo ?? ''} · ${x.student}`,
-              detail: x.reason,
-              href: '/fees/requests?tab=list',
-              since: x.requestedAt,
-            })),
-          ];
-          return items.length
-            ? {
-                key: 'fee',
-                title: 'Fee requests',
-                help: 'Receipt cancellations, cheque bounces and date corrections waiting for your decision',
-                href: adj.length ? '/fees/adjustments' : '/fees/requests?tab=list',
-                count: items.length,
-                items: items.slice(0, size),
-              }
-            : null;
-        })
-      : null,
-    has.has('people.withdrawal.clear')
-      ? apiFetch<{
-          data: Array<{
-            id: string;
-            studentName: string;
-            section: string | null;
-            leavingOn: string;
-            initiatedOn: string;
-            currentStep: number | null;
-            clearances: Array<{
-              departmentName: string;
-              step: number;
-              status: string;
-              canAct?: boolean;
-            }>;
-          }>;
-          page: { total: number };
-        }>(`/people/withdrawals?mine=true&size=${size}`)
-          .then((r): ApprovalGroup => ({
-            key: 'withdrawal',
-            title: 'Withdrawal clearances',
-            help: 'Leaving students waiting for your department to clear them',
-            href: '/people/withdrawals?status=mine',
-            count: r.page.total,
-            items: r.data.map((w) => ({
-              id: w.id,
-              title: `${w.studentName}${w.section ? ` · ${w.section}` : ''}`,
-              detail: `${w.clearances
-                .filter((x) => x.canAct && x.step === w.currentStep && x.status !== 'cleared')
-                .map((x) => x.departmentName)
-                .join(', ')} · leaving ${w.leavingOn}`,
-              href: `/people/withdrawals/${w.id}`,
-              since: w.initiatedOn,
-            })),
-          }))
-          .catch(() => null)
-      : null,
-    has.has('people.transfer.manage')
-      ? apiFetch<{ data: SchoolTransfer[] }>('/people/school-transfers?box=incoming')
-          .then((r): ApprovalGroup | null => {
-            const waiting = r.data.filter((t) => t.status === 'requested');
-            return waiting.length
-              ? {
-                  key: 'transfer',
-                  title: 'Students sent from other schools',
-                  help: 'Transfers from schools of the group, waiting to be admitted here',
-                  href: '/people/school-transfers',
-                  count: waiting.length,
-                  items: waiting.slice(0, size).map((t) => ({
-                    id: t.id,
-                    title: `${t.student.name}${t.student.classSection ? ` · ${t.student.classSection}` : ''}`,
-                    detail: `from ${t.fromSchool}`,
-                    href: `/people/school-transfers?open=${t.id}`,
-                    since: t.requestedAt,
-                  })),
-                }
-              : null;
-          })
-          .catch(() => null)
-      : null,
-    // gate passes wait on a person by name (class teacher, coordinator, principal...), not on a
-    // permission: everyone is asked, and the group shows only when something waits
-    apiFetch<{
-      data: Array<{
-        id: string;
-        number: string;
-        kind: string;
-        audience: string;
-        student: string | null;
-        section: string | null;
-        employee: string | null;
-        onDate: string;
-        atTime: string | null;
-        reason: string;
-        createdAt: string;
-      }>;
-    }>('/gate-passes/inbox')
-      .then((r): ApprovalGroup | null =>
-        r.data.length
-          ? {
-              key: 'gate_pass',
-              title: 'Gate passes',
-              help: 'Pupil and staff gate passes waiting for your approval',
-              href: '/engagement/gate-passes/approvals',
-              count: r.data.length,
-              items: r.data.slice(0, size).map((p) => ({
-                id: p.id,
-                title:
-                  p.audience === 'student'
-                    ? `${p.student ?? 'Student'}${p.section ? ` · ${p.section}` : ''}`
-                    : (p.employee ?? 'Employee'),
-                detail: `${p.kind.replace('_', ' ')} · ${p.onDate}${p.atTime ? `, ${p.atTime}` : ''} · ${p.reason}`,
-                href: `/engagement/gate-passes/${p.id}`,
-                since: p.createdAt,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // vacancies at my approval level (docs/design/34-recruitment.md): anybody may sit at a level, so this
-    // is asked for everyone and is empty for those who do not
-    apiFetch<{
-      data: Array<{
-        id: string;
-        code: string;
-        title: string;
-        department: string | null;
-        posts: number;
-        level: string;
-        raisedBy: string | null;
-        since: string;
-        overdue: boolean;
-      }>;
-    }>('/people/recruitment/to-approve')
-      .then((r): ApprovalGroup | null =>
-        r.data.length
-          ? {
-              key: 'vacancy',
-              title: 'Vacancies to approve',
-              help: 'Posts raised for recruitment, waiting at your approval level',
-              href: `/people/recruitment/${r.data[0]!.id}`,
-              count: r.data.length,
-              items: r.data.slice(0, size).map((x) => ({
-                id: x.id,
-                title: `${x.code} · ${x.title}`,
-                detail: `${x.level} · ${x.department ? `${x.department} · ` : ''}${x.posts} post${x.posts > 1 ? 's' : ''}${x.raisedBy ? ` · raised by ${x.raisedBy}` : ''}${x.overdue ? ' · overdue' : ''}`,
-                href: `/people/recruitment/${x.id}`,
-                since: x.since,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // ACRs at my level (docs/design/32-employee-acr.md): any staff member may sit at a level, so this is
-    // asked for everyone and is empty for those who do not
-    apiFetch<{
-      waiting: Array<{
-        id: string;
-        cycle: string;
-        employee: { name: string; code: string; designation: string | null };
-        level: { seq: number; label: string | null } | null;
-        updatedAt: string;
-      }>;
-    }>('/people/acr/to-assess')
-      .then((r): ApprovalGroup | null =>
-        r.waiting.length
-          ? {
-              key: 'acr',
-              title: 'ACRs to assess',
-              help: 'Annual confidential reports at your level, waiting for your rating or review',
-              href: '/me/acr',
-              count: r.waiting.length,
-              items: r.waiting.slice(0, size).map((x) => ({
-                id: x.id,
-                title: `${x.employee.name} · ${x.employee.code}`,
-                detail: `${x.level?.label ?? 'Your level'} · ${x.cycle}${x.employee.designation ? ` · ${x.employee.designation}` : ''}`,
-                href: `/me/acr/${x.id}`,
-                since: x.updatedAt,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // transport requests wait on the people of a level (transport in-charge, fee department)
-    apiFetch<{
-      data: Array<{
-        id: string;
-        number: string;
-        kindLabel: string;
-        student: string;
-        section: string | null;
-        what: string;
-        requestedAt: string;
-      }>;
-    }>('/transport/requests/inbox')
-      .then((r): ApprovalGroup | null =>
-        r.data.length
-          ? {
-              key: 'transport',
-              title: 'Transport requests',
-              help: 'New transport, changes and withdrawals waiting for your approval',
-              href: '/transport/requests/approvals',
-              count: r.data.length,
-              items: r.data.slice(0, size).map((p) => ({
-                id: p.id,
-                title: `${p.student}${p.section ? ` · ${p.section}` : ''}`,
-                detail: `${p.kindLabel} · ${p.what}`,
-                href: `/transport/requests/${p.id}`,
-                since: p.requestedAt,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // files for approval wait on the people their creator named
-    has.has('files.movement.raise')
-      ? apiFetch<{
-          data: Array<{
-            id: string;
-            number: string;
-            subject: string;
-            createdBy: string;
-            submittedAt: string;
-          }>;
-        }>('/file-movement?box=inbox')
-          .then((r): ApprovalGroup | null =>
-            r.data.length
-              ? {
-                  key: 'file',
-                  title: 'File movement',
-                  help: 'Files raised for approval that are with you now',
-                  href: '/workflow/files',
-                  count: r.data.length,
-                  items: r.data.slice(0, size).map((n) => ({
-                    id: n.id,
-                    title: `${n.number} · ${n.subject}`,
-                    detail: `raised by ${n.createdBy}`,
-                    href: `/workflow/files/${n.id}`,
-                    since: n.submittedAt,
-                  })),
-                }
-              : null,
-          )
-          .catch(() => null)
-      : null,
-    // lessons uploaded by teachers wait for the approver of their level
-    has.has('academics.lesson_plan.view')
-      ? apiFetch<{
-          data: Array<{ id: string; topic: string; employee: string; requestedAt: string }>;
-          page: { total: number };
-        }>('/academics/lessons?mine=approve&size=20')
-          .then((r): ApprovalGroup | null =>
-            r.data.length
-              ? {
-                  key: 'lesson',
-                  title: 'Lessons',
-                  help: 'Lessons uploaded by teachers that wait for you',
-                  href: '/academics/lesson-plans?tab=report&mine=approve',
-                  count: r.page.total,
-                  items: r.data.slice(0, size).map((n) => ({
-                    id: n.id,
-                    title: `#${n.id} · ${n.topic}`,
-                    detail: `uploaded by ${n.employee}`,
-                    href: `/academics/lesson-plans/${n.id}`,
-                    since: n.requestedAt,
-                  })),
-                }
-              : null,
-          )
-          .catch(() => null)
-      : null,
-    // student leave waits on the people of a level (class teacher, coordinator, principal)
-    has.has('attendance.leave.decide') || has.has('attendance.setup.manage')
-      ? apiFetch<{
-          data: Array<{
-            id: string;
-            number: string;
-            student: string;
-            section: string | null;
-            leaveTypeLabel: string;
-            fromDate: string;
-            toDate: string;
-            days: number;
-            appliedAt: string;
-          }>;
-        }>('/attendance/leaves?tab=inbox')
-          .then((r): ApprovalGroup | null =>
-            r.data.length
-              ? {
-                  key: 'leave',
-                  title: 'Student leave',
-                  help: 'Leave the families applied for, waiting for your approval',
-                  href: '/attendance/leaves',
-                  count: r.data.length,
-                  items: r.data.slice(0, size).map((l) => ({
-                    id: l.id,
-                    title: `${l.student}${l.section ? ` · ${l.section}` : ''}`,
-                    detail: `${l.leaveTypeLabel} · ${l.fromDate}${l.toDate !== l.fromDate ? ` to ${l.toDate}` : ''} · ${String(l.days)} day${l.days === 1 ? '' : 's'}`,
-                    href: `/attendance/leaves?tab=inbox&open=${l.id}`,
-                    since: l.appliedAt,
-                  })),
-                }
-              : null,
-          )
-          .catch(() => null)
-      : null,
-    // staff leave and cancellations at a level of this user (docs/design/85): anyone may be an approver
-    apiFetch<{
-      rows: Array<{
-        id: string;
-        number: string;
-        what: 'leave' | 'cancellation';
-        since: string;
-        days: number;
-        from: string;
-        to: string;
-        employee: { name: string; code: string };
-        leaveType: { code: string };
-      }>;
-    }>('/leave/approvals')
-      .then((r): ApprovalGroup | null =>
-        r.rows.length
-          ? {
-              key: 'staff_leave',
-              title: 'Staff leave',
-              help: 'Leave of staff, and cancellations of approved leave, waiting at your level',
-              href: '/leave/approvals',
-              count: r.rows.length,
-              items: r.rows.slice(0, size).map((l) => ({
-                id: `${l.id}-${l.what}`,
-                title: `${l.employee.name} (${l.employee.code}) · ${l.number}`,
-                detail: `${l.what === 'cancellation' ? 'Cancel ' : ''}${l.leaveType.code} · ${l.from}${l.to !== l.from ? ` to ${l.to}` : ''} · ${String(l.days)} day${l.days === 1 ? '' : 's'}`,
-                href: `/leave/requests/${l.id}`,
-                since: l.since,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // attendance corrections (regularisation) at a level of this user (docs/design/85, phase C)
-    apiFetch<{
-      rows: Array<{
-        id: string;
-        day: string;
-        since: string;
-        employee: string;
-        code: string;
-        employee_id: string;
-        in_time: string | null;
-        out_time: string | null;
-        day_type: string | null;
-      }>;
-    }>('/staff-attendance/regularisations/approvals')
-      .then((r): ApprovalGroup | null =>
-        r.rows.length
-          ? {
-              key: 'staff_regularisation',
-              title: 'Attendance corrections',
-              help: 'Days staff say are wrong (a forgotten punch, a device that missed them), at your level',
-              href: '/leave/attendance/approvals',
-              count: r.rows.length,
-              items: r.rows.slice(0, size).map((g) => ({
-                id: g.id,
-                title: `${g.employee} (${g.code}) · ${g.day}`,
-                detail: [
-                  g.in_time ? `IN ${g.in_time}` : null,
-                  g.out_time ? `OUT ${g.out_time}` : null,
-                  g.day_type,
-                ]
-                  .filter(Boolean)
-                  .join(' · '),
-                href: `/leave/attendance/day?emp=${g.employee_id}&day=${g.day}`,
-                since: g.since,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-    // admission registrations at a level this user is named in (docs/design/47, 50): anyone may be an
-    // approver, so it is asked for every user (an empty answer adds nothing)
-    apiFetch<{
-      waiting: number;
-      overdue: number;
-      data: Array<{
-        id: string;
-        number: string | null;
-        candidate: string | null;
-        className: string;
-        stage: string | null;
-        level: string | null;
-        since: string | null;
-        overdue: boolean;
-      }>;
-    }>(`/admissions/approvals?tab=waiting&size=${String(Math.max(size, 1))}`)
-      .then((r): ApprovalGroup | null =>
-        r.waiting
-          ? {
-              key: 'admission',
-              title: 'Registrations to decide',
-              help: `Admission registrations waiting at your level${r.overdue ? ` · ${String(r.overdue)} overdue` : ''}`,
-              href: '/admissions/approvals',
-              count: r.waiting,
-              items: r.data.map((x) => ({
-                id: x.id,
-                title: `${x.candidate ?? x.number ?? 'Registration'} · ${x.className}`,
-                detail: `${x.stage ?? ''}${x.level ? ` · ${x.level}` : ''}${x.overdue ? ' · overdue' : ''}`,
-                href: `/admissions/approvals/${x.id}`,
-                since: x.since,
-              })),
-            }
-          : null,
-      )
-      .catch(() => null),
-  ]);
-  // a source may give several groups (purchase requisitions: to approve, to sign)
-  return groups.flat().filter((g): g is ApprovalGroup => g !== null);
+  const box = await apiFetch<Inbox>(`/approvals/inbox${withItems ? '' : '?view=counts'}`);
+  const groups = box.kinds.map((k): ApprovalGroup => {
+    const how = KINDS[k.kind];
+    const items = box.items
+      .filter((i) => i.kind === k.kind)
+      .map((i) => ({
+        id: i.id,
+        title: i.title,
+        detail: i.detail,
+        href: i.adminHref ?? i.staffUrl,
+        external: i.adminHref === null && i.staffUrl !== null,
+        since: i.at,
+      }));
+    const own = typeof how?.href === 'function' ? how.href(has) : (how?.href ?? null);
+    // a kind without a page of its own here: its items' page, when they all open the same one (a staff app list)
+    const links = [...new Set(items.map((i) => i.href))];
+    const href = own ?? (links.length === 1 ? links[0]! : null);
+    return {
+      kind: k.kind,
+      title: how?.title ?? k.label,
+      help: how?.help ?? null,
+      href,
+      count: k.count,
+      items: href ? items.slice(0, perGroup) : items,
+    };
+  });
+  return { total: box.total, groups, unavailable: box.unavailable.map((u) => u.label) };
 }

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { endImpersonation } from '@/lib/actions';
 import type { Me } from '@/lib/api';
 import { apiFetch } from '@/lib/api';
-import { myApprovals } from '@/lib/approvals';
+import { approvalsWaiting } from '@/lib/approvals';
 import { tourFor } from '@/lib/tours';
 import { Icon, SECTION_ICON } from './nav-icons';
 import { Tour } from './Tour';
@@ -109,11 +109,8 @@ export async function Shell({
         .then((r) => r.data.length)
         .catch(() => 0)
     : 0;
-  // approvals waiting for me (profile changes, workflow steps, withdrawal clearances, gate passes): best effort
-  const waiting = (await myApprovals(me.permissions).catch(() => [])).reduce(
-    (n, g) => n + g.count,
-    0,
-  );
+  // everything waiting for my decision, every kind (the server's approvals inbox): best effort
+  const waiting = await approvalsWaiting();
   // consent forms the signed-in staff member has to answer (docs/design/28-consent-forms.md): best effort
   const isStaff = me.memberships.some((m) => m.personType === 'employee');
   const myForms = isStaff

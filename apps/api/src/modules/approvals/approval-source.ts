@@ -28,6 +28,10 @@ export interface ApprovalItem {
   rejectAs: 'reject' | 'send_back' | null;
   /** the page as a full address (an admin page, opened in the browser); a staff page opens inside the app */
   url: string | null;
+  /** the page in the admin app (null: the admin app has none for it; the staff app's page is `staffUrl`) */
+  adminHref: string | null;
+  /** a staff app page as a full address (the admin app links there when it has no page of its own) */
+  staffUrl: string | null;
 }
 
 export type Decision = 'approve' | 'reject';
@@ -47,10 +51,17 @@ export interface RouteCall {
 export interface ApprovalSource {
   kind: string;
   label: string;
-  /** the person needs one of these for the list (empty: the route itself decides who sees what) */
+  /** the person needs one of these to decide (empty: the routes themselves decide who sees what) */
   permissions: string[];
+  /** and every one of these: the list route's own right, when it is another one (no list read only to be refused) */
+  needsAll?: string[];
   list: RouteCall;
   items(answer: unknown): ListedItem[];
+  /**
+   * How many wait for the person in all, from the list answer, when the route counts them (its list may stop at a
+   * page); without it, or when it gives null, the count is the items read.
+   */
+  total?: (answer: unknown) => number | null;
   /** the web app of the item pages */
   app: 'admin' | 'teacher';
   reasonOnReject?: boolean;
@@ -61,11 +72,14 @@ export interface ApprovalSource {
   decide?: (id: string, decision: Decision, reason: string | null) => RouteCall;
 }
 
-/** What a source reads from its list: the item without the kind's fixed facts. */
+/**
+ * What a source reads from its list: the item without the kind's fixed facts. `adminHref` is needed only for a staff
+ * app kind whose item has a page in the admin app too (an admin kind's page is `href`).
+ */
 export type ListedItem = Pick<
   ApprovalItem,
   'id' | 'title' | 'detail' | 'by' | 'at' | 'amount' | 'href'
->;
+> & { adminHref?: string | null };
 
 /** Small readers for the list answers. */
 export const rows = (answer: unknown, key = 'data'): Array<Record<string, unknown>> => {
@@ -75,3 +89,9 @@ export const rows = (answer: unknown, key = 'data'): Array<Record<string, unknow
 };
 export const str = (v: unknown): string | null =>
   v === null || v === undefined || v === '' ? null : String(v);
+/** A count in the list answer (`total`, `page.total`, `waitingForMe` …): a number, or null when it is not there. */
+export const count = (answer: unknown, ...path: string[]): number | null => {
+  let v: unknown = answer;
+  for (const k of path) v = (v as Record<string, unknown> | null | undefined)?.[k];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+};

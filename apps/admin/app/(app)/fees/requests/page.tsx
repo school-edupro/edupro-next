@@ -144,7 +144,8 @@ export default async function FeeRequestsPage({
   const canApprove = me.permissions.includes('fees.adjustment.approve');
   const canUpload = me.permissions.includes('fees.bulk.upload');
   const [requests, periods, uploads, upload] = await Promise.all([
-    tab === 'list' && canAsk
+    // the list: those who ask and those who decide
+    tab === 'list' && (canAsk || canApprove)
       ? apiFetch<{ data: Req[] }>(`/fees/requests${sp.status ? `?status=${sp.status}` : ''}`).then(
           (r) => r.data,
         )

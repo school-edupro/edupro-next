@@ -2,7 +2,9 @@ import { Body, Controller, Get, HttpCode, Param, Post, Query, Res } from '@nestj
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { mustReadFeeRequests } from './fee-request-readers';
 import { FeeRequestsService } from './fee-requests.service';
 import {
   CollectionSubmitDto,
@@ -26,8 +28,10 @@ export class FeeRequestsController {
 
   @Get()
   @ApiOperation({ summary: 'Late-fee waivers, receipt transfers and date corrections of the year' })
-  @RequirePermission(FEES.adjustmentRequest)
+  // those who raise them and those who decide them (the approvals inbox reads it for approvers)
+  @AuthenticatedOnly()
   async list(@ReqCtx() ctx: RequestContext, @Query() q: ListChangeRequestsQueryDto) {
+    mustReadFeeRequests(ctx);
     return { data: await this.requests.list(ctx, q) };
   }
 

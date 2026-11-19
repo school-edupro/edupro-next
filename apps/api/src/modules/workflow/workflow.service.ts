@@ -1,9 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
+import { isFreshMfa } from '../../common/access/fresh-mfa';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { SecurityEventsService } from '../../common/security/security-events.service';
+import { ENV, type Env } from '../../config/env';
 import type {
   ActDto,
   CancelDto,
@@ -198,6 +201,8 @@ export class WorkflowService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    @Inject(ENV) private readonly env: Env,
+    private readonly security: SecurityEventsService,
   ) {}
 
   onComplete(entityType: string, handler: CompletionHandler): void {
@@ -1203,6 +1208,45 @@ export class WorkflowService {
     if (own) throw new DomainError('conflict', own, { status: 409 });
   }
 
+  /**
+   * Fee requests riding the approval levels: a waiver or its undoing, a receipt cancellation or cheque bounce
+   * (fee_waiver), a date correction and the other fee requests (fee_change_request), a fee profile change, opening
+   * balances, a refund (fee_refund) and a misc fee request. Decided without levels, each goes through a route that
+   * needs fees.adjustment.approve or fees.refund.approve, both step-up; deciding its step asks the same: a recent
+   * second factor, and never while impersonating.
+   */
+  static stepUp(entityType: string): boolean {
+    return entityType.startsWith('fee_') || entityType === 'misc_fee_request';
+  }
+
+  private assertStepUp(ctx: RequestContext, entityType: string): void {
+    const tenant = requireTenant(ctx);
+    if (ctx.user.impersonation) {
+      this.security.record('permission_denied', {
+        schoolId: tenant.schoolId,
+        userId: ctx.user.id,
+        detail: `workflow step ${entityType} (impersonated)`,
+      });
+      throw new DomainError(
+        'impersonation-restricted',
+        'Privileged actions are not available while impersonating',
+        { status: 403 },
+      );
+    }
+    if (!isFreshMfa(ctx.user, this.env.MFA_FRESHNESS_MINUTES)) {
+      this.security.record('mfa_required', {
+        schoolId: tenant.schoolId,
+        userId: ctx.user.id,
+        detail: `workflow step ${entityType}`,
+      });
+      throw new DomainError(
+        'mfa-required',
+        'This action requires a recent multi-factor authentication',
+        { status: 403 },
+      );
+    }
+  }
+
   async act(
     ctx: RequestContext,
     stepId: string,
@@ -1218,8 +1262,10 @@ export class WorkflowService {
         level: number;
         status: string;
         assignees: string[];
+        entity_type: string;
       }>(
-        `SELECT id::text, instance_id::text, level, status::text, assignee_user_ids::text[] AS assignees FROM workflow_steps WHERE id = $1 FOR UPDATE`,
+        `SELECT s.id::text, s.instance_id::text, s.level, s.status::text, s.assignee_user_ids::text[] AS assignees, i.entity_type
+           FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id WHERE s.id = $1 FOR UPDATE OF s`,
         [stepId],
       );
       const step = s.rows[0];
@@ -1243,6 +1289,8 @@ export class WorkflowService {
           });
         delegatedFrom = d.rows[0].from_user_id;
       }
+      // a fee request's step asks what its own route asks: a recent second factor
+      if (WorkflowService.stepUp(step.entity_type)) this.assertStepUp(ctx, step.entity_type);
       const inst = await c.query<{
         status: string;
         current_level: number;

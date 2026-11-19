@@ -891,7 +891,16 @@ export class GatePassService {
         `${SELECT} WHERE EXISTS (SELECT 1 FROM gate_pass_approvals a WHERE a.pass_id = p.id AND a.acted_by = app.current_user_id())
           ORDER BY p.created_at DESC LIMIT 30`,
       );
-      return { data: open.rows.map(toRow), decided: done.rows.map(toRow) };
+      // how many wait on me in all (the list stops at 200)
+      const waiting = await c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM gate_passes p WHERE p.state = 'pending' AND EXISTS (SELECT 1 FROM gate_pass_approvals a
+            WHERE a.pass_id = p.id AND a.status = 'pending' AND app.current_user_id() = ANY(a.approver_user_ids))`,
+      );
+      return {
+        data: open.rows.map(toRow),
+        waiting: waiting.rows[0]!.n,
+        decided: done.rows.map(toRow),
+      };
     });
   }
 

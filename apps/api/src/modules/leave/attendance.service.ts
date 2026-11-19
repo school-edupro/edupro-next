@@ -1772,10 +1772,11 @@ export class AttendanceService implements OnModuleInit {
         code: string;
         employee_id: string;
         since: Date;
+        total_rows: number;
       }>(
         `SELECT g.id::text, g.day::text, g.status, to_char(g.in_time, 'HH24:MI') AS in_time, to_char(g.out_time, 'HH24:MI') AS out_time,
                 g.day_type, g.reason, e.display_name AS employee, e.employee_code AS code, e.id::text AS employee_id,
-                ${view === 'waiting' ? 'i.requested_at' : 's.acted_at'} AS since
+                ${view === 'waiting' ? 'i.requested_at' : 's.acted_at'} AS since, (count(*) OVER ())::int AS total_rows
            FROM staff_regularisations g JOIN employees e ON e.id = g.employee_id
            JOIN workflow_instances i ON i.id = g.workflow_instance_id
            JOIN workflow_steps s ON s.instance_id = i.id
@@ -1783,11 +1784,14 @@ export class AttendanceService implements OnModuleInit {
           ORDER BY since ${view === 'waiting' ? 'ASC' : 'DESC'} LIMIT 300`,
       );
       const out = [];
-      for (const r of rows.rows) {
+      for (const x of rows.rows) {
         const may = view === 'waiting';
+        const r: Omit<typeof x, 'total_rows'> & { total_rows?: number } = { ...x };
+        delete r.total_rows;
         out.push({ ...r, since: r.since.toISOString(), mayDecide: may });
       }
-      return { rows: out };
+      // how many in all (the list stops at 300)
+      return { rows: out, total: rows.rows[0]?.total_rows ?? 0 };
     });
   }
 
