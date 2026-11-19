@@ -117,6 +117,12 @@ class School {
               'items': [
                 {'href': '/profile', 'label': 'Profile', 'help': null, 'icon': 'user'},
                 {'href': '/teachers', 'label': 'My teachers', 'help': null, 'icon': 'users'},
+                {
+                  'href': '/documents',
+                  'label': 'Session plan and date sheets',
+                  'help': null,
+                  'icon': 'file',
+                },
               ],
             },
             if (queries)
@@ -458,6 +464,65 @@ class School {
               },
           ],
         };
+      case 'GET /academics/documents':
+        return {
+          'kinds': [
+            {'value': 'session_plan', 'label': 'Session plan'},
+            {'value': 'curriculum', 'label': 'Curriculum / syllabus'},
+            {'value': 'date_sheet', 'label': 'Date sheet'},
+            {'value': 'other', 'label': 'Other'},
+          ],
+          'data': [
+            {
+              'id': 'd1',
+              'kind': 'session_plan',
+              'kindLabel': 'Session plan',
+              'title': 'Session plan 2026-27',
+              'remark': '<p>The plan for the <b>whole</b> year.</p>',
+              'classSectionId': '300',
+              'section': 'VI-A',
+              'fileIds': ['81'],
+              'publishAt': '${day(-3)}T04:30:00Z',
+              'ackRequired': true,
+              'ackedFor': [],
+              'postedBy': 'Asha Teacher',
+            },
+            {
+              'id': 'd2',
+              'kind': 'date_sheet',
+              'kindLabel': 'Date sheet',
+              'title': 'Not this class',
+              'remark': null,
+              'classSectionId': '301',
+              'section': 'VI-B',
+              'fileIds': ['82'],
+              'publishAt': '${day(-2)}T04:30:00Z',
+              'ackRequired': false,
+              'ackedFor': [],
+              'postedBy': null,
+            },
+            {
+              'id': 'd3',
+              'kind': 'magazine',
+              'kindLabel': 'School magazine',
+              'title': 'Our magazine',
+              'remark': null,
+              'classSectionId': null,
+              'section': null,
+              'fileIds': ['83'],
+              'publishAt': '${day(-1)}T04:30:00Z',
+              'ackRequired': false,
+              'ackedFor': [],
+              'postedBy': null,
+            },
+          ],
+        };
+      case 'GET /academics/documents/d1/files/81':
+        return const ApiFile(
+          bytes: [37, 80, 68, 70],
+          contentType: 'application/pdf',
+          name: 'plan.pdf',
+        );
       case 'GET /academics/calendar':
         return {'holidays': [], 'events': [], 'from': c.query?['from'], 'to': c.query?['to']};
       case 'GET /exams/mine/date-sheets':
@@ -471,7 +536,7 @@ class School {
                   'name': 'Periodic test 2',
                   'startsOn': day(5),
                   'endsOn': day(6),
-                  'note': null,
+                  'note': 'Bring your own geometry box.',
                   'papers': [
                     {
                       'subject': 'Maths',
@@ -480,6 +545,16 @@ class School {
                       'endsAt': '10:00:00',
                     },
                     {'subject': 'Science', 'examOn': day(6), 'startsAt': null, 'endsAt': null},
+                  ],
+                },
+                {
+                  'id': 'e0',
+                  'name': 'Periodic test 1',
+                  'startsOn': day(-40),
+                  'endsOn': day(-40),
+                  'note': null,
+                  'papers': [
+                    {'subject': 'English', 'examOn': day(-40), 'startsAt': null, 'endsAt': null},
                   ],
                 },
               ],
@@ -1486,6 +1561,78 @@ void main() {
   });
 
   testWidgets(
+    'exam date sheet as on the website: the next paper, the papers, earlier exams folded',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await pumpFamily(tester);
+      await tester.tap(find.text('Academics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Date sheet').last);
+      await tester.pumpAndSettle();
+      final s = S(false);
+      expect(find.text('The papers of each exam: date, day and time.'), findsOneWidget);
+      expect(
+        find.text('Next paper: Maths · ${s.dayLong(DateTime.parse(day(5)))} · 09:00–10:00'),
+        findsOneWidget,
+      );
+      expect(find.text('Periodic test 2'), findsOneWidget);
+      expect(find.text('Bring your own geometry box.'), findsOneWidget);
+      expect(find.text('09:00–10:00'), findsOneWidget);
+      // the earlier exam folded away until tapped
+      expect(find.text('Earlier exams (1)'), findsOneWidget);
+      expect(find.text('Periodic test 1'), findsNothing);
+      await tester.tap(find.byKey(const Key('earlierExams')));
+      await tester.pumpAndSettle();
+      expect(find.text('Periodic test 1'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'session plan and date sheets in the app: the class\'s and the school\'s, a kind, a file',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final (t, _) = await pumpFamily(tester, kind: 'student');
+      await tester.tap(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('More')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Session plan and date sheets'));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/academics/documents'), isTrue);
+      expect(find.text('Session plan, curriculum and date sheets'), findsWidgets);
+      // the child's class and the whole school; another class's paper is not shown
+      expect(find.text('For the class'), findsOneWidget);
+      expect(find.text('From the school'), findsOneWidget);
+      expect(find.text('Session plan 2026-27'), findsOneWidget);
+      expect(find.text('The plan for the whole year.'), findsOneWidget);
+      expect(find.text('Our magazine'), findsOneWidget);
+      expect(find.text('Not this class'), findsNothing);
+      // the kinds that have papers
+      expect(find.byKey(const Key('docKind-session_plan')), findsOneWidget);
+      expect(find.byKey(const Key('docKind-curriculum')), findsNothing);
+      await tester.tap(find.byKey(const Key('docKind-session_plan')));
+      await tester.pumpAndSettle();
+      expect(find.text('Our magazine'), findsNothing);
+      // the file and "I have seen this"
+      await tester.tap(find.byKey(const Key('view-0')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/academics/documents/d1/files/81'), isTrue);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('docAck-d1')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/academics/acks').body, {
+        'type': 'document',
+        'id': 'd1',
+        'studentId': '41',
+      });
+      expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
+    },
+  );
+
+  testWidgets(
     'homework as on the website: a day at a time, earlier days, "I have seen this", a file',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(420, 1800));
@@ -1663,6 +1810,15 @@ void main() {
       await tester.tap(
         find.descendant(of: find.byType(NavigationBar), matching: find.text('Timetable')),
       );
+      await tester.pumpAndSettle();
+      // the week, as on the website: a column per school day
+      expect(find.byKey(const Key('ttWeek')), findsOneWidget);
+      expect(find.text('6 school days a week'), findsOneWidget);
+      expect(find.text('Hindi'), findsNWidgets(3));
+      expect(find.text('English'), findsNWidgets(3));
+      expect(find.text('Asha Teacher · 12'), findsNWidgets(6));
+      // a day at a time
+      await tester.tap(find.byKey(const Key('ttView-day')));
       await tester.pumpAndSettle();
       final weekday = now.weekday == 7 ? 1 : now.weekday;
       expect(find.text(weekday.isEven ? 'Hindi' : 'English'), findsOneWidget);
@@ -1896,6 +2052,10 @@ void main() {
         ]) {
           await tester.tap(find.text(screen).last);
           await check(screen);
+          if (screen == s.timetable) {
+            await tester.tap(find.byKey(const Key('ttView-day')));
+            await check('$screen, day');
+          }
           if (screen == s.homework) {
             await tester.tap(find.byKey(const Key('hwView-assignments')));
             await check('$screen, assignments');
@@ -1945,6 +2105,10 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.widgetWithText(ListTile, s.menu('My teachers')));
         await check('My teachers');
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(ListTile, s.menu('Session plan and date sheets')));
+        await check('Session plan and date sheets');
         handle.dispose();
       },
     );
@@ -2066,6 +2230,11 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, 'My teachers'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'My teachers');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Session plan and date sheets'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Session plan and date sheets');
   });
 
   test('the copies are kept per profile and wiped at sign-out', () async {

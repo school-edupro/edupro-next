@@ -693,3 +693,19 @@ tab; Academics → Homework for a parent):
 - Each piece of work as the website shows it: its kind, title and text, the due date (today amber, past red with
   "overdue"), the files (View / Download), who posted it and when it was published, and **I have seen this** when
   the teacher asks for it. Home's "Homework due" and its full view are unchanged.
+
+## As built — Timetable, shared papers and date sheet as on the website (19 Nov 2026)
+
+- **Timetable** (`family/timetable.dart`): **Week** first, as apps/parent/app/(app)/timetable — a row per period
+  (name and time) and a column per school day (slides sideways on a phone; today's column marked), each with the
+  subject, teacher and room, breaks as "—"; "n school days a week"; "The timetable has not been published yet."
+  **Day** keeps the one-day view for a quick look.
+- **Session plan and date sheets** (`family/documents.dart`, menu `/documents`, no web page): as
+  apps/parent/app/(app)/documents — the kinds that have papers (All, Session plan, Curriculum, Date sheet, Other);
+  **For the class** (only the child's class) and **From the school** (magazine, almanac); each paper with its
+  kind, title, the school's remark, the files (View / Download, `GET academics/documents/:id/files/:fileId`), who
+  shared it, the class and when, and **I have seen this** when the school asks (`POST academics/acks`,
+  `type: document`).
+- **Exam date sheet** (`family/date_sheet.dart`): as apps/parent/app/(app)/date-sheet — "The papers of each exam:
+  date, day and time."; **Next paper** on top; each exam still to come with its papers (date and day, subject,
+  time) and the school's note; **Earlier exams (n)** folded until tapped; "No date sheet yet." / "No exam coming up."

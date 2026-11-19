@@ -7,6 +7,7 @@ import '../profiles/profiles.dart';
 import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
 import '../family/teachers.dart';
+import '../family/documents.dart';
 import '../family/academics.dart';
 import '../family/fees.dart';
 import '../family/profile.dart';
@@ -89,6 +90,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/profile' => ProfileScreen(profile: p),
     // who teaches the child, with the contact the school shows: on the phone, no web page
     '/teachers' => TeachersScreen(profile: p),
+    // the session plan, curriculum, date sheets, magazine and almanac the school shared: no web page
+    '/documents' => DocumentsScreen(profile: p),
     _ => null,
   };
 }

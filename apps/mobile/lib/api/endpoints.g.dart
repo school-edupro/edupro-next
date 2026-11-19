@@ -124,6 +124,14 @@ class EduProApi {
   Future<dynamic> documentsAck({required AckDto body}) =>
       _t.send('POST', '/academics/acks', body: body.toJson());
 
+  /// GET /academics/documents — Class documents the viewer may see (families from the publish time)
+  Future<dynamic> documentsList({String? kind, String? classSectionId, String? from, String? to}) =>
+      _t.send('GET', '/academics/documents', query: {if (kind != null) 'kind': kind, if (classSectionId != null) 'classSectionId': classSectionId, if (from != null) 'from': from, if (to != null) 'to': to});
+
+  /// GET /academics/documents/{id}/files/{fileId}
+  Future<ApiFile> documentsFile({required String id, required String fileId}) =>
+      _t.file('GET', '/academics/documents/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
   /// GET /academics/notices — Notices and circulars visible to the caller
   Future<dynamic> noticesList({String? kind, String? status, String? q, String? studentId, String? from, String? to, int? page, int? size}) =>
       _t.send('GET', '/academics/notices', query: {if (kind != null) 'kind': kind, if (status != null) 'status': status, if (q != null) 'q': q, if (studentId != null) 'studentId': studentId, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});

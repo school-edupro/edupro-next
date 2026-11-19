@@ -38,6 +38,8 @@ DailyWorkController_viewerInfo
 DailyWorkController_list
 DailyWorkController_file !file
 DocumentsController_ack
+DocumentsController_list
+DocumentsController_file !file
 NoticesController_list
 NoticesController_get
 NoticesController_file !file

@@ -274,6 +274,30 @@ class S {
   String dueOn(String date) => _t('Due $date', 'जमा करें $date');
   String postedBy(String name) => _t('By $name', '$name द्वारा');
   String get acknowledge => _t('I have seen this', 'मैंने यह देख लिया');
+  // timetable, shared papers, date sheet
+  String get weekTab => _t('Week', 'सप्ताह');
+  String get dayTab => _t('Day', 'दिन');
+  String schoolDaysAWeek(int n) => _t('$n school days a week', 'सप्ताह में $n विद्यालय दिवस');
+  String get timetableNotPublished =>
+      _t('The timetable has not been published yet.', 'समय-सारिणी अभी प्रकाशित नहीं हुई है।');
+  String get periodLabel => _t('Period', 'कालांश');
+  String get weekTimetableLabel => _t('The week\'s timetable', 'सप्ताह की समय-सारिणी');
+  String get docsTitle =>
+      _t('Session plan, curriculum and date sheets', 'सत्र योजना, पाठ्यक्रम और डेट शीट');
+  String get docsHelp => _t(
+    'What the teachers and the school shared for this session.',
+    'इस सत्र के लिए शिक्षकों और विद्यालय ने जो साझा किया।',
+  );
+  String get allKinds => _t('All', 'सभी');
+  String get forTheClass => _t('For the class', 'कक्षा के लिए');
+  String get fromTheSchool => _t('From the school', 'विद्यालय से');
+  String get nothingShared => _t('Nothing has been shared yet.', 'अभी कुछ साझा नहीं किया गया है।');
+  String get dateSheetHelp =>
+      _t('The papers of each exam: date, day and time.', 'हर परीक्षा के पेपर: तारीख़, दिन और समय।');
+  String nextPaperLine(String text) => _t('Next paper: $text', 'अगला पेपर: $text');
+  String get noDateSheet => _t('No date sheet yet.', 'अभी कोई डेट शीट नहीं।');
+  String earlierExams(int n) => _t('Earlier exams ($n)', 'पिछली परीक्षाएँ ($n)');
+  String get timeLabel => _t('Time', 'समय');
   String get homeworkAndClasswork => _t('Homework and classwork', 'गृहकार्य और कक्षा-कार्य');
   String get assignmentsTab => _t('Assignments', 'असाइनमेंट');
   String get daysWithWork => _t('Days with work', 'कार्य वाले दिन');

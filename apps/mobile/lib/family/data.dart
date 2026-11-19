@@ -219,6 +219,17 @@ final timetableProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profil
   return Loaded(asJson(r.data), r.at, stale: r.stale);
 });
 
+/// What the teachers and the school shared for the session (session plan, curriculum, date sheets, the
+/// magazine, the almanac) with the kinds, and the child's class to keep only theirs: `{data, kinds, section}`.
+final documentsProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((ref, p) async {
+  final r = await cached('docs:${p.id}', () async {
+    final section = await _sectionOf(ref, p);
+    final list = asJson(await _api(ref).documentsList());
+    return {'data': list['data'], 'kinds': list['kinds'], 'section': section};
+  });
+  return Loaded(asJson(r.data), r.at, stale: r.stale);
+});
+
 /// The school's holidays and events from `from` to `to`.
 final calendarProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profile, String, String)>(
   (ref, a) async {
