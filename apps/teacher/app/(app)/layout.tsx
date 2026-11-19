@@ -18,8 +18,13 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       redirect('/login?error=session-expired');
     throw error;
   }
-  // opened inside the mobile app: the app has its own header, menu and approvals (docs/design/89)
-  if ((await bff.session.read())?.mobile)
+  // opened inside the mobile app: the app has its own header, menu and approvals (docs/design/89). A session the
+  // app handed over AND the app's own web view (it adds "EduProApp/<version>" to its user agent): the same session in
+  // an ordinary browser (the app's web preview shares the computer's browser) keeps the portal's frame
+  const inApp =
+    (await bff.session.read())?.mobile &&
+    /\bEduProApp\//.test((await headers()).get('user-agent') ?? '');
+  if (inApp)
     return (
       <main id="main" className="ep-main">
         {children}

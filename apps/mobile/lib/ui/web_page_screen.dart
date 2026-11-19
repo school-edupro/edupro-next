@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../api/endpoints.g.dart';
 import '../app_services.dart';
+import '../config.dart';
 import '../profiles/profiles.dart';
 import 'widgets.dart';
 
@@ -56,6 +57,9 @@ class _WebPageScreenState extends ConsumerState<WebPageScreen> {
             javaScriptEnabled: true,
             // the session is the web app's own cookie; nothing is cached for another person on this phone
             cacheEnabled: false,
+            // the web app shows the page without its own header and menu only inside the app (its layouts look
+            // for this mark; a session handed over and then opened in a browser keeps the portal's frame)
+            applicationNameForUserAgent: 'EduProApp/${AppConfig.appVersion}',
             mediaPlaybackRequiresUserGesture: true,
             allowsInlineMediaPlayback: true,
           ),
