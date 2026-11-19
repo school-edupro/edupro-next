@@ -308,6 +308,10 @@ class EduProApi {
   Future<dynamic> miscFeesMine() =>
       _t.send('GET', '/fees/misc-fees/mine');
 
+  /// GET /fees/misc-fees/mine/receipts/{id}/file — One of the family's own misc receipts as a PDF (the parent copy)
+  Future<ApiFile> miscFeesMyReceiptFile({required String id}) =>
+      _t.file('GET', '/fees/misc-fees/mine/receipts/${Uri.encodeComponent(id)}/file');
+
   /// GET /payments/intents/mine — The family's own online payments (recent first)
   Future<dynamic> paymentsMine() =>
       _t.send('GET', '/payments/intents/mine');

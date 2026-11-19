@@ -460,9 +460,24 @@ class School {
                   'blocked': null,
                 },
               ],
+              'receipts': [
+                {
+                  'id': 'mr1',
+                  'receiptNo': 'MF-12',
+                  'receivedOn': day(-3),
+                  'amount': '500.00',
+                  'refunded': '0.00',
+                  'mode': 'cash',
+                  'status': 'posted',
+                  'title': 'Art kit',
+                  'announced': true,
+                },
+              ],
             },
           ],
         };
+      case 'GET /fees/misc-fees/mine/receipts/mr1/file':
+        return const ApiFile(bytes: [1], contentType: 'application/pdf', name: 'mf.pdf');
       case 'GET /payments/gateways/options':
         return {
           'data': [
@@ -764,7 +779,22 @@ void main() {
         'outcome': 'success',
       });
       expect(find.text('Payment received. The receipt is below.'), findsOneWidget);
-      // the receipts: the receipt with View / Download, and the online payments
+      // the receipts by fee type: the school fee and the other fees (no hostel: not a hosteller)
+      String? title(String k) => tester
+          .widget<Text>(
+            find.descendant(of: find.byKey(Key('receipts-$k')), matching: find.byType(Text)).first,
+          )
+          .data;
+      expect(title('school'), 'School fee · 1 receipt · ₹15,000 received');
+      expect(title('other'), 'Other fees · 1 receipt · ₹500 received');
+      expect(find.byKey(const Key('receipts-hostel')), findsNothing);
+      expect(find.textContaining('Art kit'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('view-miscReceipt-mr1')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/fees/misc-fees/mine/receipts/mr1/file'), isTrue);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // each receipt with View / Download, and the online payments
       expect(find.byKey(const Key('view-receipt-1001')), findsOneWidget);
       expect(find.byKey(const Key('download-receipt-1001')), findsOneWidget);
       expect(find.byKey(const Key('intent-i1')), findsOneWidget);

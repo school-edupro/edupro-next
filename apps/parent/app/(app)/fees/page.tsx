@@ -75,8 +75,19 @@ interface Intent {
   entityId: string | null;
   createdAt: string;
 }
+interface MiscReceipt {
+  id: string;
+  receiptNo: string;
+  receivedOn: string;
+  amount: string;
+  refunded: string;
+  mode: string;
+  status: string;
+  title: string;
+}
 interface MiscChild {
   student: { id: string; name: string };
+  receipts?: MiscReceipt[];
   lines: Array<{
     id: string;
     title: string;
@@ -262,6 +273,45 @@ export default async function FeesPage({
   const dueHostel = c?.payableHostel ?? '0';
   const dueOther = miscOpen.reduce((a, l) => a + Number(l.balance), 0);
   const active = c?.year.status === 'active';
+  // receipts by fee type: the school fee, the hostel fee (a hosteller, or one with hostel receipts) and the
+  // other fees (trips, activities, forms: their own receipt series); a cancelled or bounced one does not count
+  interface ReceiptRow {
+    id: string;
+    receiptNo: string | null;
+    receivedOn: string;
+    amount: string;
+    lateFee: string;
+    refunded: string;
+    mode: string;
+    status: string;
+    settled: boolean;
+    clearedOn: string | null;
+    title?: string;
+  }
+  const counted = (r: ReceiptRow) =>
+    ['bounced', 'reversed', 'cancelled'].includes(r.status)
+      ? 0
+      : Number(r.amount) - Number(r.refunded);
+  const group = (key: 'school' | 'hostel' | 'other', rows: ReceiptRow[]) => ({
+    key,
+    rows,
+    received: rows.reduce((a, r) => a + counted(r), 0),
+  });
+  const otherReceipts: ReceiptRow[] = (misc?.receipts ?? []).map((m) => ({
+    ...m,
+    lateFee: '0',
+    settled: false,
+    clearedOn: null,
+  }));
+  const hostelReceipts = (c?.payments ?? []).filter((p) => p.ledger === 'hostel');
+  const receiptGroups = [
+    group(
+      'school',
+      (c?.payments ?? []).filter((p) => p.ledger !== 'hostel'),
+    ),
+    ...(hostel || hostelReceipts.length ? [group('hostel', hostelReceipts)] : []),
+    ...(misc?.lines.length || otherReceipts.length ? [group('other', otherReceipts)] : []),
+  ];
 
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
@@ -535,62 +585,66 @@ export default async function FeesPage({
 
           {tab === 'receipts' ? (
             <>
-              <Card title={tabLabel.receipts}>
-                {c.payments.length === 0 ? (
-                  <p className="ep-field__help">{t(lang, 'No receipts yet.')}</p>
-                ) : (
-                  <ul className="fp-rcpts">
-                    {c.payments.map((p) => (
-                      <li key={p.id}>
-                        <span>
-                          <strong>{p.receiptNo ?? '—'}</strong>{' '}
-                          <Badge tone={p.ledger === 'hostel' ? 'info' : 'neutral'}>
-                            {t(lang, p.ledger === 'hostel' ? 'Hostel fee' : 'School fee')}
-                          </Badge>{' '}
-                          {p.status === 'bounced' ? (
-                            <Badge tone="danger">{t(lang, 'Bounced')}</Badge>
-                          ) : p.status !== 'posted' && Number(p.refunded) > 0 ? (
-                            <Badge tone="warning">
-                              {t(
-                                lang,
-                                p.status === 'partly_refunded' ? 'Partly refunded' : 'Refunded',
-                              )}{' '}
-                              ₹{money(p.refunded)}
-                            </Badge>
-                          ) : p.status !== 'posted' ? (
-                            <Badge tone="neutral">{t(lang, 'Cancelled')}</Badge>
-                          ) : null}
-                          <span className="ep-field__help" style={{ display: 'block' }}>
-                            {dmy(p.receivedOn)} · {p.mode.toUpperCase()} · ₹{money(p.amount)}
-                            {Number(p.lateFee) > 0
-                              ? ` (${t(lang, 'Late fee')} ₹${money(p.lateFee)})`
-                              : ''}
-                            {p.clearedOn
-                              ? ` · ${t(lang, 'Cleared')} ${dmy(p.clearedOn)}`
-                              : p.settled
-                                ? ` · ${t(lang, 'Settled')}`
+              {receiptGroups.map((g) => (
+                <Card
+                  key={g.key}
+                  title={`${tabLabel[g.key]} · ${String(g.rows.length)} ${t(lang, g.rows.length === 1 ? 'receipt' : 'receipts')} · ₹${money(g.received)} ${t(lang, 'received')}`}
+                  style={{ marginBottom: 'var(--sp-4)' }}
+                >
+                  {g.rows.length === 0 ? (
+                    <p className="ep-field__help">{t(lang, 'No receipts yet.')}</p>
+                  ) : (
+                    <ul className="fp-rcpts">
+                      {g.rows.map((p) => (
+                        <li key={p.id}>
+                          <span>
+                            <strong>{p.receiptNo ?? '—'}</strong>{' '}
+                            {p.status === 'bounced' ? (
+                              <Badge tone="danger">{t(lang, 'Bounced')}</Badge>
+                            ) : p.status !== 'posted' && Number(p.refunded) > 0 ? (
+                              <Badge tone="warning">
+                                {t(
+                                  lang,
+                                  p.status === 'partly_refunded' ? 'Partly refunded' : 'Refunded',
+                                )}{' '}
+                                ₹{money(p.refunded)}
+                              </Badge>
+                            ) : p.status !== 'posted' ? (
+                              <Badge tone="neutral">{t(lang, 'Cancelled')}</Badge>
+                            ) : null}
+                            <span className="ep-field__help" style={{ display: 'block' }}>
+                              {p.title ? `${p.title} · ` : ''}
+                              {dmy(p.receivedOn)} · {p.mode.toUpperCase()} · ₹{money(p.amount)}
+                              {Number(p.lateFee) > 0
+                                ? ` (${t(lang, 'Late fee')} ₹${money(p.lateFee)})`
                                 : ''}
+                              {p.clearedOn
+                                ? ` · ${t(lang, 'Cleared')} ${dmy(p.clearedOn)}`
+                                : p.settled
+                                  ? ` · ${t(lang, 'Settled')}`
+                                  : ''}
+                            </span>
                           </span>
-                        </span>
-                        <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-                          <a
-                            className="ep-btn ep-btn--secondary ep-btn--sm"
-                            href={`/fees/receipt/${p.id}`}
-                          >
-                            {t(lang, 'View')}
-                          </a>
-                          <a
-                            className="ep-btn ep-btn--ghost ep-btn--sm"
-                            href={`/fees/receipt/${p.id}/pdf`}
-                          >
-                            {t(lang, 'Download PDF')}
-                          </a>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
+                          <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                            <a
+                              className="ep-btn ep-btn--secondary ep-btn--sm"
+                              href={`/fees/receipt/${p.id}${g.key === 'other' ? '?kind=misc' : ''}`}
+                            >
+                              {t(lang, 'View')}
+                            </a>
+                            <a
+                              className="ep-btn ep-btn--ghost ep-btn--sm"
+                              href={`/fees/receipt/${p.id}/pdf${g.key === 'other' ? '?kind=misc' : ''}`}
+                            >
+                              {t(lang, 'Download PDF')}
+                            </a>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              ))}
               {intents.length ? (
                 <Card title={t(lang, 'Online payments')} style={{ marginTop: 'var(--sp-4)' }}>
                   <table className="ep-table ep-table--dense" style={{ width: '100%' }}>

@@ -1190,6 +1190,10 @@ const DICT: Record<string, string> = {
   Marks: 'अंक',
   'Grades as CBSE printed them; the best five as the school counts them.':
     'ग्रेड जैसे CBSE ने छापे; सर्वश्रेष्ठ पाँच जैसे विद्यालय गिनता है।',
+  'Download PDF': 'PDF डाउनलोड करें',
+  receipt: 'रसीद',
+  receipts: 'रसीदें',
+  received: 'प्राप्त',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

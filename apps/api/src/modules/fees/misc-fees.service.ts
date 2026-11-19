@@ -411,6 +411,24 @@ export class MiscFeesService {
     });
   }
 
+  /** A misc receipt of an announced fee of one of the signed-in family's children (else not found). */
+  async assertMyReceipt(ctx: RequestContext, receiptId: string): Promise<void> {
+    const v = await this.viewer.resolve(ctx, 'fees.family.view');
+    if (v.kind !== 'family')
+      throw new DomainError('permission-denied', 'Families only', { status: 403 });
+    const mine =
+      /^\d{1,18}$/.test(receiptId) &&
+      (await this.db.tenant(requireTenant(ctx), async (c) => {
+        const r = await c.query<{ student_id: string | null; announced: boolean }>(
+          `SELECT student_id::text, misc_fee_student_id IS NOT NULL AS announced FROM misc_receipts WHERE id = $1`,
+          [receiptId],
+        );
+        const x = r.rows[0];
+        return !!x && x.announced && v.students.some((st) => st.id === x.student_id);
+      }));
+    if (!mine) throw new DomainError('not-found', 'Receipt not found', { status: 404 });
+  }
+
   /** The misc fees announced for the family's children, as the parent app shows them. */
   async mine(ctx: RequestContext) {
     const v = await this.viewer.resolve(ctx, 'fees.family.view');

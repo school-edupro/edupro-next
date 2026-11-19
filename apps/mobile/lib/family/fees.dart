@@ -148,7 +148,7 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
             'school' ||
             'hostel' => _fee(s, c, section, section == 'hostel' ? dueHostel : dueSchool),
             'other' => _other(s, lines, open),
-            'receipts' => _receipts(s, c),
+            'receipts' => _receipts(s, c, misc, hostel),
             _ => [_BillSection(profile: p, hostel: hostel)],
           },
           const SizedBox(height: Tokens.sp4),
@@ -337,41 +337,74 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
     );
   }
 
-  /// Every receipt of the session (View, Download) and the online payments.
-  List<Widget> _receipts(S s, Json c) {
+  /// Every receipt of the session by fee type — the school fee, the hostel fee (a hosteller, or one with hostel
+  /// receipts), the other fees (their own receipt series) — each with View and Download, then the online payments.
+  List<Widget> _receipts(S s, Json c, Json? misc, bool hostel) {
     final p = _p;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = dark ? Tokens.mobGray300 : Tokens.textMuted;
-    final payments = asList(c['payments'])
-      ..sort((a, b) => '${b['receivedOn']}'.compareTo('${a['receivedOn']}'));
+    int newest(Json a, Json b) => '${b['receivedOn']}'.compareTo('${a['receivedOn']}');
+    final payments = asList(c['payments'])..sort(newest);
+    final school = [
+      for (final x in payments)
+        if (x['ledger'] != 'hostel') x,
+    ];
+    final hostelRows = [
+      for (final x in payments)
+        if (x['ledger'] == 'hostel') x,
+    ];
+    final other = asList(misc?['receipts'])..sort(newest);
     final intents = ref.watch(feeIntentsProvider(p)).value ?? const <Json>[];
+    // a cancelled or bounced receipt does not count; a refund comes off
+    num received(List<Json> rows) => rows.fold<num>(
+      0,
+      (a, r) => ['bounced', 'reversed', 'cancelled'].contains('${r['status']}')
+          ? a
+          : a +
+                (num.tryParse('${r['amount']}') ?? 0) -
+                (num.tryParse('${r['refunded'] ?? 0}') ?? 0),
+    );
+    Widget card(List<Json> rows, bool isMisc) => rows.isEmpty
+        ? EmptyLine(s.noReceipts)
+        : Card(
+            child: Column(
+              children: [
+                for (var i = 0; i < rows.length; i++)
+                  Container(
+                    decoration: BoxDecoration(
+                      border: i + 1 < rows.length
+                          ? Border(
+                              bottom: BorderSide(
+                                color: dark ? Tokens.mobGray700 : Tokens.mobGray100,
+                              ),
+                            )
+                          : null,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(
+                      Tokens.sp4,
+                      Tokens.sp3,
+                      Tokens.sp1,
+                      Tokens.sp3,
+                    ),
+                    child: _receipt(s, rows[i], muted, misc: isMisc),
+                  ),
+              ],
+            ),
+          );
+    final groups = <(String, String, List<Json>, bool)>[
+      ('school', s.schoolFee, school, false),
+      if (hostel || hostelRows.isNotEmpty) ('hostel', s.hostelFee, hostelRows, false),
+      if (other.isNotEmpty || asList(misc?['lines']).isNotEmpty)
+        ('other', s.otherFees, other, true),
+    ];
     return [
-      if (payments.isEmpty)
-        EmptyLine(s.noReceipts)
-      else
-        Card(
-          child: Column(
-            children: [
-              for (var i = 0; i < payments.length; i++)
-                Container(
-                  decoration: BoxDecoration(
-                    border: i + 1 < payments.length
-                        ? Border(
-                            bottom: BorderSide(color: dark ? Tokens.mobGray700 : Tokens.mobGray100),
-                          )
-                        : null,
-                  ),
-                  padding: const EdgeInsets.fromLTRB(
-                    Tokens.sp4,
-                    Tokens.sp3,
-                    Tokens.sp1,
-                    Tokens.sp3,
-                  ),
-                  child: _receipt(s, payments[i], muted),
-                ),
-            ],
-          ),
+      for (final (key, label, rows, isMisc) in groups) ...[
+        SectionTitle(
+          '$label · ${s.receiptsOf(rows.length)} · ${s.receivedOf(s.money(received(rows)))}',
+          key: Key('receipts-$key'),
         ),
+        card(rows, isMisc),
+      ],
       if (intents.isNotEmpty) ...[
         SectionTitle(s.onlinePayments),
         Card(
@@ -402,7 +435,7 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
     ];
   }
 
-  Widget _receipt(S s, Json pay, Color muted) {
+  Widget _receipt(S s, Json pay, Color muted, {bool misc = false}) {
     final refunded = num.tryParse('${pay['refunded'] ?? 0}') ?? 0;
     final status = '${pay['status'] ?? 'posted'}';
     final late = num.tryParse('${pay['lateFee'] ?? 0}') ?? 0;
@@ -419,7 +452,6 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(no, style: const TextStyle(fontWeight: Tokens.fwBold, fontSize: 16)),
-                  Tag(pay['ledger'] == 'hostel' ? s.hostelFee : s.schoolFee),
                   if (status == 'bounced')
                     Tag(s.bounced, color: Tokens.statusDangerBg)
                   else if (status != 'posted' && refunded > 0)
@@ -435,6 +467,7 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
               ),
               Text(
                 [
+                  if (misc && pay['title'] != null) '${pay['title']}',
                   s.date(pay['receivedOn']),
                   '${pay['mode']}'.toUpperCase(),
                   late > 0
@@ -451,9 +484,11 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
           ),
         ),
         FileIcons(
-          name: 'receipt-${pay['id']}',
+          name: '${misc ? 'miscReceipt' : 'receipt'}-${pay['id']}',
           label: s.receiptNo(no),
-          load: () => ref.read(apiProvider).feesMyReceiptFile(paymentId: '${pay['id']}'),
+          load: () => misc
+              ? ref.read(apiProvider).miscFeesMyReceiptFile(id: '${pay['id']}')
+              : ref.read(apiProvider).feesMyReceiptFile(paymentId: '${pay['id']}'),
         ),
       ],
     );

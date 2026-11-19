@@ -41,6 +41,22 @@ export class MiscFeesController {
     return this.misc.mine(ctx);
   }
 
+  @Get('mine/receipts/:id/view')
+  @ApiOperation({ summary: "One of the family's own misc receipts, as it prints" })
+  @RequirePermission(FEES.familyView)
+  async myReceiptView(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    await this.misc.assertMyReceipt(ctx, id);
+    return this.papers.miscReceiptView(ctx, id);
+  }
+
+  @Get('mine/receipts/:id/file')
+  @ApiOperation({ summary: "One of the family's own misc receipts as a PDF (the parent copy)" })
+  @RequirePermission(FEES.familyView)
+  async myReceiptFile(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    await this.misc.assertMyReceipt(ctx, id);
+    return this.papers.miscReceiptFile(ctx, id, ['Parent copy']);
+  }
+
   @Get('sheet-format')
   @ApiOperation({ summary: 'The Excel sheet to fill for an announcement by upload' })
   @RequirePermission(FEES.miscView)

@@ -2,13 +2,19 @@ import { NextResponse } from 'next/server';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 
-/** The family's own receipt as a PDF file, made at once by the API (no waiting for a worker). */
+/**
+ * The family's own receipt as a PDF file, made at once by the API (no waiting for a worker);
+ * `?kind=misc`: an other-fee receipt.
+ */
 export async function GET(req: Request, { params }: { params: Promise<{ paymentId: string }> }) {
   const { paymentId } = await params;
+  const misc = new URL(req.url).searchParams.get('kind') === 'misc';
   if (!/^\d{1,18}$/.test(paymentId)) return NextResponse.redirect(new URL('/fees', req.url), 303);
   try {
     const f = await bff.api.fetch<{ filename: string; contentType: string; base64: string }>(
-      `/fees/mine/receipts/${paymentId}/file`,
+      misc
+        ? `/fees/misc-fees/mine/receipts/${paymentId}/file`
+        : `/fees/mine/receipts/${paymentId}/file`,
     );
     return new NextResponse(Buffer.from(f.base64, 'base64'), {
       headers: {

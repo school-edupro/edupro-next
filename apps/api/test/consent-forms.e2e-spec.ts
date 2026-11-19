@@ -1043,6 +1043,27 @@ describe('consent forms (e2e)', () => {
     expect(paid.json()).toMatchObject({ status: 'succeeded' });
     expect(paid.json().returnUrl).toContain('/consents?student=');
     expect(await line(a.json().id)).toMatchObject({ paid: '50.00', status: 'paid' });
+    // the parent's own other-fee receipt: listed with the child's other fees, viewed as it prints and as a PDF
+    const misc = (await get('/fees/misc-fees/mine', parent)).json() as {
+      children: Array<{ receipts: Array<{ id: string; receiptNo: string; amount: string }> }>;
+    };
+    const rc = misc.children.flatMap((ch) => ch.receipts).find((x) => x.amount === '50.00');
+    expect(rc?.receiptNo).toBeTruthy();
+    const view = await get(`/fees/misc-fees/mine/receipts/${rc!.id}/view`, parent);
+    expect(view.statusCode).toBe(200);
+    expect(view.json()).toMatchObject({
+      receiptNo: rc!.receiptNo,
+      feeType: 'misc',
+      amount: '50.00',
+    });
+    const file = await get(`/fees/misc-fees/mine/receipts/${rc!.id}/file`, parent);
+    expect(file.statusCode).toBe(200);
+    expect(Buffer.from(file.json().base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
+    // another family's receipt, or a number that is no receipt: not found
+    expect((await get(`/fees/misc-fees/mine/receipts/999999999/view`, parent)).statusCode).toBe(
+      404,
+    );
+    expect((await get(`/fees/misc-fees/mine/receipts/abc/file`, parent)).statusCode).toBe(404);
   });
 
   // ---- sharing one form; reminding the ticked ------------------------------------------------------

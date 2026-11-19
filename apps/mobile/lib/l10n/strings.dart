@@ -269,17 +269,20 @@ class S {
   String get hostelFee => _t('Hostel fee', 'छात्रावास शुल्क');
   String get otherFees => _t('Other fees', 'अन्य शुल्क');
   String get feeSections => _t('Fee sections', 'शुल्क के भाग');
-  String payPlan(String plan) => _t('Pay plan: ${switch (plan) {
-    'monthly' => 'Monthly',
-    'quarterly' => 'Quarterly',
-    'half_yearly' => 'Half-yearly',
-    _ => 'Yearly',
-  }}', 'भुगतान योजना: ${switch (plan) {
-    'monthly' => 'मासिक',
-    'quarterly' => 'त्रैमासिक',
-    'half_yearly' => 'अर्धवार्षिक',
-    _ => 'वार्षिक',
-  }}');
+  String payPlan(String plan) => _t(
+    'Pay plan: ${switch (plan) {
+      'monthly' => 'Monthly',
+      'quarterly' => 'Quarterly',
+      'half_yearly' => 'Half-yearly',
+      _ => 'Yearly',
+    }}',
+    'भुगतान योजना: ${switch (plan) {
+      'monthly' => 'मासिक',
+      'quarterly' => 'त्रैमासिक',
+      'half_yearly' => 'अर्धवार्षिक',
+      _ => 'वार्षिक',
+    }}',
+  );
   String get hosteller => _t('Hosteller', 'छात्रावासी');
   String transportOf(String route) => _t('Transport: $route', 'परिवहन: $route');
   String discountOf(String list) => _t('Discount: $list', 'छूट: $list');
@@ -338,6 +341,9 @@ class S {
   String clearedOn(String d) => _t('Cleared $d', 'समाशोधित $d');
   String get settled => _t('Settled', 'निपटाया गया');
   String get onlinePayments => _t('Online payments', 'ऑनलाइन भुगतान');
+  String receiptsOf(int n) =>
+      _t(n == 1 ? '1 receipt' : '$n receipts', n == 1 ? '1 रसीद' : '$n रसीदें');
+  String receivedOf(String amount) => _t('$amount received', '$amount प्राप्त');
   String intentStatus(String status) => switch (status) {
     'succeeded' => _t('Paid', 'भुगतान हुआ'),
     'failed' => _t('Failed', 'असफल'),
@@ -371,8 +377,10 @@ class S {
   String get refundLabel => _t('Refund', 'वापसी');
   String get advanceLabel => _t('Advance', 'अग्रिम');
   String get balanceLabel => _t('Balance', 'शेष');
-  String get billNotMade =>
-      _t('The fee bill could not be made. Please try again.', 'फ़ीस बिल नहीं बन सका। फिर कोशिश करें।');
+  String get billNotMade => _t(
+    'The fee bill could not be made. Please try again.',
+    'फ़ीस बिल नहीं बन सका। फिर कोशिश करें।',
+  );
   String get financialYear => _t('Financial year', 'वित्तीय वर्ष');
   String get issuedOn => _t('Issued on', 'जारी तिथि');
   String get taxHelp => _t(

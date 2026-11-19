@@ -406,6 +406,21 @@ export class FeeDocumentsService {
     };
   }
 
+  /** A misc receipt as a PDF on the fee receipt's sheet (a parent gets the parent copy). */
+  async miscReceiptFile(ctx: RequestContext, receiptId: string, copies?: string[]) {
+    const r = await this.miscReceiptView(ctx, receiptId);
+    const which = copies ?? r.copies;
+    const bytes =
+      r.layout === 'classic'
+        ? await receiptPdf(r, which)
+        : await receiptLayoutPdf(r, which, await this.logo(ctx, r.letterhead.logoFileId));
+    return {
+      filename: `receipt-${r.receiptNo.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
+      contentType: 'application/pdf',
+      base64: bytes.toString('base64'),
+    };
+  }
+
   /** The fee bill of the whole session as a PDF, in the school's bill layout. */
   async billFile(
     ctx: RequestContext,

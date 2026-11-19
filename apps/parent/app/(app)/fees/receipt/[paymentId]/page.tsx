@@ -6,18 +6,26 @@ import { bff } from '@/lib/bff';
 
 /**
  * One of the family's own receipts, shown at once and printable (or saved as PDF from the print
- * dialog). It does not wait for a file to be made.
+ * dialog). It does not wait for a file to be made. `?kind=misc`: an other-fee receipt (trip, activity,
+ * form), printed on the same sheet.
  */
 export default async function MyReceiptPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ paymentId: string }>;
+  searchParams: Promise<{ kind?: string }>;
 }) {
   const { paymentId } = await params;
+  const misc = (await searchParams).kind === 'misc';
   if (!/^\d+$/.test(paymentId)) redirect('/fees');
   let r: FeeReceipt;
   try {
-    r = await bff.api.fetch<FeeReceipt>(`/fees/mine/receipts/${paymentId}/view`);
+    r = await bff.api.fetch<FeeReceipt>(
+      misc
+        ? `/fees/misc-fees/mine/receipts/${paymentId}/view`
+        : `/fees/mine/receipts/${paymentId}/view`,
+    );
   } catch (error) {
     if (error instanceof ApiError) {
       if (error.status === 401) redirect('/login?error=session-expired');
@@ -37,10 +45,13 @@ export default async function MyReceiptPage({
         }}
       >
         <PrintButton label="Print receipt" />
-        <a className="ep-btn ep-btn--secondary" href={`/fees/receipt/${paymentId}/pdf`}>
+        <a
+          className="ep-btn ep-btn--secondary"
+          href={`/fees/receipt/${paymentId}/pdf${misc ? '?kind=misc' : ''}`}
+        >
           Download PDF
         </a>
-        <a className="ep-btn ep-btn--ghost" href={`/fees?student=${r.student.id}`}>
+        <a className="ep-btn ep-btn--ghost" href={`/fees?student=${r.student.id}&tab=receipts`}>
           Back to fees
         </a>
       </div>

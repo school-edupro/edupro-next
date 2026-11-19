@@ -97,6 +97,7 @@ FeesController_myBill
 FeesController_myTaxCertificate
 FeesController_myTaxCertificateFile !file
 MiscFeesController_mine
+MiscFeesController_myReceiptFile !file
 PaymentsController_mine
 PaymentsController_createMine
 PaymentsController_createMineMisc
