@@ -1,107 +1,23 @@
 import type { ReactNode } from 'react';
 import type { Me } from '@edupro/bff';
+import { FAMILY_MENU, FAMILY_TABS, type Audience, type FamilyGroup } from '@edupro/menus';
 import { t, type Lang } from '@/lib/i18n';
 import { canOpen } from '@/lib/portal-menu';
 import { Icon, type IconName } from './nav-icons';
 import { SidebarToggle } from './SidebarToggle';
 
-export type Audience = 'parent' | 'student';
+export type { Audience };
+const NAV = FAMILY_MENU as Array<Omit<FamilyGroup, 'icon'> & { icon: IconName }>;
+const TABS = FAMILY_TABS as Record<
+  Audience,
+  Array<{ href: string; label: string; icon: IconName }>
+>;
 
 /** A student login (no guardian membership in the working school) gets the student menus and wording. */
 export function audienceOf(me: Me): Audience {
   const here = me.memberships.filter((m) => !me.school || m.schoolId === me.school.id);
   return here.length > 0 && here.every((m) => m.personType === 'student') ? 'student' : 'parent';
 }
-
-interface NavItem {
-  href: string;
-  label: string;
-  /** Family-only items (payments, consents, meetings, leave) are hidden from student logins. */
-  parentOnly?: boolean;
-}
-interface NavGroup {
-  section: string;
-  label: { parent: string; student: string };
-  icon: IconName;
-  items: NavItem[];
-}
-
-const NAV: NavGroup[] = [
-  {
-    section: 'home',
-    label: { parent: 'Home', student: 'Home' },
-    icon: 'home',
-    items: [{ href: '/', label: 'Home' }],
-  },
-  {
-    section: 'child',
-    label: { parent: 'My child', student: 'My school day' },
-    icon: 'users',
-    items: [
-      { href: '/profile', label: 'Profile' },
-      { href: '/attendance', label: 'Attendance' },
-      { href: '/timetable', label: 'Timetable' },
-      { href: '/teachers', label: 'My teachers' },
-      { href: '/homework', label: 'Homework' },
-      { href: '/documents', label: 'Session plan and date sheets' },
-      { href: '/results', label: 'Results' },
-      { href: '/date-sheet', label: 'Exam date sheet' },
-      { href: '/health', label: 'Health' },
-      { href: '/certificates', label: 'Certificates' },
-    ],
-  },
-  {
-    section: 'school',
-    label: { parent: 'School', student: 'School' },
-    icon: 'book',
-    items: [
-      { href: '/messages', label: 'Messages' },
-      { href: '/notices', label: 'Notices' },
-      { href: '/calendar', label: 'Calendar' },
-      { href: '/directory', label: 'School directory' },
-      { href: '/transport', label: 'School bus' },
-      { href: '/hostel', label: 'Hostel' },
-      { href: '/library', label: 'Library' },
-    ],
-  },
-  {
-    section: 'fees',
-    label: { parent: 'Fees', student: 'Fees' },
-    icon: 'wallet',
-    items: [{ href: '/fees', label: 'Dues and receipts', parentOnly: true }],
-  },
-  {
-    section: 'help',
-    label: { parent: 'Help desk', student: 'Help desk' },
-    icon: 'message',
-    items: [
-      { href: '/queries', label: 'Queries', parentOnly: true },
-      { href: '/appointments', label: 'Appointments', parentOnly: true },
-      { href: '/gate-passes', label: 'Gate passes', parentOnly: true },
-      { href: '/consents', label: 'Consent forms', parentOnly: true },
-      { href: '/assistant', label: 'Assistant' },
-      { href: '/help', label: 'Help' },
-    ],
-  },
-];
-
-/** Phone tab bar: the four screens families open most, plus Home. */
-const TABS: Record<Audience, Array<{ href: string; label: string; icon: IconName }>> = {
-  parent: [
-    { href: '/', label: 'Home', icon: 'home' },
-    { href: '/attendance', label: 'Attendance', icon: 'check' },
-    { href: '/homework', label: 'Homework', icon: 'book' },
-    { href: '/fees', label: 'Fees', icon: 'wallet' },
-    { href: '/profile', label: 'Profile', icon: 'user' },
-  ],
-  student: [
-    { href: '/', label: 'Home', icon: 'home' },
-    { href: '/attendance', label: 'Attendance', icon: 'check' },
-    { href: '/homework', label: 'Homework', icon: 'book' },
-    { href: '/results', label: 'Results', icon: 'clipboard' },
-    { href: '/profile', label: 'Profile', icon: 'user' },
-  ],
-};
 
 /** The parent and student portal frame, laid out like the admin portal (sidebar, header, content). */
 export function FamilyShell({

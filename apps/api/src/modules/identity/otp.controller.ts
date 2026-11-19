@@ -9,12 +9,12 @@ import { ReqCtx, requireTenant, type RequestContext } from '../../common/http/re
 import { PLATFORM } from '../platform/platform.permissions';
 import { OtpService } from './otp.service';
 
-const App = z.enum(['admin', 'teacher', 'parent']);
+const App = z.enum(['admin', 'teacher', 'parent', 'mobile']);
 const Device = z
   .string()
   .regex(/^[A-Za-z0-9_-]{20,100}$/)
   .optional();
-const StartSchema = z.object({
+const OtpStartSchema = z.object({
   /** email or mobile number of the account, or a pupil's admission number (its primary guardian) */
   login: z.string().trim().min(3).max(120),
   app: App,
@@ -22,16 +22,16 @@ const StartSchema = z.object({
   ip: z.string().max(45).optional(),
   userAgent: z.string().max(300).optional(),
 });
-class StartDto extends createZodDto(StartSchema) {}
-const SecondSchema = z.object({ app: App, deviceToken: Device });
-class SecondDto extends createZodDto(SecondSchema) {}
-const VerifySchema = z.object({
+class OtpStartDto extends createZodDto(OtpStartSchema) {}
+const OtpSecondSchema = z.object({ app: App, deviceToken: Device });
+class OtpSecondDto extends createZodDto(OtpSecondSchema) {}
+const OtpVerifySchema = z.object({
   challengeId: z.string().uuid(),
   code: z.string().regex(/^\d{6}$/),
   remember: z.boolean().default(false),
   userAgent: z.string().max(300).optional(),
 });
-class VerifyDto extends createZodDto(VerifySchema) {}
+class OtpVerifyDto extends createZodDto(OtpVerifySchema) {}
 
 /**
  * Sign-in with a one-time code by email (0136). The web apps call these from their server side (so limits
@@ -60,7 +60,7 @@ export class OtpController {
   @ApiOperation({
     summary: 'Code-only sign-in: send a code to the account named by email or mobile',
   })
-  start(@Body() body: StartDto) {
+  start(@Body() body: OtpStartDto) {
     return this.otp.startLogin(body.login, body.app, body.deviceToken, {
       ip: body.ip,
       userAgent: body.userAgent,
@@ -72,7 +72,7 @@ export class OtpController {
   @Public()
   @HttpCode(200)
   @ApiOperation({ summary: 'Code-only sign-in: check the code and give the session' })
-  verify(@Body() body: VerifyDto) {
+  verify(@Body() body: OtpVerifyDto) {
     return this.otp.verify(body.challengeId, body.code, 'login', body.remember, {
       userAgent: body.userAgent,
     });
@@ -84,7 +84,7 @@ export class OtpController {
   @OtpExempt()
   @HttpCode(200)
   @ApiOperation({ summary: 'After One Auth: send a code when a school of the user asks one' })
-  startSecond(@ReqCtx() ctx: RequestContext, @Body() body: SecondDto) {
+  startSecond(@ReqCtx() ctx: RequestContext, @Body() body: OtpSecondDto) {
     return this.otp.startSecondFactor(ctx, body.app, body.deviceToken);
   }
 
@@ -94,7 +94,7 @@ export class OtpController {
   @OtpExempt()
   @HttpCode(200)
   @ApiOperation({ summary: 'After One Auth: check the code and give the session' })
-  verifySecond(@ReqCtx() ctx: RequestContext, @Body() body: VerifyDto) {
+  verifySecond(@ReqCtx() ctx: RequestContext, @Body() body: OtpVerifyDto) {
     return this.otp.verify(body.challengeId, body.code, 'second_factor', body.remember, {
       userAgent: body.userAgent,
       userId: ctx.user.id,

@@ -8,7 +8,7 @@ import type { RequestContext } from '../../common/http/request-context';
 import { OutboxService } from '../../common/jobs/outbox.service';
 import { ENV, type Env } from '../../config/env';
 
-export type OtpApp = 'admin' | 'teacher' | 'parent';
+export type OtpApp = 'admin' | 'teacher' | 'parent' | 'mobile';
 export type OtpPurpose = 'login' | 'second_factor';
 const CODE_MINUTES = 10;
 const SESSION_HOURS = 12;
@@ -425,7 +425,7 @@ export class OtpService {
     );
   }
 
-  private async user(userId: string) {
+  async user(userId: string) {
     return this.db.global(async (c) => {
       const r = await c.query<{
         sub: string;
@@ -440,14 +440,16 @@ export class OtpService {
     });
   }
 
-  /** Step 2: the code. A right code gives the session; "remember" keeps this browser for 30 days. */
-  async verify(
+  /**
+   * The code checked (the web sign-in and the mobile app's): the account it signs in, and the app that asked.
+   * A second factor answers only the challenge of the signed-in user (`userId`).
+   */
+  async checkCode(
     challengeId: string,
     code: string,
     purpose: OtpPurpose,
-    remember: boolean,
-    meta: { userAgent?: string; userId?: string },
-  ): Promise<OtpSession> {
+    userId?: string,
+  ): Promise<{ userId: string; app: OtpApp }> {
     const wrong = () =>
       new DomainError('auth.otp_wrong', 'The code is not right. Check it and try again.', {
         status: 401,
@@ -473,11 +475,20 @@ export class OtpService {
         status: 401,
       });
     // a second factor answers only the challenge of the signed-in user
-    if (r.outcome !== 'ok' || !r.user_id || (meta.userId && meta.userId !== r.user_id))
-      throw wrong();
-    const owner = r.user_id;
+    if (r.outcome !== 'ok' || !r.user_id || (userId && userId !== r.user_id)) throw wrong();
+    return { userId: r.user_id, app: r.app ?? 'admin' };
+  }
+
+  /** Step 2: the code. A right code gives the session; "remember" keeps this browser for 30 days. */
+  async verify(
+    challengeId: string,
+    code: string,
+    purpose: OtpPurpose,
+    remember: boolean,
+    meta: { userAgent?: string; userId?: string },
+  ): Promise<OtpSession> {
+    const { userId: owner, app } = await this.checkCode(challengeId, code, purpose, meta.userId);
     const u = await this.user(owner);
-    const app = r.app ?? 'admin';
     const s: OtpSession = await this.session(u.sub, u.displayName, purpose, app);
     // the school decides whether a browser may be remembered (off: the code at every sign-in)
     if (remember && (await this.policy(owner)).remember) {

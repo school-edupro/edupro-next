@@ -1,0 +1,24 @@
+# The API operations the mobile app uses (docs/design/89). scripts/mobile/generate.mjs makes a typed method for
+# each in lib/api/endpoints.g.dart from apps/api/openapi.json; CI fails when one is renamed, removed or changes.
+
+# sign-in and the phone's session
+OtpController_start
+MobileAuthController_verify
+MobileAuthController_refresh
+MobileAuthController_oneAuth
+MobileAuthController_secondFactor
+MobileAuthController_devices
+MobileAuthController_signOut
+MobileAuthController_signOutDevice
+MobileAuthController_webHandoff
+
+# who I am, my profiles and menus
+MeController_me
+MeController_signIn
+MeController_profiles
+MeController_menu
+
+# push and the inbox badge
+CommsPushController_register
+CommsPushController_unregister
+CommsInboxController_unread

@@ -25,6 +25,13 @@ export default async function FamilyLayout({ children }: { children: ReactNode }
     .catch(() => 0);
   // a withdrawn pupil's (or the parent's) days on the portal are over: no rights are left in this school
   const ended = me.permissions.length === 0;
+  // opened inside the mobile app: the app has its own header, menu and back button (docs/design/89)
+  if ((await bff.session.read())?.mobile)
+    return (
+      <main id="main" className="ep-main">
+        {ended ? <p role="status">{t(lang, 'Portal access has ended')}</p> : children}
+      </main>
+    );
   return (
     <FamilyShell me={me} lang={lang} currentPath={currentPath} unread={unread}>
       {ended ? (

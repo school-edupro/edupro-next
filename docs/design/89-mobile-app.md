@@ -203,3 +203,68 @@ the OpenAPI spec and the app change in one commit.
 - One Auth on mobile: which schools use it, and its redirect URI for the app.
 - Native payment SDKs (Razorpay first?) after the web-view checkout.
 - Transport live tracking on a map, if the buses report GPS (today: bus attendance only).
+
+## As built — phase A, foundations (19 Nov 2026)
+
+**API**
+
+- **Mobile sessions** (migration 0400, `identity/mobile-auth.*`): `mobile_sessions` and `mobile_web_handoffs` behind
+  SECURITY DEFINER functions (forced RLS, the migrator policy only). `POST /auth/otp/start` takes `app: 'mobile'`;
+  `POST /auth/mobile/verify` (the code), `/one-auth` (a One Auth token), `/second-factor/verify` (One Auth + the code;
+  the session counts as multi-factor) return `{accessToken, expiresAt, refreshToken, sessionId}`. Access tokens are
+  the `otp.` HS256 tokens with `app: 'mobile'` and `msid` (the session), one hour; the auth guard refuses a token
+  whose session is closed (a one-minute cache, cleared on sign-out). `POST /auth/mobile/refresh` rotates the refresh
+  token (keyed hash stored; the previous one kept): the old one within 15 s answers `auth.mobile_superseded` (two
+  renewals at once), later it is a stolen token — `auth.mobile_reused`, the phone signed out. 60 days unused ends a
+  session. `GET /auth/mobile/devices`, `POST /auth/mobile/sign-out`, `POST /auth/mobile/devices/:id/sign-out`
+  (one's own phones only). verify / refresh / redeem are on the public allow-list with their reasons.
+- **Acting as the family**: header `X-Acting-As: family` (request context `actingAs`); `ViewerService.resolve` reads a
+  person who is staff and also a guardian / student in the school as the family. The parent web app's BFF always
+  sends it, so a teacher who is also a parent now sees their child on the parent portal too.
+- **Profiles** `GET /me/profiles` (staff of each school, parent of each child, student; `actingAs` when also staff)
+  and **menus** `GET /me/menu?kind=staff|parent|student` from the new package **`@edupro/menus`** (the staff menu
+  moved from `packages/bff/src/staff-menu.ts`, which re-exports it, and the parent / student menu from the parent
+  app's `FamilyShell` and `portal-menu.ts`; one definition for the web apps, the API and the app), with each screen's
+  icon (`screenIcon`, `familyIcon`).
+- **Web pages inside the app**: `POST /auth/mobile/web-handoff {app, to}` → a 60-second single-use link
+  `…/api/auth/mobile?code=` (the BFF's new `mobile` handler, in the parent and staff apps) → the web app redeems it
+  (`/web-handoff/redeem`) for its own session (`otp.` token naming the phone's session, so it ends with the phone)
+  marked `mobile`: the `(app)` layouts then show the page without the app's header, menu and tab bar. A parent's page
+  goes through `/api/child?id=…&back=…` to pick the child.
+- **Push for phones** (migration 0401): `push_devices.app` may be `mobile` with `platform`; `PushService.send` queues
+  pushes to phones even without the school's own Firebase (not when the school switched push off), marked
+  `variables.app = 'mobile'`; the workers send them through `MOBILE_FCM_SERVICE_ACCOUNT_FILE` (the EduPro project;
+  console in development) with Android / APNs settings. The helpdesk's SQL path still needs the school's Firebase
+  (phase D).
+- `POST /me/sign-in` has a typed body (app `mobile`); the code sign-in DTOs were renamed (`OtpStartDto` …) because
+  another module's `StartDto` overwrote them in the OpenAPI description; `openapi:export` now exits when written, and
+  `openapi:export:dist` exports from the build in 2 s.
+
+**App** (`apps/mobile`, Flutter 3.50 / Dart 3.14, `package:material_ui`)
+
+- Riverpod, go_router, dio, flutter_secure_storage, local_auth, flutter_inappwebview, shared_preferences,
+  device_info_plus, google_fonts, firebase_messaging (off until `PUSH=true`), sentry_flutter (off without a DSN).
+- Sign-in (login → code → app PIN), unlock (PIN or fingerprint / face), sessions renewed one at a time and signed out
+  when the API says so; profiles with the switcher in the bar; Home (a welcome — the native daily screens come in
+  phases B and C); More (the menu, in English or Hindi) opening web pages; Settings (language, sign out).
+- **Generated** by `scripts/mobile/generate.mjs` (`pnpm mobile:gen`): `lib/api/endpoints.g.dart` (typed methods and
+  request classes for the operations in `api-operations.txt`, from `apps/api/openapi.json`), `lib/theme/tokens.g.dart`
+  (the design tokens), `lib/l10n/menu_hindi.g.dart` (Hindi for the menus from the web apps' dictionaries). The app's
+  own words are in `lib/l10n/strings.dart` (English and Hindi) rather than ARB files.
+- Android: label EduPro, `FlutterFragmentActivity` (local_auth), internet / biometric / notification permissions;
+  iOS: display name, Face ID text. Package id `in.edupro.edupro` until the store accounts fix the final one.
+- **CI**: the build job exports the OpenAPI description and fails on stale generated sources; a new job runs
+  `flutter analyze` and `flutter test` (subosito/flutter-action, Flutter 3.50.0).
+
+**Tests**: API e2e `mobile.e2e-spec.ts` (5: code sign-in, rotation, superseded and reused tokens; phones listed and
+signed out, not another person's; profiles, menus and acting as the parent; web hand-off once, per app, ending with the
+phone; a push queued to a phone without the school's Firebase); the permission allow-list; workers' FCM test for the
+phone format; Flutter (10: the transport's renewal, single-flight, sign-out and errors; PIN hashing; the generated
+client; the screens from sign-in through PIN, profile switch, More in Hindi, sign-out). Checked in a browser on a test
+school: the app's web build signs in with the code, sets the PIN, switches to the parent profile and lists its menu;
+the hand-off links open the parent and staff pages without their frame (axe clean) and end when the phone signs out.
+
+**Not done in phase A (needs the company / this Mac)**: running on Android and iOS (Android Studio with an emulator and
+Xcode are not installed), push through the EduPro Firebase project (no project or APNs key yet), crash reports (no
+Sentry DSN), the final package id and store listings. The web build cannot show the web pages inside the app (the web
+apps forbid framing — correct; phones open them in a WebView, not a frame).

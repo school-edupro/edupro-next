@@ -22,6 +22,8 @@ export class FcmAdapter implements ChannelAdapter {
   constructor(
     private readonly account: ServiceAccount,
     private readonly fetchImpl: typeof fetch = fetch,
+    /** 'web': the school's web apps (a link that opens the page); 'mobile': the EduPro app (Android and iOS) */
+    private readonly target: 'web' | 'mobile' = 'web',
   ) {
     if (!account.project_id || !account.client_email || !account.private_key)
       throw new Error('The Firebase service account JSON is incomplete');
@@ -82,10 +84,17 @@ export class FcmAdapter implements ChannelAdapter {
             token: message.to,
             notification: { title: message.subject ?? 'School', body: message.body },
             data: { link },
-            webpush: {
-              fcm_options: { link },
-              notification: { icon: '/icons/icon.svg', badge: '/icons/icon.svg' },
-            },
+            ...(this.target === 'mobile'
+              ? {
+                  android: { priority: 'high', notification: { channel_id: 'school' } },
+                  apns: { payload: { aps: { sound: 'default' } } },
+                }
+              : {
+                  webpush: {
+                    fcm_options: { link },
+                    notification: { icon: '/icons/icon.svg', badge: '/icons/icon.svg' },
+                  },
+                }),
           },
         }),
         signal: AbortSignal.timeout(15_000),

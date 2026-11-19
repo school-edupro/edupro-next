@@ -11,6 +11,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { randomUUID } from 'node:crypto';
 import { ENV, type Env } from '../../config/env';
 import { IdentityService } from '../../modules/identity/identity.service';
+import { MobileAuthService } from '../../modules/identity/mobile-auth.service';
 import { OtpService } from '../../modules/identity/otp.service';
 import type { AuthenticatedUser, ContextualRequest } from '../http/request-context';
 import { IS_PUBLIC, OTP_EXEMPT } from './decorators';
@@ -30,6 +31,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly identity: IdentityService,
     private readonly otp: OtpService,
+    private readonly mobileAuth: MobileAuthService,
     @Inject(ENV) private readonly env: Env,
   ) {
     this.jwks = createRemoteJWKSet(new URL(env.ONEAUTH_JWKS_URL));
@@ -61,6 +63,7 @@ export class JwtAuthGuard implements CanActivate {
     let mobile: string | null = null;
     let impersonation: AuthenticatedUser['impersonation'];
     let oneAuth = false;
+    let mobileSessionId: string | undefined;
 
     if (token.startsWith('dev:')) {
       if (!this.env.AUTH_DEV_BYPASS || this.env.NODE_ENV === 'production') {
@@ -114,6 +117,15 @@ export class JwtAuthGuard implements CanActivate {
       const amr = Array.isArray(payload.amr) ? (payload.amr as string[]) : [];
       mfa = amr.includes('mfa');
       authTime = typeof payload.iat === 'number' ? payload.iat : undefined;
+      // the mobile app's tokens (and web pages it opened) name the phone's session: a phone signed out is refused
+      if (typeof payload.msid === 'string') {
+        if (!(await this.mobileAuth.isOpen(payload.msid)))
+          throw new UnauthorizedException({
+            type: 'auth.mobile_signed_out',
+            detail: 'This phone is signed out. Sign in again.',
+          });
+        mobileSessionId = payload.msid;
+      }
     } else if (token.startsWith('compat.')) {
       // Session token issued by the compatibility handshake (S4-05): HS256, short-lived, carries the school.
       const payload = await this.verifyCompat(token.slice('compat.'.length));
@@ -160,6 +172,9 @@ export class JwtAuthGuard implements CanActivate {
 
     const user: AuthenticatedUser = { ...resolved, mfa, dev };
     if (authTime !== undefined) user.authTime = authTime;
+    if (mobileSessionId) user.mobileSessionId = mobileSessionId;
+    // the profile the app acts as (a teacher who is also a parent): honoured where the person is a family member
+    if (req.headers['x-acting-as'] === 'family') user.actingAs = 'family';
     if (impersonation) user.impersonation = impersonation;
 
     req.ctx = {

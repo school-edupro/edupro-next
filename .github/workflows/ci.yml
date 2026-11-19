@@ -90,6 +90,29 @@ jobs:
         run: pnpm audit --audit-level=high
       - name: Build
         run: pnpm build
+      # the mobile app's typed client, texts and theme are generated: stale ones fail here (docs/design/89)
+      - name: Mobile app generated sources up to date
+        run: pnpm --filter @edupro/api openapi:export:dist && node scripts/mobile/generate.mjs --check
+
+  mobile:
+    name: Mobile app (Flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+      - name: Packages
+        working-directory: apps/mobile
+        run: flutter pub get
+      - name: Analyze
+        working-directory: apps/mobile
+        run: flutter analyze
+      - name: Tests
+        working-directory: apps/mobile
+        run: flutter test
 
   admin-e2e:
     name: Admin smoke (Playwright)

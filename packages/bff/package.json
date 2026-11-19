@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@edupro/menus": "workspace:*",
     "jose": "^5.9.3",
     "openid-client": "^6.1.3"
   },

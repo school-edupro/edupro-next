@@ -57,9 +57,21 @@ export class ViewerService {
           WHERE user_id = app.current_user_id() AND school_id = app.current_school_id() AND status = 'active' AND deleted_at IS NULL
           ORDER BY CASE person_type WHEN 'employee' THEN 0 WHEN 'external' THEN 1 ELSE 2 END LIMIT 1`,
       );
+      // a teacher who is also a parent here, acting as the parent (X-Acting-As: family), reads as the family
+      const family =
+        ctx.user.actingAs === 'family'
+          ? (
+              await c.query(
+                `SELECT 1 FROM user_school_memberships
+                  WHERE user_id = app.current_user_id() AND school_id = app.current_school_id()
+                    AND person_type IN ('guardian', 'student') AND status = 'active' AND deleted_at IS NULL`,
+              )
+            ).rowCount
+          : 0;
       const staff =
-        emp.rows[0] !== undefined ||
-        ['employee', 'external'].includes(membership.rows[0]?.person_type ?? '');
+        !family &&
+        (emp.rows[0] !== undefined ||
+          ['employee', 'external'].includes(membership.rows[0]?.person_type ?? ''));
       if (staff) {
         const allowed = await this.scopes.filter(tenant, permission, 'class_section');
         return {

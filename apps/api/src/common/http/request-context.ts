@@ -22,6 +22,13 @@ export interface AuthenticatedUser {
   authTime?: number;
   /** Development bypass token was used */
   dev: boolean;
+  /** The mobile app's session the token belongs to (docs/design/89): signed out phones are refused. */
+  mobileSessionId?: string;
+  /**
+   * The profile the request acts as (header `X-Acting-As`, docs/design/89): a teacher who is also a parent in
+   * the school reads as the parent with `family`. Honoured only when the person has that membership.
+   */
+  actingAs?: 'family';
   /** Present when the request runs under an impersonation session (S5-02). */
   impersonation?: {
     sessionId: string;

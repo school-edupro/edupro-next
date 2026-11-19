@@ -13,6 +13,7 @@
     "test:e2e": "jest --config test/jest-e2e.config.cjs",
     "test:permissions": "jest --config test/jest-e2e.config.cjs --testPathPattern permission-coverage",
     "openapi:export": "ts-node -r tsconfig-paths/register src/openapi-export.ts",
+    "openapi:export:dist": "node dist/openapi-export.js",
     "test:redteam": "jest --config test/jest-e2e.config.cjs --testPathPattern redteam",
     "test:eval": "jest --config test/jest-e2e.config.cjs --testPathPattern assistant-eval",
     "eval:build": "tsx scripts/build-eval.ts"
@@ -26,6 +27,7 @@
     "@edupro/ai": "workspace:*",
     "@edupro/db": "workspace:*",
     "@edupro/etl": "workspace:*",
+    "@edupro/menus": "workspace:*",
     "@edupro/payroll-engine": "workspace:*",
     "@edupro/storage": "workspace:*",
     "@fastify/cors": "^10.0.1",

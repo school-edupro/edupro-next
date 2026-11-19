@@ -65,15 +65,20 @@ export class PushService {
 
   async register(
     ctx: RequestContext,
-    dto: { token: string; app: 'parent' | 'teacher'; userAgent?: string },
+    dto: {
+      token: string;
+      app: 'parent' | 'teacher' | 'mobile';
+      platform?: 'android' | 'ios' | 'web' | undefined;
+      userAgent?: string | undefined;
+    },
   ) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await c.query(
-        `INSERT INTO push_devices (school_id, user_id, app, token, user_agent)
-         VALUES (app.current_school_id(), app.current_user_id(), $1, $2, $3)
+        `INSERT INTO push_devices (school_id, user_id, app, token, user_agent, platform)
+         VALUES (app.current_school_id(), app.current_user_id(), $1, $2, $3, $4)
          ON CONFLICT (school_id, token) DO UPDATE SET user_id = EXCLUDED.user_id, app = EXCLUDED.app,
-           user_agent = EXCLUDED.user_agent, last_seen = now(), revoked_at = NULL`,
-        [dto.app, dto.token, dto.userAgent ?? null],
+           user_agent = EXCLUDED.user_agent, platform = EXCLUDED.platform, last_seen = now(), revoked_at = NULL`,
+        [dto.app, dto.token, dto.userAgent ?? null, dto.platform ?? null],
       );
       const n = await c.query<{ n: number }>(
         `SELECT count(*)::int AS n FROM push_devices WHERE user_id = app.current_user_id() AND revoked_at IS NULL`,
@@ -113,8 +118,10 @@ export class PushService {
   }
 
   /**
-   * Queues one push per active device of the users when the event is switched on and Firebase is set
-   * up. Returns how many pushes were queued. Never throws for a business transaction's sake.
+   * Queues one push per active device of the users when the event is switched on: the web apps' devices when the
+   * school's Firebase is set up, the mobile app's phones always (the EduPro project sends them, docs/design/89) —
+   * unless the school switched push off. Returns how many pushes were queued. Never throws for a business
+   * transaction's sake.
    */
   async send(
     c: PoolClient,
@@ -135,9 +142,12 @@ export class PushService {
       const p = await c.query<{ active: boolean; secret: string | null }>(
         `SELECT active, secret FROM comms_providers WHERE channel = 'push' AND provider = 'fcm'`,
       );
-      if (!p.rows[0]?.active || !p.rows[0].secret) return 0;
-      const keys = JSON.parse(decryptField(p.rows[0].secret) ?? '{}') as Record<string, string>;
-      if (!keys.serviceAccount) return 0;
+      // a school that switched push off sends none; without its own Firebase only the mobile app's phones get one
+      if (p.rows[0] && !p.rows[0].active) return 0;
+      const keys = p.rows[0]?.secret
+        ? (JSON.parse(decryptField(p.rows[0].secret) ?? '{}') as Record<string, string>)
+        : {};
+      const web = Boolean(keys.serviceAccount);
       if (input.event) {
         const policy = await this.settings.policy(c);
         if (!policy.pushEvents.includes(input.event)) return 0;
@@ -152,17 +162,20 @@ export class PushService {
         userIds = userIds.filter((u) => !done.has(u));
         if (!userIds.length) return 0;
       }
-      const devices = await c.query<{ user_id: string; token: string }>(
-        `SELECT user_id::text, token FROM push_devices WHERE user_id = ANY($1::bigint[]) AND revoked_at IS NULL`,
-        [userIds],
+      const devices = await c.query<{ user_id: string; token: string; app: string }>(
+        `SELECT user_id::text, token, app FROM push_devices
+          WHERE user_id = ANY($1::bigint[]) AND revoked_at IS NULL AND (app = 'mobile' OR $2::boolean)`,
+        [userIds, web],
       );
       if (!devices.rows.length) return 0;
       const tenant = requireTenant(ctx);
       const ids = (
         await c.query<{ id: string }>(
           `INSERT INTO comms_messages (school_id, channel, recipient_user_id, recipient_address, subject, body, variables, request_id, created_by)
-           SELECT app.current_school_id(), 'push', x.user_id, x.token, $3, $4, $5::jsonb, app.current_request_id(), app.current_user_id()
-             FROM unnest($1::bigint[], $2::text[]) AS x(user_id, token)
+           SELECT app.current_school_id(), 'push', x.user_id, x.token, $3, $4,
+                  $5::jsonb || CASE WHEN x.app = 'mobile' THEN jsonb_build_object('app', 'mobile') ELSE '{}'::jsonb END,
+                  app.current_request_id(), app.current_user_id()
+             FROM unnest($1::bigint[], $2::text[], $6::text[]) AS x(user_id, token, app)
            RETURNING id::text`,
           [
             devices.rows.map((d) => d.user_id),
@@ -170,6 +183,7 @@ export class PushService {
             input.title.slice(0, 200),
             input.body.slice(0, 1000),
             JSON.stringify({ link: input.link, event: input.event }),
+            devices.rows.map((d) => d.app),
           ],
         )
       ).rows.map((x) => x.id);

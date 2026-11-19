@@ -113,6 +113,13 @@ describe('permission coverage', () => {
       'GpsController.ingest (transport/gps)',
       'HealthController.health (health)',
       'MetricsController.metricsText (metrics)',
+      // the mobile app (docs/design/89): verify checks the one-time code as OtpController.verify does; refresh
+      // takes a 256-bit refresh token kept only as a keyed hash, bound to the device, rotated at each use (an old
+      // one again signs the phone out); redeem turns a 60-second single-use link, bound to its web app and the
+      // phone's open session, into that web app's session
+      'MobileAuthController.redeem (auth/mobile)',
+      'MobileAuthController.refresh (auth/mobile)',
+      'MobileAuthController.verify (auth/mobile)',
       // sign-in with an emailed code (0136): before any session exists. start answers the same for an unknown
       // login; verify checks a 6-digit code bound to its challenge (5 tries, 10 minutes, one per 30 s, five in
       // 15 minutes per user, in the database); offered says only whether any school uses it.

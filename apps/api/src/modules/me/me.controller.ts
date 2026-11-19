@@ -1,4 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { familyIcon, familyScreens, screenIcon, staffScreens } from '@edupro/menus';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant } from '../../common/http/request-context';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -6,6 +9,18 @@ import { AuthenticatedOnly, TenantOptional } from '../../common/auth/decorators'
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { AccessService } from '../access/access.service';
 import { DbService } from '../../common/db/db.service';
+import { ProfilesService } from './profiles.service';
+
+/** How and where a sign-in happened (the web apps' BFF and the mobile app send it). */
+const MeSignInSchema = z
+  .object({
+    method: z.enum(['oidc', 'otp', 'dev']).optional(),
+    app: z.enum(['admin', 'parent', 'teacher', 'mobile']).optional(),
+    userAgent: z.string().max(1000).optional(),
+    ip: z.string().max(100).optional(),
+  })
+  .partial();
+class MeSignInDto extends createZodDto(MeSignInSchema) {}
 
 interface YearSummary {
   id: string;
@@ -27,7 +42,64 @@ export class MeController {
   constructor(
     private readonly access: AccessService,
     private readonly db: DbService,
+    private readonly profilesOf: ProfilesService,
   ) {}
+
+  /** The mobile app's profiles (docs/design/89): each school as staff, as the parent of each child, as a student. */
+  @Get('profiles')
+  @ApiOperation({
+    summary: 'My profiles for the mobile app: staff of a school, parent of each child, student',
+  })
+  @AuthenticatedOnly()
+  @TenantOptional()
+  profiles(@ReqCtx() ctx: RequestContext) {
+    return this.profilesOf.profiles(ctx);
+  }
+
+  /**
+   * The mobile app's menu for a profile (docs/design/89): the same screens the staff or the parent / student web
+   * app shows this person in the school (`X-School-Id`), each with the web page it opens.
+   */
+  @Get('menu')
+  @ApiOperation({
+    summary: "My menu in the school for a profile kind (the web apps' screens, by my rights)",
+  })
+  @AuthenticatedOnly()
+  async menu(@ReqCtx() ctx: RequestContext, @Query('kind') kind?: string) {
+    const tenant = requireTenant(ctx);
+    const permissions = [...(await this.access.effectivePermissions(tenant))];
+    if (kind === 'staff')
+      return {
+        app: 'teacher',
+        groups: staffScreens(permissions).map((g) => ({
+          id: g.id,
+          label: g.label,
+          icon: g.icon,
+          items: g.items.map((i) => ({
+            href: i.href,
+            label: i.label,
+            help: i.help,
+            icon: screenIcon(i.href, g.icon),
+          })),
+        })),
+      };
+    if (kind === 'parent' || kind === 'student')
+      return {
+        app: 'parent',
+        groups: familyScreens(kind, permissions).map((g) => ({
+          id: g.section,
+          label: g.label[kind],
+          icon: g.icon,
+          items: g.items.map((i) => ({
+            href: i.href,
+            label: i.label,
+            help: null,
+            icon: familyIcon(i.href, g.icon),
+          })),
+        })),
+      };
+    throw new DomainError('validation-failed', 'kind is staff, parent or student', { status: 400 });
+  }
 
   @Get()
   @ApiOperation({
@@ -80,12 +152,9 @@ export class MeController {
   @HttpCode(204)
   @AuthenticatedOnly()
   @TenantOptional()
-  async signIn(
-    @ReqCtx() ctx: RequestContext,
-    @Body() body: { method?: string; app?: string; userAgent?: string; ip?: string },
-  ) {
+  async signIn(@ReqCtx() ctx: RequestContext, @Body() body: MeSignInDto) {
     const method = body?.method === 'dev' ? 'dev' : body?.method === 'otp' ? 'otp' : 'oidc';
-    const app = ['admin', 'parent', 'teacher'].includes(String(body?.app))
+    const app = ['admin', 'parent', 'teacher', 'mobile'].includes(String(body?.app))
       ? String(body?.app)
       : 'admin';
     const ip =

@@ -147,6 +147,9 @@ importers:
       '@edupro/etl':
         specifier: workspace:*
         version: link:../../packages/etl
+      '@edupro/menus':
+        specifier: workspace:*
+        version: link:../../packages/menus
       '@edupro/payroll-engine':
         specifier: workspace:*
         version: link:../../packages/payroll-engine
@@ -286,6 +289,9 @@ importers:
       '@edupro/bff':
         specifier: workspace:*
         version: link:../../packages/bff
+      '@edupro/menus':
+        specifier: workspace:*
+        version: link:../../packages/menus
       '@edupro/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -520,6 +526,9 @@ importers:
 
   packages/bff:
     dependencies:
+      '@edupro/menus':
+        specifier: workspace:*
+        version: link:../menus
       jose:
         specifier: ^5.9.3
         version: 5.10.0
@@ -628,6 +637,21 @@ importers:
       vitest:
         specifier: ^4.1.12
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.20.4)(@vitest/coverage-v8@4.1.12)(vite@6.4.5(@types/node@22.20.4)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/menus:
+    devDependencies:
+      '@edupro/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^22.7.4
+        version: 22.20.4
+      eslint:
+        specifier: ^9.12.0
+        version: 9.39.5
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
 
   packages/payroll-engine:
     devDependencies:
@@ -13549,9 +13573,9 @@ snapshots:
     dependencies:
       acorn: 8.18.0
 
-  acorn-jsx@5.3.2(acorn@8.18.0):
+  acorn-jsx@5.3.2(acorn@8.19.0):
     dependencies:
-      acorn: 8.18.0
+      acorn: 8.19.0
 
   acorn-walk@8.3.5:
     dependencies:
@@ -14898,7 +14922,7 @@ snapshots:
   eslint@9.39.5:
     dependencies:
       '@eslint-community/eslint-utils': 4.10.1(eslint@9.39.5)
-      '@eslint-community/regexpp': 4.12.2
+      '@eslint-community/regexpp': 4.12.3
       '@eslint/config-array': 0.21.2
       '@eslint/config-helpers': 0.4.2
       '@eslint/core': 0.17.0
@@ -14908,7 +14932,7 @@ snapshots:
       '@humanfs/node': 0.16.8
       '@humanwhocodes/module-importer': 1.0.1
       '@humanwhocodes/retry': 0.4.3
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       ajv: 6.15.0
       chalk: 4.1.2
       cross-spawn: 7.0.6
@@ -14936,8 +14960,8 @@ snapshots:
 
   espree@10.4.0:
     dependencies:
-      acorn: 8.18.0
-      acorn-jsx: 5.3.2(acorn@8.18.0)
+      acorn: 8.19.0
+      acorn-jsx: 5.3.2(acorn@8.19.0)
       eslint-visitor-keys: 4.2.1
 
   esprima@4.0.1: {}
@@ -18296,7 +18320,7 @@ snapshots:
   terser@5.51.2:
     dependencies:
       '@jridgewell/source-map': 0.3.11
-      acorn: 8.18.0
+      acorn: 8.19.0
       commander: 2.20.3
       source-map-support: 0.5.21
 

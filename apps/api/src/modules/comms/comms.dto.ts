@@ -463,7 +463,9 @@ export class ApproversDto extends createZodDto(ApproversSchema) {}
 
 export const PushDeviceSchema = z.object({
   token: z.string().trim().min(20).max(4096),
-  app: z.enum(['parent', 'teacher']),
+  app: z.enum(['parent', 'teacher', 'mobile']),
+  /** the mobile app's phone (docs/design/89) */
+  platform: z.enum(['android', 'ios', 'web']).optional(),
   userAgent: z.string().trim().max(300).optional(),
 });
 export class PushDeviceDto extends createZodDto(PushDeviceSchema) {}

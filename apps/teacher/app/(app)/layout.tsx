@@ -18,6 +18,13 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       redirect('/login?error=session-expired');
     throw error;
   }
+  // opened inside the mobile app: the app has its own header, menu and approvals (docs/design/89)
+  if ((await bff.session.read())?.mobile)
+    return (
+      <main id="main" className="ep-main">
+        {children}
+      </main>
+    );
   // the header badge and what waits on this person; best effort, never blocks the page
   const [
     unread,

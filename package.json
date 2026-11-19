@@ -16,6 +16,7 @@
     "db:migrate": "pnpm --filter @edupro/db migrate",
     "db:test": "pnpm --filter @edupro/db test",
     "api:openapi": "pnpm --filter @edupro/api openapi:export",
+    "mobile:gen": "node scripts/mobile/generate.mjs",
     "client:generate": "pnpm --filter @edupro/api-client generate",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,yml,yaml,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json,yml,yaml,css}\"",

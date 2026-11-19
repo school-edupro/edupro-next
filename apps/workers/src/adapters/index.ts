@@ -1,11 +1,14 @@
+import { readFileSync } from 'node:fs';
 import type { WorkerEnv } from '../env';
 import type { Logger } from '../logger';
 import type { Channel, ChannelAdapter } from './adapter';
 import { ConsoleAdapter } from './console.adapter';
+import { FcmAdapter, type ServiceAccount } from './fcm.adapter';
 import { HttpAdapter } from './http.adapter';
 import { SmtpAdapter } from './smtp.adapter';
 
-export type Adapters = Record<Channel, ChannelAdapter>;
+/** `mobilePush`: the mobile app's pushes, through the one EduPro Firebase project (docs/design/89) */
+export type Adapters = Record<Channel, ChannelAdapter> & { mobilePush?: ChannelAdapter };
 
 export function buildAdapters(env: WorkerEnv, log: Logger): Adapters {
   const console_ = new ConsoleAdapter(log);
@@ -13,7 +16,15 @@ export function buildAdapters(env: WorkerEnv, log: Logger): Adapters {
     if (!url) throw new Error(`${channel.toUpperCase()}_HTTP_URL is required for the http adapter`);
     return new HttpAdapter(channel, url, token);
   };
+  const mobilePush = env.MOBILE_FCM_SERVICE_ACCOUNT_FILE
+    ? new FcmAdapter(
+        JSON.parse(readFileSync(env.MOBILE_FCM_SERVICE_ACCOUNT_FILE, 'utf8')) as ServiceAccount,
+        fetch,
+        'mobile',
+      )
+    : undefined;
   return {
+    ...(mobilePush ? { mobilePush } : {}),
     sms:
       env.NOTIFY_SMS_ADAPTER === 'http'
         ? http('sms', env.SMS_HTTP_URL, env.SMS_HTTP_TOKEN)

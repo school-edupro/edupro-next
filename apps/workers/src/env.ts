@@ -33,6 +33,8 @@ const EnvSchema = z.object({
   WHATSAPP_HTTP_TOKEN: z.string().optional(),
   PUSH_HTTP_URL: z.string().url().optional(),
   PUSH_HTTP_TOKEN: z.string().optional(),
+  /** the EduPro Firebase project's service account (JSON file) for the mobile app's pushes (docs/design/89) */
+  MOBILE_FCM_SERVICE_ACCOUNT_FILE: z.string().optional(),
   // Exports
   EXPORT_PDF_ENGINE: z.enum(['playwright', 'none']).default('playwright'),
   EXPORTS_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(7),

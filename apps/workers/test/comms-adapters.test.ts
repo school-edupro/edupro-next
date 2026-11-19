@@ -246,6 +246,47 @@ describe('FCM adapter', () => {
       },
     });
   });
+  it('the mobile app: Android and iOS settings, the link as data, no web settings', async () => {
+    const calls: Array<{ url: string; body: string }> = [];
+    const fn = (async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), body: String(init?.body ?? '') });
+      if (String(url).includes('oauth2'))
+        return new Response(JSON.stringify({ access_token: 'ya29.y', expires_in: 3600 }), {
+          status: 200,
+        });
+      return new Response(JSON.stringify({ name: 'projects/edupro-app/messages/2' }), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const a = new FcmAdapter(
+      {
+        ...account,
+        project_id: 'edupro-app',
+        client_email: `app-${String(Date.now())}@edupro-app.iam.gserviceaccount.com`,
+      },
+      fn,
+      'mobile',
+    );
+    await a.send({
+      ...base,
+      channel: 'push',
+      to: 'phone-token',
+      subject: 'Leave to approve',
+      body: 'Asha Rao asked for 2 days',
+      link: '/approvals',
+    });
+    const sent = JSON.parse(calls.at(-1)!.body) as { message: Record<string, unknown> };
+    expect(calls.at(-1)!.url).toBe(
+      'https://fcm.googleapis.com/v1/projects/edupro-app/messages:send',
+    );
+    expect(sent.message).toMatchObject({
+      token: 'phone-token',
+      data: { link: '/approvals' },
+      android: { priority: 'high' },
+      apns: { payload: { aps: { sound: 'default' } } },
+    });
+    expect(sent.message.webpush).toBeUndefined();
+  });
   it('reports a dead device token so it can be removed', async () => {
     const fn = (async (url: string | URL) =>
       String(url).includes('oauth2')

@@ -20,6 +20,8 @@ export interface JobLike<T> {
 interface MessageDbRow {
   id: string;
   channel: Channel;
+  /** 'mobile': a push to the mobile app's phone (docs/design/89) */
+  push_app: string | null;
   recipient_address: string;
   subject: string | null;
   body: string;
@@ -156,6 +158,7 @@ export function notificationProcessor(
     const row = await db.withTenant(tenant, async (c) => {
       const r = await c.query<MessageDbRow>(
         `SELECT m.id::text, m.channel, m.recipient_address, m.subject, m.body, m.status, m.attempts, m.format, m.params, m.attachments, m.variables->>'link' AS link,
+                m.variables->>'app' AS push_app,
                 m.reply_to,
                 COALESCE(m.expires_at < now(), false) AS expired,
                 (SELECT s.status::text FROM schools s WHERE s.id = m.school_id) AS school_status,
@@ -210,8 +213,11 @@ export function notificationProcessor(
     let adapter: ChannelAdapter = adapters[row.channel];
     try {
       if (row.provider && !row.provider.active) throw new SwitchedOff(row.channel);
+      // the mobile app's phones: the EduPro project (console in development), not the school's own Firebase
       adapter =
-        schoolAdapter(envelope.schoolId, row.channel, row.provider) ?? adapters[row.channel];
+        row.channel === 'push' && row.push_app === 'mobile'
+          ? (adapters.mobilePush ?? adapters.push)
+          : (schoolAdapter(envelope.schoolId, row.channel, row.provider) ?? adapters[row.channel]);
       const attachments: NonNullable<OutboundMessage['attachments']> = [];
       if (row.attachments?.length && storage && row.channel !== 'sms') {
         const files = await db.withTenant(

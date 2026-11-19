@@ -29,6 +29,8 @@ export interface Session {
   academicYearId?: string;
   /** Opened by the school as this person (0183): the banner shows and "End" closes it. */
   viewAs?: boolean;
+  /** Opened inside the mobile app (docs/design/89): the page shows without the app's own header and menu. */
+  mobile?: boolean;
 }
 
 export interface Me {
@@ -203,6 +205,8 @@ export function createBff(options: BffOptions) {
         headers.set('Content-Type', 'application/json');
       if (s.schoolId) headers.set('X-School-Id', s.schoolId);
       if (s.academicYearId) headers.set('X-Academic-Year-Id', s.academicYearId);
+      // the parent portal is always the family's view (a teacher who is also a parent here reads as the parent)
+      if (appName === 'parent') headers.set('X-Acting-As', 'family');
       headers.set('X-Request-Id', crypto.randomUUID());
       const res = await fetch(`${env.apiBaseUrl}/api/v1${path}`, {
         ...init,
@@ -228,6 +232,7 @@ export function createBff(options: BffOptions) {
       });
       if (s.schoolId) headers.set('X-School-Id', s.schoolId);
       if (s.academicYearId) headers.set('X-Academic-Year-Id', s.academicYearId);
+      if (appName === 'parent') headers.set('X-Acting-As', 'family');
       return fetch(`${env.apiBaseUrl}/api/v1${path}`, { headers, cache: 'no-store' });
     },
   };
@@ -341,6 +346,45 @@ export function createBff(options: BffOptions) {
           viewAs: true,
         });
         return NextResponse.redirect(new URL(home, req.url));
+      } catch {
+        return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+      }
+    },
+    /**
+     * GET /api/auth/mobile?code=… : a page opened inside the mobile app (docs/design/89). The one-time code is
+     * turned in at the API for this app's session (it ends with the phone's); the page shows without the app's
+     * own header and menu.
+     */
+    async mobile(req: NextRequest) {
+      const code = req.nextUrl.searchParams.get('code') ?? '';
+      if (appName === 'admin' || !/^[A-Za-z0-9_-]{40,100}$/.test(code))
+        return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+      try {
+        const r = await fetch(`${env.apiBaseUrl}/api/v1/auth/mobile/web-handoff/redeem`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code, app: appName }),
+          signal: AbortSignal.timeout(5000),
+          cache: 'no-store',
+        });
+        if (!r.ok) return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+        const t = (await r.json()) as {
+          accessToken: string;
+          sub: string;
+          displayName: string;
+          schoolId: string | null;
+          expiresAt: number;
+          to: string;
+        };
+        await session.write({
+          sub: t.sub,
+          accessToken: t.accessToken,
+          expiresAt: t.expiresAt,
+          displayName: t.displayName,
+          ...(t.schoolId ? { schoolId: t.schoolId } : {}),
+          mobile: true,
+        });
+        return NextResponse.redirect(new URL(safeReturn(t.to), req.url));
       } catch {
         return NextResponse.redirect(new URL('/login?error=handoff', req.url));
       }
