@@ -778,3 +778,17 @@ stoppage (type to search), drop at another stoppage, from / to month, the slab a
 the website, a note. Calls: `attendance/bus/mine`, `transport/requests/mine` (+ `/options`, `/:id/cancel`, POST),
 `transport/gps/mine`, and the month's bus roll. The server's English-only labels are rebuilt in the app so Hindi
 works.
+
+## As built — Hostel as on the website (20 Nov 2026)
+
+**Hostel in the app** (`family/hostel.dart`, menu `/hostel`): the hostel and four figures (room / bed, where the
+child is now, approved visitors, open complaints); the summary (since when, room-mates, back by — red when late —,
+last roll-call, next home leave or outing, wardens with Call and WhatsApp, today's meals, quick actions); six parts:
+**Leave and outings** (passes with status and lateness, earlier folded), **Visitors** (parents on record, added
+visitors with photo; Add — name, relation, mobile, a photo under 300 KB sent as the website does —; Remove, asked
+first), **Mess** (the week back and forward, diet and allergies, each day folded but today, specials; rate the meals
+with five stars and a comment), **Complaints** (raise with a type-to-search head; open ones, closed folded with the
+resolution), **From the hostel** (incidents and action taken), **Leaving the hostel** (requests and withdrawals,
+Take back asked first, the clearance certificate View / Download, the ask form when nothing waits); a child who
+does not board or has left sees that, with the certificate. **Gate passes** (ask for home leave or an outing, open a
+pass) still open the website's gate-pass pages through the app's web route: the app has no gate-pass screen yet.

@@ -9,6 +9,7 @@ import '../theme/tokens.g.dart';
 import '../family/teachers.dart';
 import '../family/documents.dart';
 import '../family/directory.dart';
+import '../family/hostel.dart';
 import '../family/library.dart';
 import '../family/transport.dart';
 import '../family/health.dart';
@@ -105,6 +106,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/library' => LibraryScreen(profile: p),
     // the child's bus: route, live position, requests and applying: no web page
     '/transport' => TransportScreen(profile: p),
+    // the hostel: summary, leave and outings, visitors, mess, complaints, leaving (gate passes still on the web)
+    '/hostel' => HostelScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };
