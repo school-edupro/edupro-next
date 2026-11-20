@@ -10,6 +10,7 @@ import '../family/teachers.dart';
 import '../family/documents.dart';
 import '../family/directory.dart';
 import '../family/library.dart';
+import '../family/transport.dart';
 import '../family/health.dart';
 import '../family/certificates.dart';
 import '../family/academics.dart';
@@ -102,6 +103,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/directory' => DirectoryScreen(profile: p),
     // the child's books, reservations, history and the catalogue: no web page
     '/library' => LibraryScreen(profile: p),
+    // the child's bus: route, live position, requests and applying: no web page
+    '/transport' => TransportScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };

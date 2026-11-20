@@ -763,3 +763,18 @@ status, a search, Excel (download) and PDF (View / Download) of the filtered row
 small bars and the most read; the digital library (http/https links only). Calls: `library/portal/borrowers/student/
 :id`, `…/history` (and `/export?format=xlsx|pdf`), `library/portal/catalogue` (sent with its query by the transport:
 the generated call has none), `library/portal/reservations` and `/:id/cancel`, `library/mine/digital`.
+
+## As built — School bus as on the website (20 Nov 2026)
+
+**School bus in the app, with no web page** (`family/transport.dart`, menu `/transport`): six figures (route, bus,
+monthly charge, valid until, trips this month, bus taps today); **Live bus** (route, stop and pick-up time, a
+replacement bus with its driver to call, the bus number, last seen, speed, how far from the child's stop, Open in
+maps; or no position yet / runs from / no bus mapped; left out when the school does not share it); the **transport
+card** (service, slab, charge, valid until, pick and drop lines, the in-charge to call, the coming period, the
+request waiting with Cancel, asked first; Apply for transport or Change or stop when the school takes family
+requests); transport history and the requests folded; **today on the bus** (morning and afternoon, today's taps,
+the week folded). **Apply** (`BusApplyForm`): change or withdrawal for a child who rides, service, route then
+stoppage (type to search), drop at another stoppage, from / to month, the slab and monthly charge worked out as on
+the website, a note. Calls: `attendance/bus/mine`, `transport/requests/mine` (+ `/options`, `/:id/cancel`, POST),
+`transport/gps/mine`, and the month's bus roll. The server's English-only labels are rebuilt in the app so Hindi
+works.
