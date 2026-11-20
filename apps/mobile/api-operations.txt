@@ -169,3 +169,9 @@ LibraryController_portalReserve
 LibraryController_portalCancel
 LibraryController_mine
 LibraryController_myDigital
+GatePassController_mine
+GatePassController_mineApply
+GatePassController_mineOptions
+GatePassController_mineGet
+GatePassController_mineCardJson !file
+GatePassController_mineCancel

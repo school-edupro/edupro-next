@@ -4,6 +4,7 @@ import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app_services.dart';
 import 'package:edupro/family/common.dart';
 import 'package:edupro/family/data.dart';
+import 'package:edupro/family/gate_pass.dart';
 import 'package:edupro/family/hostel.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
@@ -339,11 +340,10 @@ class Hostel {
   }
 }
 
-/// A screen on test: the calls it made, the website pages it opened, the calls and chats it started.
+/// A screen on test: the calls it made, the calls and chats it started.
 class Run {
   Run(this.t);
   final FakeTransport t;
-  final web = <String>[];
   final launched = <String>[];
 
   /// what the phone's camera or gallery gives
@@ -361,13 +361,15 @@ Future<Run> pumpHostel(WidgetTester tester, Hostel h, {bool hindi = false}) asyn
       overrides: [
         transportProvider.overrideWithValue(run.t),
         hostelPhotoPickerProvider.overrideWithValue((context, s) async => run.photo),
-        hostelWebProvider.overrideWithValue((context, p, to, title) async => run.web.add(to)),
         hostelLaunchProvider.overrideWithValue((uri) async => run.launched.add('$uri')),
       ],
       child: MaterialApp(
         theme: eduproTheme(brightness: Brightness.light, webFonts: false),
         darkTheme: eduproTheme(brightness: Brightness.dark, webFonts: false),
-        home: FamilyPage(title: S(hindi).hostelTitle, child: const HostelScreen(profile: kid)),
+        home: FamilyPage(
+          title: S(hindi).hostelTitle,
+          child: const HostelScreen(profile: kid),
+        ),
       ),
     ),
   );
@@ -415,75 +417,85 @@ Future<void> tapIn(WidgetTester tester, Finder f) async {
 void main() {
   const s = S(false);
 
-  testWidgets('the main view shows the website\'s summary: hostel, figures, room, warden, meals, leave', (
-    tester,
-  ) async {
-    await tall(tester);
-    final run = await pumpHostel(tester, Hostel());
-    expect(tester.takeException(), isNull);
-    expect(find.text('Tagore House'), findsOneWidget);
-    expect(find.text(s.hostelIntro), findsOneWidget);
-    // the figures, an even number: room, now, approved visitors (two on record, one approved), open complaints
-    Finder fig(String x) =>
-        find.descendant(of: find.byKey(const Key('hostelFigures')), matching: find.text(x));
-    expect(find.byType(FigureTile), findsNWidgets(4));
-    expect(fig('A · 12 / B'), findsOneWidget);
-    expect(fig('In the hostel'), findsOneWidget);
-    expect(fig('3'), findsOneWidget);
-    expect(fig('1'), findsOneWidget);
-    // the summary: since when, with whom, the last roll-call, the next leave
-    expect(find.text('since ${s.dayShort('2026-04-02')} · 2 room-mates'), findsOneWidget);
-    expect(find.text('Last roll-call: Present · Night ${s.dayShort(day(-1))}'), findsOneWidget);
-    expect(find.text('Next home leave: ${s.dayShort(day(2))} 16:00'), findsOneWidget);
-    // the wardens: the head first; a call and WhatsApp from the phone when there is a mobile
-    expect(find.text('Meena Rao (head)'), findsOneWidget);
-    expect(find.text('Ravi Kumar'), findsOneWidget);
-    expect(find.byKey(const Key('callWarden-1')), findsNothing);
-    await tester.tap(find.byKey(const Key('callWarden-0')));
-    await tester.tap(find.byKey(const Key('whatsappWarden-0')));
-    expect(run.launched, ['tel:98765%2043210', 'https://wa.me/919876543210']);
-    // today's meals, the special one marked
-    expect(find.text('Breakfast · 07:30'), findsOneWidget);
-    expect(find.text('Poha, milk'), findsOneWidget);
-    expect(find.text('Special today'), findsOneWidget);
-    // Leave and outings first: the approved pass, the one back folded
-    expect(find.byKey(const Key('hostelTab-leave')), findsOneWidget);
-    final pass = find.byKey(const Key('pass-501'));
-    expect(
-      find.descendant(of: pass, matching: find.text('Home leave · ${s.dayShort(day(2))} 16:00')),
-      findsOneWidget,
-    );
-    expect(find.descendant(of: pass, matching: find.text('Approved')), findsOneWidget);
-    expect(find.descendant(of: pass, matching: find.text('Cousin’s wedding')), findsOneWidget);
-    expect(find.byKey(const Key('pass-480')), findsNothing);
-    await tapIn(tester, find.byKey(const Key('earlierPasses')));
-    expect(find.byKey(const Key('pass-480')), findsOneWidget);
-    expect(find.text('Late 25 min'), findsOneWidget);
-    expect(find.text('Back'), findsOneWidget);
-    // home leave, an outing and a pass open the website's gate-pass pages (no native screen yet)
-    await tapIn(tester, find.byKey(const Key('askHomeLeave')));
-    await tapIn(tester, find.byKey(const Key('askOuting2')));
-    await tapIn(tester, find.byKey(const Key('openPass-501')));
-    expect(run.web, [
-      '/gate-passes/new?student=41&kind=hostel_home',
-      '/gate-passes/new?student=41&kind=hostel_outing',
-      '/gate-passes/501',
-    ]);
-    // the website's calls, the menu of this week without a week
-    final menu = run.calls('GET', '/hostel/mine/menu').first;
-    expect(menu.query, {'studentId': '41'});
-    for (final p in [
-      '/hostel/mine/exit',
-      '/hostel/mine/summary',
-      '/hostel/mine/visitors',
-      '/hostel/mine/complaints',
-      '/hostel/mine/incidents',
-      '/hostel/mine/feedback',
-    ]) {
-      expect(run.calls('GET', p).first.query, {'studentId': '41'}, reason: p);
-    }
-    expect(run.calls('GET', '/hostel/mine/complaint-heads'), isNotEmpty);
-  });
+  testWidgets(
+    'the main view shows the website\'s summary: hostel, figures, room, warden, meals, leave',
+    (tester) async {
+      await tall(tester);
+      final run = await pumpHostel(tester, Hostel());
+      expect(tester.takeException(), isNull);
+      expect(find.text('Tagore House'), findsOneWidget);
+      expect(find.text(s.hostelIntro), findsOneWidget);
+      // the figures, an even number: room, now, approved visitors (two on record, one approved), open complaints
+      Finder fig(String x) =>
+          find.descendant(of: find.byKey(const Key('hostelFigures')), matching: find.text(x));
+      expect(find.byType(FigureTile), findsNWidgets(4));
+      expect(fig('A · 12 / B'), findsOneWidget);
+      expect(fig('In the hostel'), findsOneWidget);
+      expect(fig('3'), findsOneWidget);
+      expect(fig('1'), findsOneWidget);
+      // the summary: since when, with whom, the last roll-call, the next leave
+      expect(find.text('since ${s.dayShort('2026-04-02')} · 2 room-mates'), findsOneWidget);
+      expect(find.text('Last roll-call: Present · Night ${s.dayShort(day(-1))}'), findsOneWidget);
+      expect(find.text('Next home leave: ${s.dayShort(day(2))} 16:00'), findsOneWidget);
+      // the wardens: the head first; a call and WhatsApp from the phone when there is a mobile
+      expect(find.text('Meena Rao (head)'), findsOneWidget);
+      expect(find.text('Ravi Kumar'), findsOneWidget);
+      expect(find.byKey(const Key('callWarden-1')), findsNothing);
+      await tester.tap(find.byKey(const Key('callWarden-0')));
+      await tester.tap(find.byKey(const Key('whatsappWarden-0')));
+      expect(run.launched, ['tel:98765%2043210', 'https://wa.me/919876543210']);
+      // today's meals, the special one marked
+      expect(find.text('Breakfast · 07:30'), findsOneWidget);
+      expect(find.text('Poha, milk'), findsOneWidget);
+      expect(find.text('Special today'), findsOneWidget);
+      // Leave and outings first: the approved pass, the one back folded
+      expect(find.byKey(const Key('hostelTab-leave')), findsOneWidget);
+      final pass = find.byKey(const Key('pass-501'));
+      expect(
+        find.descendant(of: pass, matching: find.text('Home leave · ${s.dayShort(day(2))} 16:00')),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: pass, matching: find.text('Approved')), findsOneWidget);
+      expect(find.descendant(of: pass, matching: find.text('Cousin’s wedding')), findsOneWidget);
+      expect(find.byKey(const Key('pass-480')), findsNothing);
+      await tapIn(tester, find.byKey(const Key('earlierPasses')));
+      expect(find.byKey(const Key('pass-480')), findsOneWidget);
+      expect(find.text('Late 25 min'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+      // home leave, an outing and a pass open the app's own gate-pass screens, no web page
+      for (final (key, kind) in [
+        ('askHomeLeave', 'hostel_home'),
+        ('askOuting2', 'hostel_outing'),
+      ]) {
+        await tapIn(tester, find.byKey(Key(key)));
+        expect(tester.widget<GatePassForm>(find.byType(GatePassForm)).kind, kind);
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+      }
+      await tapIn(tester, find.byKey(const Key('openPass-501')));
+      expect(tester.widget<GatePassDetail>(find.byType(GatePassDetail)).id, '501');
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(
+        run.t.calls.any((c) => c.path.contains('/web') || c.path.contains('handoff')),
+        isFalse,
+      );
+      // the website's calls, the menu of this week without a week
+      final menu = run.calls('GET', '/hostel/mine/menu').first;
+      expect(menu.query, {'studentId': '41'});
+      for (final p in [
+        '/hostel/mine/exit',
+        '/hostel/mine/summary',
+        '/hostel/mine/visitors',
+        '/hostel/mine/complaints',
+        '/hostel/mine/incidents',
+        '/hostel/mine/feedback',
+      ]) {
+        expect(run.calls('GET', p).first.query, {'studentId': '41'}, reason: p);
+      }
+      expect(run.calls('GET', '/hostel/mine/complaint-heads'), isNotEmpty);
+    },
+  );
 
   testWidgets('each part shows the website\'s facts: visitors, mess, complaints, notes, leaving', (
     tester,
@@ -784,33 +796,34 @@ void main() {
     expect(find.text(s.hostelTakenBack), findsOneWidget);
   });
 
-  testWidgets('not in the hostel: when the child left, the fee month and the clearance certificate', (
-    tester,
-  ) async {
-    await tall(tester);
-    final run = await pumpHostel(
-      tester,
-      Hostel()
-        ..boards = false
-        ..left = true,
-    );
-    expect(find.byKey(const Key('hostelNone')), findsOneWidget);
-    expect(
-      find.text('Your child left the hostel on ${s.date('2026-10-31')} (Tagore House).'),
-      findsOneWidget,
-    );
-    expect(find.text('The hostel fee is charged up to October 2026.'), findsOneWidget);
-    expect(find.byKey(const Key('view-clearance-16')), findsOneWidget);
-    expect(find.byKey(const Key('download-clearance-16')), findsOneWidget);
-    // no figures, no parts, and only the calls the website makes for a child who does not board
-    expect(find.byType(FigureTile), findsNothing);
-    expect(find.byKey(const Key('hostelTab-leave')), findsNothing);
-    expect(run.calls('GET', '/hostel/mine/visitors'), isEmpty);
-    expect(run.calls('GET', '/hostel/mine/complaints'), isEmpty);
-    await tester.tap(find.byKey(const Key('view-clearance-16')));
-    await tester.pumpAndSettle();
-    expect(run.calls('GET', '/hostel/mine/withdrawals/16/certificate'), isNotEmpty);
-  });
+  testWidgets(
+    'not in the hostel: when the child left, the fee month and the clearance certificate',
+    (tester) async {
+      await tall(tester);
+      final run = await pumpHostel(
+        tester,
+        Hostel()
+          ..boards = false
+          ..left = true,
+      );
+      expect(find.byKey(const Key('hostelNone')), findsOneWidget);
+      expect(
+        find.text('Your child left the hostel on ${s.date('2026-10-31')} (Tagore House).'),
+        findsOneWidget,
+      );
+      expect(find.text('The hostel fee is charged up to October 2026.'), findsOneWidget);
+      expect(find.byKey(const Key('view-clearance-16')), findsOneWidget);
+      expect(find.byKey(const Key('download-clearance-16')), findsOneWidget);
+      // no figures, no parts, and only the calls the website makes for a child who does not board
+      expect(find.byType(FigureTile), findsNothing);
+      expect(find.byKey(const Key('hostelTab-leave')), findsNothing);
+      expect(run.calls('GET', '/hostel/mine/visitors'), isEmpty);
+      expect(run.calls('GET', '/hostel/mine/complaints'), isEmpty);
+      await tester.tap(find.byKey(const Key('view-clearance-16')));
+      await tester.pumpAndSettle();
+      expect(run.calls('GET', '/hostel/mine/withdrawals/16/certificate'), isNotEmpty);
+    },
+  );
 
   testWidgets('never boarded: the website\'s line, nothing else', (tester) async {
     await tall(tester);
@@ -838,7 +851,10 @@ void main() {
     const hi = S(true);
     expect(find.text(hi.hostelIntro), findsOneWidget);
     expect(
-      find.descendant(of: find.byKey(const Key('hostelFigures')), matching: find.text('छात्रावास में')),
+      find.descendant(
+        of: find.byKey(const Key('hostelFigures')),
+        matching: find.text('छात्रावास में'),
+      ),
       findsOneWidget,
     );
     expect(find.text('पिछली हाज़िरी: उपस्थित · Night ${hi.dayShort(day(-1))}'), findsOneWidget);
@@ -857,10 +873,7 @@ void main() {
     await tall(tester, const Size(360, 780));
     await pumpHostel(tester, Hostel()..pendingExit = false);
     expect(tester.takeException(), isNull);
-    expect(
-      MediaQuery.of(tester.element(find.byType(HostelScreen))).textScaler.scale(10),
-      20,
-    );
+    expect(MediaQuery.of(tester.element(find.byType(HostelScreen))).textScaler.scale(10), 20);
     for (final t in ['leave', 'visitors', 'mess', 'complaints', 'notes', 'leaving']) {
       await reach(tester, find.byKey(Key('hostelTab-$t')));
       await tester.tap(find.byKey(Key('hostelTab-$t')));

@@ -8,6 +8,7 @@ import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
 import '../family/teachers.dart';
 import '../family/documents.dart';
+import '../family/gate_pass.dart';
 import '../family/directory.dart';
 import '../family/hostel.dart';
 import '../family/library.dart';
@@ -108,6 +109,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/transport' => TransportScreen(profile: p),
     // the hostel: summary, leave and outings, visitors, mess, complaints, leaving (gate passes still on the web)
     '/hostel' => HostelScreen(profile: p),
+    // gate passes: ask (leaving early, arriving late, hostel home leave and outings), follow, the pass card
+    '/gate-passes' => GatePassesScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };

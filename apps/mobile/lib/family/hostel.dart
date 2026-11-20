@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart' show ImagePicker, ImageSource;
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -18,6 +17,7 @@ import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'common.dart';
 import 'data.dart';
+import 'gate_pass.dart';
 
 // ------------------------------------------------------------------------------------------------ the API
 
@@ -145,16 +145,6 @@ final hostelPhotoPickerProvider = Provider<Future<PickedFile?> Function(BuildCon
   },
 );
 
-/// Opens a web app page in the app (the gate passes have no native screen yet); a test puts its own in.
-final hostelWebProvider =
-    Provider<Future<void> Function(BuildContext context, Profile p, String to, String title)>(
-      (ref) => (context, p, to, title) async {
-        await context.push(
-          Uri(path: '/web', queryParameters: {'app': p.app, 'to': to, 'title': title}).toString(),
-        );
-      },
-    );
-
 /// Calls or writes on WhatsApp from the phone; a test puts its own in.
 final hostelLaunchProvider = Provider<Future<void> Function(Uri uri)>(
   (ref) => (uri) async {
@@ -208,10 +198,8 @@ extension HostelWords on S {
   String hostelBackBy(String at) => _h('back by $at', '$at तक वापसी');
   String hostelBackOn(String at) => _h('back on $at', '$at को वापस आया');
   String hostelLate(int min) => _h('Late $min min', '$min मिनट देर');
-  String hostelLastRoll(String label, String session, String day) => _h(
-    'Last roll-call: $label · $session $day',
-    'पिछली हाज़िरी: $label · $session $day',
-  );
+  String hostelLastRoll(String label, String session, String day) =>
+      _h('Last roll-call: $label · $session $day', 'पिछली हाज़िरी: $label · $session $day');
   String hostelRoll(String status, String fallback) => switch (status) {
     'present' => _h('Present', 'उपस्थित'),
     'absent' => _h('Absent', 'अनुपस्थित'),
@@ -306,8 +294,10 @@ extension HostelWords on S {
   String get hostelPhotoBad =>
       _h('Choose a JPEG or PNG photo under 300 KB.', '300 KB से छोटी JPEG या PNG फ़ोटो चुनें।');
   String get hostelAddToList => _h('Add to the list', 'सूची में जोड़ें');
-  String get hostelAdded =>
-      _h('Added. The warden will approve the visitor.', 'जोड़ा गया। वार्डन आगंतुक को स्वीकृत करेंगे।');
+  String get hostelAdded => _h(
+    'Added. The warden will approve the visitor.',
+    'जोड़ा गया। वार्डन आगंतुक को स्वीकृत करेंगे।',
+  );
   String get hostelAddHelp => _h(
     'The warden approves the visitor; until then they wait at the gate.',
     'वार्डन आगंतुक को स्वीकृत करेंगे; तब तक वे गेट पर प्रतीक्षा करेंगे।',
@@ -395,10 +385,8 @@ extension HostelWords on S {
   String get hostelDetailsShort =>
       _h('Write the details (at least 3 letters).', 'विवरण लिखें (कम से कम 3 अक्षर)।');
   String get hostelRaiseTheComplaint => _h('Raise the complaint', 'शिकायत दर्ज करें');
-  String get hostelComplaintRaised => _h(
-    'Complaint raised. The warden will look into it.',
-    'शिकायत दर्ज हुई। वार्डन इसे देखेंगे।',
-  );
+  String get hostelComplaintRaised =>
+      _h('Complaint raised. The warden will look into it.', 'शिकायत दर्ज हुई। वार्डन इसे देखेंगे।');
   String get hostelNoHeads => _h(
     'The hostel takes no complaints in the app yet.',
     'छात्रावास अभी ऐप में शिकायतें नहीं लेता।',
@@ -438,10 +426,8 @@ extension HostelWords on S {
     _ => _h('Cancelled', 'रद्द'),
   };
   String get hostelTakeBack => _h('Take back', 'वापस लें');
-  String get hostelTakeBackAsk => _h(
-    'Take back this request to leave the hostel?',
-    'छात्रावास छोड़ने का यह अनुरोध वापस लें?',
-  );
+  String get hostelTakeBackAsk =>
+      _h('Take back this request to leave the hostel?', 'छात्रावास छोड़ने का यह अनुरोध वापस लें?');
   String get hostelTakenBack => _h('Your request is taken back.', 'आपका अनुरोध वापस ले लिया गया।');
   String get hostelAskToLeave => _h('Ask to leave the hostel', 'छात्रावास छोड़ने का अनुरोध करें');
   String get hostelLastDay => _h('Last day in the hostel', 'छात्रावास में अंतिम दिन');
@@ -450,7 +436,8 @@ extension HostelWords on S {
     'other' => _h('Other', 'अन्य'),
     _ => _h('Our own reasons', 'हमारे अपने कारण'),
   };
-  String get hostelNoteOffice => _h('Note for the hostel office', 'छात्रावास कार्यालय के लिए टिप्पणी');
+  String get hostelNoteOffice =>
+      _h('Note for the hostel office', 'छात्रावास कार्यालय के लिए टिप्पणी');
   String get hostelSendRequest => _h('Send the request', 'अनुरोध भेजें');
   String get hostelExitSent => _h(
     'Your request is sent. The hostel office will start the withdrawal or reply here.',
@@ -583,7 +570,6 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
   String? _error;
 
   Profile get _p => widget.profile;
-  String get _id => _p.studentId ?? '';
 
   void _done(String? message, {String? error, String? tab}) {
     if (!mounted) return;
@@ -604,29 +590,28 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
         content: Text(text),
         actions: [
           TextButton(onPressed: () => Navigator.of(c).pop(false), child: Text(s.close)),
-          FilledButton(
-            key: Key(key),
-            onPressed: () => Navigator.of(c).pop(true),
-            child: Text(yes),
-          ),
+          FilledButton(key: Key(key), onPressed: () => Navigator.of(c).pop(true), child: Text(yes)),
         ],
       ),
     );
     return ok == true;
   }
 
-  /// A website page (the gate passes); the page is loaded again on the way back.
-  Future<void> _web(String to, String title) async {
-    await ref.read(hostelWebProvider)(context, _p, to, title);
-    if (mounted) ref.invalidate(hostelProvider(_p));
-  }
-
-  void _gatePass(String kind) {
+  /// Asks for home leave or an outing on the app's own gate-pass form; the new pass opens, and the hostel
+  /// page is loaded again on the way back.
+  Future<void> _gatePass(String kind) async {
     final s = ref.read(stringsProvider);
-    _web(
-      '/gate-passes/new?student=${Uri.encodeQueryComponent(_id)}&kind=$kind',
-      kind == 'hostel_home' ? s.hostelAskHome : s.hostelAskOuting,
+    final id = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => FamilyPage(
+          title: kind == 'hostel_home' ? s.hostelAskHome : s.hostelAskOuting,
+          child: GatePassForm(profile: _p, kind: kind),
+        ),
+      ),
     );
+    if (!mounted) return;
+    ref.invalidate(hostelProvider(_p));
+    if (id != null) openGatePass(context, _p, id, sent: true);
   }
 
   void _addVisitor() {
@@ -634,7 +619,10 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
     pushPage(
       context,
       s.hostelAddVisitor,
-      _VisitorForm(profile: _p, onSent: (m) => _done(m, tab: 'visitors')),
+      _VisitorForm(
+        profile: _p,
+        onSent: (m) => _done(m, tab: 'visitors'),
+      ),
     );
   }
 
@@ -643,7 +631,11 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
     pushPage(
       context,
       s.hostelRaiseComplaint,
-      _ComplaintForm(profile: _p, heads: heads, onSent: (m) => _done(m, tab: 'complaints')),
+      _ComplaintForm(
+        profile: _p,
+        heads: heads,
+        onSent: (m) => _done(m, tab: 'complaints'),
+      ),
     );
   }
 
@@ -652,7 +644,11 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
     pushPage(
       context,
       s.hostelRateTitle,
-      _RateForm(profile: _p, meal: meal, onSent: (m) => _done(m, tab: 'mess')),
+      _RateForm(
+        profile: _p,
+        meal: meal,
+        onSent: (m) => _done(m, tab: 'mess'),
+      ),
     );
   }
 
@@ -661,7 +657,10 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
     pushPage(
       context,
       s.hostelAskToLeave,
-      _ExitForm(profile: _p, onSent: (m) => _done(m, tab: 'leaving')),
+      _ExitForm(
+        profile: _p,
+        onSent: (m) => _done(m, tab: 'leaving'),
+      ),
     );
   }
 
@@ -844,10 +843,7 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
                   : s.hostelLeftOn(s.date(_str(left['on'])), _str(left['hostel'])),
             ),
             if (feeUntil != null) Text(s.hostelFeeUntil(s.month(feeUntil))),
-            for (final w in done) ...[
-              const SizedBox(height: Tokens.sp2),
-              _clearance(s, w),
-            ],
+            for (final w in done) ...[const SizedBox(height: Tokens.sp2), _clearance(s, w)],
           ],
         ),
       ),
@@ -1000,7 +996,10 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
           child: Text.rich(
             TextSpan(
               children: [
-                TextSpan(text: name, style: const TextStyle(fontWeight: Tokens.fwBold)),
+                TextSpan(
+                  text: name,
+                  style: const TextStyle(fontWeight: Tokens.fwBold),
+                ),
                 if (w['isHead'] == true)
                   TextSpan(
                     text: ' (${s.hostelHead})',
@@ -1105,7 +1104,7 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
               if (late > 0) StatusChip(s.hostelLate(late), Tone.danger),
               TextButton(
                 key: Key('openPass-${x['id']}'),
-                onPressed: () => _web('/gate-passes/${x['id']}', s.hostelGatePass),
+                onPressed: () => openGatePass(context, _p, '${x['id']}'),
                 child: Text(s.open),
               ),
             ],
@@ -1383,10 +1382,7 @@ class _HostelScreenState extends ConsumerState<HostelScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(meal, style: const TextStyle(fontWeight: Tokens.fwSemibold)),
-                Text(
-                  '$day · ${_str(m['atTime'])}',
-                  style: TextStyle(color: muted, fontSize: 13),
-                ),
+                Text('$day · ${_str(m['atTime'])}', style: TextStyle(color: muted, fontSize: 13)),
                 if (rating != null) ...[
                   const SizedBox(height: Tokens.sp1),
                   Wrap(

@@ -790,5 +790,19 @@ first), **Mess** (the week back and forward, diet and allergies, each day folded
 with five stars and a comment), **Complaints** (raise with a type-to-search head; open ones, closed folded with the
 resolution), **From the hostel** (incidents and action taken), **Leaving the hostel** (requests and withdrawals,
 Take back asked first, the clearance certificate View / Download, the ask form when nothing waits); a child who
-does not board or has left sees that, with the certificate. **Gate passes** (ask for home leave or an outing, open a
-pass) still open the website's gate-pass pages through the app's web route: the app has no gate-pass screen yet.
+does not board or has left sees that, with the certificate. **Gate passes** (ask for home leave or an outing, open a pass) open the app's own gate-pass screens (below).
+
+## As built — Gate passes as on the website (20 Nov 2026)
+
+**Gate passes in the app, with no web page** (`family/gate_pass.dart`, menu `/gate-passes`, and Hostel's Ask for home
+leave / an outing and Open): **List** ("Early leave and late arrival", how many, latest first; All / Still to come /
+Over or closed, a search by pass number, reason or who collects; ten a page) or a **Calendar** month; each pass with
+its date and time, kind, state (Waiting for the school, Approved: collect at the front desk / from the hostel
+warden, Handed over, Out, Back, Not approved, Cancelled), reason, number, who takes the child, the approver it
+waits on and the gate times; Details and Cancel (asked first). **Request a gate pass** (`GatePassForm`): leaving
+early, arriving late, and for a boarder home leave or an outing; the day and time; back in the hostel on (home
+leave) and back by (an outing no later than the hostel's hour); the reason; who takes the child (a parent on record
+or someone else with name, relation and a 10-digit mobile). **A pass in full** (`GatePassDetail`): the state, the
+pass card PDF with its QR code (View / Download; the API's QR drawing is an SVG the app does not draw itself), how it
+is used (the one-time code), the details, Cancel, and the approval steps. Calls: `gate-passes/mine` (list, POST),
+`/options`, `/:id`, `/:id/card`, `/:id/cancel`.

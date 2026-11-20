@@ -579,6 +579,30 @@ class EduProApi {
   /// GET /library/mine/digital
   Future<dynamic> libraryMyDigital() =>
       _t.send('GET', '/library/mine/digital');
+
+  /// GET /gate-passes/mine — My children's gate passes, latest first (or between two days)
+  Future<dynamic> gatePassMine({String? state, String? studentId, String? q, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/gate-passes/mine', query: {if (state != null) 'state': state, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// POST /gate-passes/mine — A parent asks for a gate pass
+  Future<dynamic> gatePassMineApply({required StudentPassDto body}) =>
+      _t.send('POST', '/gate-passes/mine', body: body.toJson());
+
+  /// GET /gate-passes/mine/options — My children with the guardians on record (who takes the child)
+  Future<dynamic> gatePassMineOptions() =>
+      _t.send('GET', '/gate-passes/mine/options');
+
+  /// GET /gate-passes/mine/{id}
+  Future<dynamic> gatePassMineGet({required String id}) =>
+      _t.send('GET', '/gate-passes/mine/${Uri.encodeComponent(id)}');
+
+  /// GET /gate-passes/mine/{id}/card — The pass card as base64 (for the portal, which speaks JSON)
+  Future<ApiFile> gatePassMineCardJson({required String id}) =>
+      _t.file('GET', '/gate-passes/mine/${Uri.encodeComponent(id)}/card');
+
+  /// POST /gate-passes/mine/{id}/cancel
+  Future<dynamic> gatePassMineCancel({required PassCancelDto body, required String id}) =>
+      _t.send('POST', '/gate-passes/mine/${Uri.encodeComponent(id)}/cancel', body: body.toJson());
 }
 
 /** The OtpStartDto the API takes. */
@@ -1163,5 +1187,43 @@ class PortalReserveDto {
         'borrowerKind': borrowerKind,
         'borrowerId': borrowerId,
         'titleId': titleId,
+      };
+}
+
+/** The StudentPassDto the API takes. */
+class StudentPassDto {
+  const StudentPassDto({required this.studentId, this.kind, this.onDate, this.atTime, this.returnOn, this.returnAt, required this.reason, this.escortKind, this.escortName, this.escortRelation, this.escortMobile});
+  final String studentId;
+  final String? kind;
+  final String? onDate;
+  final String? atTime;
+  final String? returnOn;
+  final String? returnAt;
+  final String reason;
+  final String? escortKind;
+  final String? escortName;
+  final String? escortRelation;
+  final String? escortMobile;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        if (kind != null) 'kind': kind,
+        if (onDate != null) 'onDate': onDate,
+        if (atTime != null) 'atTime': atTime,
+        if (returnOn != null) 'returnOn': returnOn,
+        if (returnAt != null) 'returnAt': returnAt,
+        'reason': reason,
+        if (escortKind != null) 'escortKind': escortKind,
+        if (escortName != null) 'escortName': escortName,
+        if (escortRelation != null) 'escortRelation': escortRelation,
+        if (escortMobile != null) 'escortMobile': escortMobile,
+      };
+}
+
+/** The PassCancelDto the API takes. */
+class PassCancelDto {
+  const PassCancelDto({this.reason});
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        if (reason != null) 'reason': reason,
       };
 }
