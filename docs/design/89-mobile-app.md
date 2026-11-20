@@ -750,3 +750,16 @@ tab; Academics → Homework for a parent):
 - **School directory** (`family/directory.dart`, menu `/directory`, no web page): "Whom to contact at the school,
   and when."; under each heading the name, designation and note, the number (a tap calls), the e-mail (a tap
   writes) and the timings (`GET academics/directory`).
+
+## As built — Library as on the website (20 Nov 2026)
+
+**Library in the app, with no web page** (`family/library.dart`, menu `/library`): the child and class; six figures
+(books out, overdue, read this session, read this month, returned on time, late fines) and a line of the average
+days kept and fines due; ready to collect; books on loan (due day, fine so far, times renewed) and the dues; the
+reservations (waiting with the place in line, ready with until when; Cancel, asked first; ended ones folded);
+**Find a book** (`LibraryCatalogueScreen`: search by title, author, subject or ISBN, 20 a page, where it is or when
+it is due back, Reserve when every copy is out); the history folded ("Read before · n books": taken from / to,
+status, a search, Excel (download) and PDF (View / Download) of the filtered rows, pages); six months of borrowing as
+small bars and the most read; the digital library (http/https links only). Calls: `library/portal/borrowers/student/
+:id`, `…/history` (and `/export?format=xlsx|pdf`), `library/portal/catalogue` (sent with its query by the transport:
+the generated call has none), `library/portal/reservations` and `/:id/cancel`, `library/mine/digital`.

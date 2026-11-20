@@ -9,6 +9,7 @@ import '../theme/tokens.g.dart';
 import '../family/teachers.dart';
 import '../family/documents.dart';
 import '../family/directory.dart';
+import '../family/library.dart';
 import '../family/health.dart';
 import '../family/certificates.dart';
 import '../family/academics.dart';
@@ -99,6 +100,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/health' => HealthScreen(profile: p),
     // whom to contact at the school: no web page
     '/directory' => DirectoryScreen(profile: p),
+    // the child's books, reservations, history and the catalogue: no web page
+    '/library' => LibraryScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };
