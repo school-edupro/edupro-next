@@ -176,6 +176,23 @@ final noticesProvider = FutureProvider.autoDispose.family<Loaded<List<Json>>, Pr
   return Loaded(asList(asJson(r.data)['data']), r.at, stale: r.stale);
 });
 
+/// Notices and circulars for the child as the website's Notices page asks for them: `(profile, kind, words)`
+/// (empty: all), up to 200, latest first.
+final noticesFilteredProvider = FutureProvider.autoDispose
+    .family<Loaded<List<Json>>, (Profile, String, String)>((ref, a) async {
+      final (p, kind, q) = a;
+      final r = await cached(
+        'notices:${p.id}:$kind:$q',
+        () => _api(ref).noticesList(
+          studentId: p.studentId,
+          kind: kind.isEmpty ? null : kind,
+          q: q.isEmpty ? null : q,
+          size: 200,
+        ),
+      );
+      return Loaded(asList(asJson(r.data)['data']), r.at, stale: r.stale);
+    });
+
 /// One notice in full.
 final noticeProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profile, String)>((
   ref,
@@ -291,6 +308,24 @@ final calendarProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profil
     return Loaded(asJson(r.data), r.at, stale: r.stale);
   },
 );
+
+/// The whole session's holidays and events, as the website's Calendar reads them (`{holidays, events, from, to}`).
+final sessionCalendarProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((
+  ref,
+  p,
+) async {
+  final r = await cached('calSession:${p.schoolId}', () => _api(ref).calendarRead());
+  return Loaded(asJson(r.data), r.at, stale: r.stale);
+});
+
+/// The school directory: whom to contact for what, under its headings.
+final directoryProvider = FutureProvider.autoDispose.family<Loaded<List<Json>>, Profile>((
+  ref,
+  p,
+) async {
+  final r = await cached('directory:${p.schoolId}', () => _api(ref).documentsDirectory());
+  return Loaded(asList(asJson(r.data)['data']), r.at, stale: r.stale);
+});
 
 /// The child's exams with their papers (the date sheet).
 final dateSheetProvider = FutureProvider.autoDispose.family<Loaded<List<Json>>, Profile>((

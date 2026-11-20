@@ -451,6 +451,134 @@ class EduProApi {
   /// GET /fees/mine/exports/{id} — Status and download link of one of my own exports
   Future<dynamic> feesMyExport({required String id}) =>
       _t.send('GET', '/fees/mine/exports/${Uri.encodeComponent(id)}');
+
+  /// GET /academics/directory — The school directory
+  Future<dynamic> documentsDirectory() =>
+      _t.send('GET', '/academics/directory');
+
+  /// GET /attendance/bus/mine — Bus boarding and alighting of my children over the last week
+  Future<dynamic> busMine({String? date, String? routeId}) =>
+      _t.send('GET', '/attendance/bus/mine', query: {if (date != null) 'date': date, if (routeId != null) 'routeId': routeId});
+
+  /// GET /transport/requests/mine — My children's transport: what runs now, the history and the requests
+  Future<dynamic> transportRequestsMine() =>
+      _t.send('GET', '/transport/requests/mine');
+
+  /// POST /transport/requests/mine — Ask for transport, a change, or to stop from a month
+  Future<dynamic> transportRequestsCreate({required ApplyDto body}) =>
+      _t.send('POST', '/transport/requests/mine', body: body.toJson());
+
+  /// GET /transport/requests/mine/options — Routes, stoppages with their slab, and the months to choose from
+  Future<dynamic> transportRequestsMineOptions({required String studentId}) =>
+      _t.send('GET', '/transport/requests/mine/options', query: {'studentId': studentId});
+
+  /// POST /transport/requests/mine/{id}/cancel
+  Future<dynamic> transportRequestsCancel({required String id}) =>
+      _t.send('POST', '/transport/requests/mine/${Uri.encodeComponent(id)}/cancel');
+
+  /// GET /transport/gps/mine — Where my child’s bus is
+  Future<dynamic> gpsMine() =>
+      _t.send('GET', '/transport/gps/mine');
+
+  /// GET /hostel/mine/visitors — A child's approved-visitor list: parents on record and the people added
+  Future<dynamic> hostelH3FamilyVisitors({required String studentId}) =>
+      _t.send('GET', '/hostel/mine/visitors', query: {'studentId': studentId});
+
+  /// POST /hostel/mine/visitors — A parent adds a visitor; a warden approves
+  Future<dynamic> hostelH3FamilyAdd({required VisitorAddDto body}) =>
+      _t.send('POST', '/hostel/mine/visitors', body: body.toJson());
+
+  /// DELETE /hostel/mine/visitors/{id}
+  Future<dynamic> hostelH3FamilyRemove({required String id}) =>
+      _t.send('DELETE', '/hostel/mine/visitors/${Uri.encodeComponent(id)}');
+
+  /// GET /hostel/mine/visitors/{id}/photo
+  Future<ApiFile> hostelH3FamilyPhoto({required String id}) =>
+      _t.file('GET', '/hostel/mine/visitors/${Uri.encodeComponent(id)}/photo');
+
+  /// GET /hostel/mine/menu — The week's mess menu of the hostel a child boards in, with the child's diet
+  Future<dynamic> hostelH3FamilyMenu({required String studentId, required String weekOf}) =>
+      _t.send('GET', '/hostel/mine/menu', query: {'studentId': studentId, 'weekOf': weekOf});
+
+  /// GET /hostel/mine/feedback — The child's meals of the last three days with the family's rating
+  Future<dynamic> hostelMessFamilyFeedback({required String studentId}) =>
+      _t.send('GET', '/hostel/mine/feedback', query: {'studentId': studentId});
+
+  /// POST /hostel/mine/feedback — Rate a meal the child had (1 to 5, with a comment)
+  Future<dynamic> hostelMessSaveFeedback({required FeedbackDto body}) =>
+      _t.send('POST', '/hostel/mine/feedback', body: body.toJson());
+
+  /// GET /hostel/mine/complaint-heads
+  Future<dynamic> hostelCareFamilyHeads() =>
+      _t.send('GET', '/hostel/mine/complaint-heads');
+
+  /// POST /hostel/mine/complaints — A parent's complaint about the child's hostel room (the helpdesk's hostel desk)
+  Future<dynamic> hostelCareFamilyRaise({required ComplaintDto body}) =>
+      _t.send('POST', '/hostel/mine/complaints', body: body.toJson());
+
+  /// GET /hostel/mine/complaints
+  Future<dynamic> hostelCareFamilyComplaints({required String studentId}) =>
+      _t.send('GET', '/hostel/mine/complaints', query: {'studentId': studentId});
+
+  /// GET /hostel/mine/incidents — The incidents the hostel shared with the family, for a child
+  Future<dynamic> hostelCareFamilyIncidents({required String studentId}) =>
+      _t.send('GET', '/hostel/mine/incidents', query: {'studentId': studentId});
+
+  /// GET /hostel/mine/summary — The parent app's hostel summary: room, wardens, where the child is now, last roll-call, today's meals
+  Future<dynamic> hostelExitSummary({required String studentId}) =>
+      _t.send('GET', '/hostel/mine/summary', query: {'studentId': studentId});
+
+  /// GET /hostel/mine/exit — The child's requests to leave the hostel and hostel withdrawals
+  Future<dynamic> hostelExitFamilyList({required String studentId}) =>
+      _t.send('GET', '/hostel/mine/exit', query: {'studentId': studentId});
+
+  /// POST /hostel/mine/exit — A parent asks for the child to leave the hostel
+  Future<dynamic> hostelExitFamilyRequest({required ExitRequestDto body}) =>
+      _t.send('POST', '/hostel/mine/exit', body: body.toJson());
+
+  /// POST /hostel/mine/exit/{id}/withdraw
+  Future<dynamic> hostelExitFamilyWithdraw({required String id}) =>
+      _t.send('POST', '/hostel/mine/exit/${Uri.encodeComponent(id)}/withdraw');
+
+  /// GET /hostel/mine/withdrawals/{id}/certificate — The family's copy of the hostel clearance certificate (PDF as JSON)
+  Future<ApiFile> hostelExitFamilyCertificate({required String id}) =>
+      _t.file('GET', '/hostel/mine/withdrawals/${Uri.encodeComponent(id)}/certificate');
+
+  /// GET /library/portal/summary — For the portal home: each of my borrowers with books held, due soon, late, kept
+  Future<dynamic> libraryPortalSummary() =>
+      _t.send('GET', '/library/portal/summary');
+
+  /// GET /library/portal/borrowers/{kind}/{id} — One of my borrowers: books held, history, reservations, dues
+  Future<dynamic> libraryPortalBorrower({required String kind, required String id}) =>
+      _t.send('GET', '/library/portal/borrowers/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}');
+
+  /// GET /library/portal/borrowers/{kind}/{id}/history — My library: figures and the history, filtered and paged
+  Future<dynamic> libraryPortalHistory({required String kind, required String id, String? from, String? to, String? status, String? q, int? page, String? format}) =>
+      _t.send('GET', '/library/portal/borrowers/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/history', query: {if (from != null) 'from': from, if (to != null) 'to': to, if (status != null) 'status': status, if (q != null) 'q': q, if (page != null) 'page': page, if (format != null) 'format': format});
+
+  /// GET /library/portal/borrowers/{kind}/{id}/history/export — My library history, as filtered, as Excel or PDF
+  Future<ApiFile> libraryPortalHistoryExport({required String kind, required String id, String? from, String? to, String? status, String? q, int? page, String? format}) =>
+      _t.file('GET', '/library/portal/borrowers/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/history/export', query: {if (from != null) 'from': from, if (to != null) 'to': to, if (status != null) 'status': status, if (q != null) 'q': q, if (page != null) 'page': page, if (format != null) 'format': format});
+
+  /// GET /library/portal/catalogue — The catalogue with each book on the shelf or out (never who has it)
+  Future<dynamic> libraryPortalCatalogue() =>
+      _t.send('GET', '/library/portal/catalogue');
+
+  /// POST /library/portal/reservations — A book reserved for one of my borrowers (every copy is out)
+  Future<dynamic> libraryPortalReserve({required PortalReserveDto body}) =>
+      _t.send('POST', '/library/portal/reservations', body: body.toJson());
+
+  /// POST /library/portal/reservations/{id}/cancel — One of my reservations cancelled
+  Future<dynamic> libraryPortalCancel({required String id}) =>
+      _t.send('POST', '/library/portal/reservations/${Uri.encodeComponent(id)}/cancel');
+
+  /// GET /library/mine — Loans of my children
+  Future<dynamic> libraryMine() =>
+      _t.send('GET', '/library/mine');
+
+  /// GET /library/mine/digital
+  Future<dynamic> libraryMyDigital() =>
+      _t.send('GET', '/library/mine/digital');
 }
 
 /** The OtpStartDto the API takes. */
@@ -931,5 +1059,109 @@ class CertificateRequestDto {
         'purpose': purpose,
         if (copies != null) 'copies': copies,
         if (note != null) 'note': note,
+      };
+}
+
+/** The ApplyDto the API takes. */
+class ApplyDto {
+  const ApplyDto({required this.studentId, required this.kind, this.service, this.pickRouteId, this.pickStopId, this.dropRouteId, this.dropStopId, required this.fromMonth, this.toMonth, this.note});
+  final String studentId;
+  final String kind;
+  final String? service;
+  final String? pickRouteId;
+  final String? pickStopId;
+  final String? dropRouteId;
+  final String? dropStopId;
+  final String fromMonth;
+  final String? toMonth;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'kind': kind,
+        if (service != null) 'service': service,
+        if (pickRouteId != null) 'pickRouteId': pickRouteId,
+        if (pickStopId != null) 'pickStopId': pickStopId,
+        if (dropRouteId != null) 'dropRouteId': dropRouteId,
+        if (dropStopId != null) 'dropStopId': dropStopId,
+        'fromMonth': fromMonth,
+        if (toMonth != null) 'toMonth': toMonth,
+        if (note != null) 'note': note,
+      };
+}
+
+/** The VisitorAddDto the API takes. */
+class VisitorAddDto {
+  const VisitorAddDto({required this.studentId, required this.name, required this.relation, required this.mobile, this.photo});
+  final String studentId;
+  final String name;
+  final String relation;
+  final String mobile;
+  final String? photo;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'name': name,
+        'relation': relation,
+        'mobile': mobile,
+        if (photo != null) 'photo': photo,
+      };
+}
+
+/** The FeedbackDto the API takes. */
+class FeedbackDto {
+  const FeedbackDto({required this.studentId, required this.mealId, required this.onDate, required this.rating, this.comment});
+  final String studentId;
+  final String mealId;
+  final String onDate;
+  final int rating;
+  final String? comment;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'mealId': mealId,
+        'onDate': onDate,
+        'rating': rating,
+        if (comment != null) 'comment': comment,
+      };
+}
+
+/** The ComplaintDto the API takes. */
+class ComplaintDto {
+  const ComplaintDto({required this.studentId, required this.categoryCode, required this.subject, required this.body});
+  final String studentId;
+  final String categoryCode;
+  final String subject;
+  final String body;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'categoryCode': categoryCode,
+        'subject': subject,
+        'body': body,
+      };
+}
+
+/** The ExitRequestDto the API takes. */
+class ExitRequestDto {
+  const ExitRequestDto({required this.studentId, required this.leavingOn, required this.reason, this.note});
+  final String studentId;
+  final String leavingOn;
+  final String reason;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'leavingOn': leavingOn,
+        'reason': reason,
+        if (note != null) 'note': note,
+      };
+}
+
+/** The PortalReserveDto the API takes. */
+class PortalReserveDto {
+  const PortalReserveDto({required this.borrowerKind, required this.borrowerId, required this.titleId});
+  final String borrowerKind;
+  final String borrowerId;
+  final String titleId;
+  Map<String, Object?> toJson() => {
+        'borrowerKind': borrowerKind,
+        'borrowerId': borrowerId,
+        'titleId': titleId,
       };
 }

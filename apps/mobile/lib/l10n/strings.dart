@@ -274,6 +274,71 @@ class S {
   String dueOn(String date) => _t('Due $date', 'जमा करें $date');
   String postedBy(String name) => _t('By $name', '$name द्वारा');
   String get acknowledge => _t('I have seen this', 'मैंने यह देख लिया');
+  // messages, notices, calendar, directory
+  String get messagesTitle => _t('Messages from school', 'विद्यालय से संदेश');
+  String get messagesHelp => _t(
+    'SMS, WhatsApp and email the school sent you',
+    'विद्यालय ने आपको भेजे SMS, WhatsApp और ईमेल',
+  );
+  String channel(String c) => switch (c) {
+    'sms' => 'SMS',
+    'whatsapp' => 'WhatsApp',
+    'email' => _t('Email', 'ईमेल'),
+    'app' => _t('App', 'ऐप'),
+    _ => c,
+  };
+  String deliveryState(String st) => switch (st) {
+    'delivered' => _t('Delivered', 'पहुँच गया'),
+    'sent' || 'sending' => _t('Sent', 'भेजा गया'),
+    'queued' => _t('Queued', 'कतार में'),
+    'failed' => _t('Failed', 'नहीं पहुँचा'),
+    'read' => _t('Read on WhatsApp', 'WhatsApp पर पढ़ा गया'),
+    _ => st,
+  };
+  String get openEmail => _t('Open the email', 'ईमेल खोलें');
+  String get noMessagesYet => _t('No messages yet.', 'अभी कोई संदेश नहीं।');
+  String get noticesTitle => _t('Notices and circulars', 'सूचनाएँ और परिपत्र');
+  String noticesCount(int n, bool filtered, int toAck) =>
+      '${filtered ? _t('$n found', '$n मिले') : _t('$n in all', 'कुल $n')} · ${_t('latest first', 'नवीनतम पहले')}'
+      '${toAck > 0 ? ' · ${_t('$toAck to acknowledge', '$toAck की पावती बाकी')}' : ''}';
+  String get noticeKindAll => _t('All', 'सभी');
+  String get circulars => _t('Circulars', 'परिपत्र');
+  String noticeKind(String k) => switch (k) {
+    'circular' => _t('Circular', 'परिपत्र'),
+    'office_order' => _t('Office order', 'कार्यालय आदेश'),
+    _ => _t('Notice', 'सूचना'),
+  };
+  String get wordsInNotice => _t('Words in the notice', 'सूचना के शब्द');
+  String get noNoticesNow => _t('No notices right now.', 'अभी कोई सूचना नहीं।');
+  String attachmentsN(int n) => _t('$n attachments', '$n संलग्नक');
+  String get toAcknowledge => _t('Acknowledge', 'पावती दें');
+  String get holidayList => _t('Holiday list', 'अवकाश सूची');
+  String sessionSpan(String from, String to) => _t('Session: $from – $to', 'सत्र: $from – $to');
+  String nextHoliday(String what) => _t('Next holiday: $what', 'अगला अवकाश: $what');
+  String calMark(String m) => switch (m) {
+    'holiday' => _t('Holiday', 'अवकाश'),
+    'vacation' => _t('Vacation', 'छुट्टियाँ'),
+    'working_day' => _t('Working day', 'कार्य दिवस'),
+    'exam' => _t('Exam', 'परीक्षा'),
+    _ => _t('Event', 'कार्यक्रम'),
+  };
+  String get nothingOnDay =>
+      _t('Nothing is scheduled on this day.', 'इस दिन कुछ निर्धारित नहीं है।');
+  String get nothingScheduled => _t('Nothing scheduled', 'कुछ निर्धारित नहीं');
+  String holidaysThisSession(int n, int days) =>
+      _t('$n holidays this session · $days days in all', 'इस सत्र में $n अवकाश · कुल $days दिन');
+  String get upcoming => _t('Upcoming', 'आने वाले');
+  String get earlierThisYear => _t('Earlier this year', 'इस वर्ष पहले');
+  String get calendarColours => _t('Colours', 'रंग');
+  String get directoryTitle => _t('School directory', 'विद्यालय निर्देशिका');
+  String get directoryHelp =>
+      _t('Whom to contact at the school, and when.', 'विद्यालय में किससे और कब संपर्क करें।');
+  String get directoryEmpty => _t(
+    'The school has not published its directory yet.',
+    'विद्यालय ने अभी अपनी निर्देशिका प्रकाशित नहीं की है।',
+  );
+  String get timings => _t('Timings', 'समय');
+
   // health
   String get healthTitle =>
       _t('Clinic visits and health cards', 'क्लिनिक विज़िट और स्वास्थ्य कार्ड');

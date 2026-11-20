@@ -8,6 +8,7 @@ import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
 import '../family/teachers.dart';
 import '../family/documents.dart';
+import '../family/directory.dart';
 import '../family/health.dart';
 import '../family/certificates.dart';
 import '../family/academics.dart';
@@ -96,6 +97,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/documents' => DocumentsScreen(profile: p),
     // clinic visits and health cards, and the certificates (ask, follow, open): on the phone, no web page
     '/health' => HealthScreen(profile: p),
+    // whom to contact at the school: no web page
+    '/directory' => DirectoryScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };

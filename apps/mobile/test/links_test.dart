@@ -99,7 +99,8 @@ void main() {
                 'id': '501',
                 'kind': 'homework',
                 'title': 'Plant a seed',
-                'assignedOn': '2026-11-19',
+                // today: the Homework screen opens on today's work
+                'assignedOn': DateTime.now().toIso8601String().substring(0, 10),
                 'dueOn': null,
                 'files': [],
                 'ackRequired': false,

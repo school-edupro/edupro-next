@@ -1,3 +1,4 @@
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
@@ -84,7 +85,21 @@ class InboxList extends ConsumerWidget {
       value: ref.watch(inboxProvider(first)),
       refresh: () => ref.refresh(inboxProvider(first).future),
       children: (inbox) => [
-        if (asList(inbox['data']).isEmpty) EmptyLine(s.nothingYet),
+        Text(
+          s.messagesTitle,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+        ),
+        Text(
+          s.messagesHelp,
+          style: TextStyle(
+            color: (Theme.of(context).brightness == Brightness.dark
+                ? Tokens.mobGray300
+                : Tokens.textMuted),
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: Tokens.sp3),
+        if (asList(inbox['data']).isEmpty) EmptyLine(s.noMessagesYet),
         ..._InboxPage.items(context, ref, profile, inbox),
         if (asJson(inbox['page'])['more'] == true) _InboxPage(profile: profile, page: 2),
       ],
@@ -112,13 +127,14 @@ class _InboxPage extends ConsumerStatefulWidget {
                   )
                 : const SizedBox(width: 12),
             title: Text(
-              '${m['subject'] ?? m['title']}',
+              '${m['title'] ?? m['subject']}',
               style: m['unread'] == true ? const TextStyle(fontWeight: Tokens.fwBold) : null,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            // as the website: when · the child · the channels, then the first words
             subtitle: Text(
-              '${s.dateTime(DateTime.parse('${m['sentAt']}'))}\n${m['text']}',
+              '${messageMeta(s, m)}\n${'${m['text'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ')}',
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -176,7 +192,15 @@ class _InboxPageState extends ConsumerState<_InboxPage> {
   }
 }
 
-/// One message in full, with its attachments.
+/// When a message came, for whom and by which channels: 19 Nov 2026, 10:42 · Kid · SMS + WhatsApp
+String messageMeta(S s, Json m) => [
+  s.dateTime(DateTime.parse('${m['sentAt']}')),
+  if (asJson(m['student'])['name'] != null) '${asJson(m['student'])['name']}',
+  [for (final c in (m['channels'] as List? ?? const [])) s.channel('$c')].join(' + '),
+].where((x) => x.isNotEmpty).join(' · ');
+
+/// One message in full as the website opens it: the subject, the text, the e-mail as it was formatted, the
+/// attachments, and how it reached the family on each channel.
 class MessageDetail extends ConsumerWidget {
   const MessageDetail({super.key, required this.message});
   final Json message;
@@ -184,9 +208,16 @@ class MessageDetail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
     final m = message;
     final files = asList(m['attachments']);
     final html = m['html'] as String?;
+    final status = asJson(m['status']);
+    final delivery = [
+      for (final e in status.entries) '${s.channel(e.key)}: ${s.deliveryState('${e.value}')}',
+      if (m['readOnPhone'] == true) s.deliveryState('read'),
+    ].join(' · ');
     return ListView(
       padding: const EdgeInsets.all(Tokens.sp4),
       children: [
@@ -195,14 +226,33 @@ class MessageDetail extends ConsumerWidget {
             header: true,
             child: Text('${m['subject']}', style: Theme.of(context).textTheme.titleLarge),
           ),
-        Text(
-          s.dateTime(DateTime.parse('${m['sentAt']}')),
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        Text(messageMeta(s, m), style: TextStyle(color: muted, fontSize: 13)),
         const SizedBox(height: Tokens.sp4),
-        SelectionArea(
-          child: Text(html != null && html.isNotEmpty ? plainText(html) : '${m['text']}'),
-        ),
+        SelectionArea(child: Text('${m['text'] ?? ''}')),
+        if (html != null && html.isNotEmpty) ...[
+          const SizedBox(height: Tokens.sp3),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: OutlinedButton.icon(
+              key: const Key('openEmail'),
+              icon: const Icon(Icons.mail_outline),
+              label: Text(s.openEmail),
+              onPressed: () => pushPage(
+                context,
+                '${m['subject'] ?? m['title']}',
+                // the e-mail as the school formatted it; no scripts, nothing kept
+                InAppWebView(
+                  key: const Key('emailBody'),
+                  initialData: InAppWebViewInitialData(data: html),
+                  initialSettings: InAppWebViewSettings(
+                    javaScriptEnabled: false,
+                    cacheEnabled: false,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: Tokens.sp4),
         Attachments(
           count: files.length,
@@ -214,54 +264,274 @@ class MessageDetail extends ConsumerWidget {
                 contentType: '${files[i]['contentType']}',
               ),
         ),
+        if (delivery.isNotEmpty) ...[
+          const SizedBox(height: Tokens.sp3),
+          Text(
+            delivery,
+            key: const Key('delivery'),
+            style: TextStyle(color: muted, fontSize: 13),
+          ),
+        ],
       ],
     );
   }
 }
 
-/// Notices and circulars for the child's family, pinned first.
-class NoticesList extends ConsumerWidget {
+/// Notices and circulars for the child as the website's Notices page: the type, the dates and words in the
+/// notice to filter by; how many, latest first, and how many still to acknowledge; a card for each with its date,
+/// tags (pinned, kind, to acknowledge), first lines, for whom, its attachments and who published it.
+class NoticesList extends ConsumerStatefulWidget {
   const NoticesList({super.key, required this.profile});
   final Profile profile;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NoticesList> createState() => _NoticesListState();
+}
+
+class _NoticesListState extends ConsumerState<NoticesList> {
+  String _kind = '';
+  String _q = '';
+  DateTime? _from;
+  DateTime? _to;
+  final _words = TextEditingController();
+
+  @override
+  void dispose() {
+    _words.dispose();
+    super.dispose();
+  }
+
+  bool get _filtered => _kind.isNotEmpty || _q.isNotEmpty || _from != null || _to != null;
+
+  Future<void> _pick(bool from) async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: (from ? _from : _to) ?? now,
+      firstDate: DateTime(now.year - 3),
+      lastDate: now,
+    );
+    if (d != null) setState(() => from ? _from = d : _to = d);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
+    final p = widget.profile;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
+    final arg = (p, _kind, _q);
     return LoadedList<List<Json>>(
-      value: ref.watch(noticesProvider(profile)),
-      refresh: () => ref.refresh(noticesProvider(profile).future),
+      value: ref.watch(noticesFilteredProvider(arg)),
+      refresh: () => ref.refresh(noticesFilteredProvider(arg).future),
       children: (notices) {
-        final list = [...notices]
-          ..sort((a, b) {
-            final pin = (b['isPinned'] == true ? 1 : 0) - (a['isPinned'] == true ? 1 : 0);
-            return pin != 0 ? pin : '${b['publishFrom']}'.compareTo('${a['publishFrom']}');
-          });
+        final from = _from == null ? '' : ymd(_from!);
+        final to = _to == null ? '' : ymd(_to!);
+        final list = notices.where((n) {
+          final on = '${n['publishFrom']}'.split('T').first;
+          return (from.isEmpty || on.compareTo(from) >= 0) && (to.isEmpty || on.compareTo(to) <= 0);
+        }).toList();
+        bool pending(Json n) =>
+            n['ackRequired'] == true &&
+            p.studentId != null &&
+            !(n['ackedFor'] is List && (n['ackedFor'] as List).contains(p.studentId));
         return [
-          if (list.isEmpty) EmptyLine(s.nothingYet),
-          for (final n in list) NoticeTile(profile: profile, notice: n),
+          Text(
+            s.noticesTitle,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+          ),
+          Text(
+            s.noticesCount(list.length, _filtered, list.where(pending).length),
+            key: const Key('noticesCount'),
+            style: TextStyle(color: muted, fontSize: 14),
+          ),
+          const SizedBox(height: Tokens.sp3),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(Tokens.sp3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Semantics(
+                    label: s.notices,
+                    container: true,
+                    explicitChildNodes: true,
+                    child: Wrap(
+                      spacing: Tokens.sp2,
+                      runSpacing: Tokens.sp2,
+                      children: [
+                        for (final (v, label) in [
+                          ('', s.noticeKindAll),
+                          ('notice', s.notices),
+                          ('circular', s.circulars),
+                        ])
+                          ChoiceChip(
+                            key: Key('noticeKind-${v.isEmpty ? 'all' : v}'),
+                            label: Text(label),
+                            selected: _kind == v,
+                            showCheckmark: false,
+                            onSelected: (_) => setState(() => _kind = v),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: Tokens.sp2),
+                  Wrap(
+                    spacing: Tokens.sp2,
+                    runSpacing: Tokens.sp2,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const Key('noticeFrom'),
+                        icon: const Icon(Icons.event),
+                        label: Text('${s.fromWord}: ${_from == null ? '—' : s.date(_from!)}'),
+                        onPressed: () => _pick(true),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('noticeTo'),
+                        icon: const Icon(Icons.event),
+                        label: Text('${s.givenTo}: ${_to == null ? '—' : s.date(_to!)}'),
+                        onPressed: () => _pick(false),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Tokens.sp2),
+                  TextField(
+                    key: const Key('noticeWords'),
+                    controller: _words,
+                    maxLength: 80,
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      labelText: s.wordsInNotice,
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      counterText: '',
+                    ),
+                    onSubmitted: (v) => setState(() => _q = v.trim()),
+                  ),
+                  if (_filtered)
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton(
+                        key: const Key('noticeClear'),
+                        onPressed: () => setState(() {
+                          _kind = '';
+                          _q = '';
+                          _from = null;
+                          _to = null;
+                          _words.clear();
+                        }),
+                        child: Text(s.clearDates),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: Tokens.sp2),
+          if (list.isEmpty) EmptyLine(_filtered ? s.nothingMatches : s.noNoticesNow),
+          for (final n in list) NoticeTile(profile: p, notice: n, pending: pending(n)),
         ];
       },
     );
   }
 }
 
+/// A notice in the list: the date block, its tags, the first lines, for whom, the attachments and who published it.
 class NoticeTile extends ConsumerWidget {
-  const NoticeTile({super.key, required this.profile, required this.notice});
+  const NoticeTile({super.key, required this.profile, required this.notice, this.pending = false});
   final Profile profile;
   final Json notice;
+
+  /// still to acknowledge for this child
+  final bool pending;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
     final n = notice;
+    final on = DateTime.tryParse('${n['publishFrom']}'.split('T').first) ?? DateTime.now();
+    final body = '${n['body'] ?? ''}';
+    var excerpt = (n['bodyFormat'] == 'html' ? plainText(body) : body)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (excerpt.length > 180) excerpt = '${excerpt.substring(0, 180).trimRight()}…';
+    final targets = [for (final t in asList(n['targets']).take(3)) '${t['label']}'];
+    final files = asList(n['files']).length;
+    void open() => pushPage(context, s.notices, NoticeDetail(profile: profile, id: '${n['id']}'));
     return Card(
-      child: ListTile(
+      child: InkWell(
         key: Key('notice-${n['id']}'),
-        leading: Icon(n['isPinned'] == true ? Icons.push_pin_outlined : Icons.campaign_outlined),
-        title: Text('${n['title']}', maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Text(s.date('${n['publishFrom']}'.split('T').first)),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => pushPage(context, s.notices, NoticeDetail(profile: profile, id: '${n['id']}')),
+        onTap: open,
+        child: Padding(
+          padding: const EdgeInsets.all(Tokens.sp3),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 60,
+                padding: const EdgeInsets.symmetric(vertical: Tokens.sp2),
+                decoration: BoxDecoration(
+                  color: (dark ? Tokens.mobNavy700 : Tokens.mobNavy50),
+                  borderRadius: BorderRadius.circular(Tokens.radiusSm),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      on.day.toString().padLeft(2, '0'),
+                      style: const TextStyle(fontSize: 20, fontWeight: Tokens.fwBold),
+                    ),
+                    Text(s.monthShort(on), style: const TextStyle(fontSize: 12)),
+                    Text('${on.year}', style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Tokens.sp3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${n['title']}', style: const TextStyle(fontWeight: Tokens.fwBold)),
+                    const SizedBox(height: Tokens.sp1),
+                    Wrap(
+                      spacing: Tokens.sp1,
+                      runSpacing: Tokens.sp1,
+                      children: [
+                        if (n['isPinned'] == true) StatusChip(s.pinned, Tone.warning),
+                        StatusChip(
+                          s.noticeKind('${n['kind']}'),
+                          n['kind'] == 'circular' ? Tone.info : Tone.neutral,
+                        ),
+                        if (pending) StatusChip(s.toAcknowledge, Tone.danger),
+                      ],
+                    ),
+                    if (excerpt.isNotEmpty) ...[const SizedBox(height: Tokens.sp1), Text(excerpt)],
+                    Text(
+                      [
+                        if (targets.isNotEmpty) targets.join(', '),
+                        if (files > 0) s.attachmentsN(files),
+                        if (n['publishedBy'] != null) '${n['publishedBy']}',
+                      ].join(' · '),
+                      style: TextStyle(color: muted, fontSize: 13),
+                    ),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton(
+                        key: Key('noticeDetails-${n['id']}'),
+                        onPressed: open,
+                        child: Semantics(
+                          label: '${s.details}: ${n['title']}',
+                          child: Text(s.details),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -313,17 +583,37 @@ class _NoticeDetailState extends ConsumerState<NoticeDetail> {
         final seen = widget.profile.studentId == null
             ? n['ackedByMe'] == true
             : n['ackedFor'] is List && (n['ackedFor'] as List).contains(widget.profile.studentId);
+        final on = DateTime.tryParse('${n['publishFrom']}'.split('T').first);
         return [
+          Text(s.noticeKind('${n['kind']}'), style: Theme.of(context).textTheme.labelLarge),
           Semantics(
             header: true,
             child: Text('${n['title']}', style: Theme.of(context).textTheme.titleLarge),
           ),
           Text(
             [
-              s.date('${n['publishFrom']}'.split('T').first),
-              if (n['publishedBy'] != null) s.postedBy('${n['publishedBy']}'),
+              if (on != null) '${s.dayLong(on)} ${on.year}',
+              if (n['publishedBy'] != null) '${n['publishedBy']}',
             ].join(' · '),
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: Tokens.sp2),
+          Wrap(
+            spacing: Tokens.sp1,
+            runSpacing: Tokens.sp1,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (n['isPinned'] == true) StatusChip(s.pinned, Tone.warning),
+              StatusChip(
+                s.noticeKind('${n['kind']}'),
+                n['kind'] == 'circular' ? Tone.info : Tone.neutral,
+              ),
+              if (asList(n['targets']).isNotEmpty)
+                Text(
+                  [for (final t in asList(n['targets']).take(6)) '${t['label']}'].join(', '),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+            ],
           ),
           const SizedBox(height: Tokens.sp4),
           SelectionArea(child: Text(n['bodyFormat'] == 'html' ? plainText(body) : body)),

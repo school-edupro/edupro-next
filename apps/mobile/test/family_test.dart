@@ -124,6 +124,7 @@ class School {
                   'icon': 'file',
                 },
                 {'href': '/health', 'label': 'Health', 'help': null, 'icon': 'heart'},
+                {'href': '/directory', 'label': 'School directory', 'help': null, 'icon': 'search'},
                 {'href': '/certificates', 'label': 'Certificates', 'help': null, 'icon': 'file'},
               ],
             },
@@ -416,10 +417,10 @@ class School {
               'channels': ['sms', 'whatsapp'],
               'subject': null,
               'text': 'The second instalment is due on the 10th.',
-              'html': null,
+              'html': '<p>The second instalment is due on the <b>10th</b>.</p>',
               'student': {'id': '41', 'name': 'Kid Sample'},
               'sentAt': '${day(-1)}T10:00:00Z',
-              'status': {},
+              'status': {'sms': 'delivered', 'whatsapp': 'sent'},
               'readOnPhone': false,
               'unread': true,
               'attachments': [],
@@ -783,7 +784,69 @@ class School {
           name: 'plan.pdf',
         );
       case 'GET /academics/calendar':
-        return {'holidays': [], 'events': [], 'from': c.query?['from'], 'to': c.query?['to']};
+        return {
+          'holidays': [
+            {
+              'id': 'h1',
+              'name': 'Festival break',
+              'kind': 'holiday',
+              'startsOn': day(10),
+              'endsOn': day(12),
+            },
+            {
+              'id': 'h0',
+              'name': 'Founders day',
+              'kind': 'holiday',
+              'startsOn': day(-30),
+              'endsOn': day(-30),
+            },
+          ],
+          'events': [
+            {
+              'id': 'ev1',
+              'title': 'Annual sports',
+              'kind': 'event',
+              'startsOn': day(0),
+              'endsOn': day(0),
+              'startsAt': '09:00',
+              'description': 'Wear the house T-shirt.',
+            },
+            {
+              'id': 'ev0',
+              'title': 'Unit test 1',
+              'kind': 'exam',
+              'startsOn': day(-5),
+              'endsOn': day(-5),
+              'startsAt': null,
+              'description': null,
+            },
+          ],
+          'from': '2026-04-01',
+          'to': '2027-03-31',
+        };
+      case 'GET /academics/directory':
+        return {
+          'data': [
+            {
+              'heading': 'Office',
+              'name': 'Office Head',
+              'designation': 'Administrator',
+              'phone': '0000-000001',
+              'email': 'office@example.test',
+              'timings': '08:00–14:00',
+              'note': null,
+            },
+            {
+              'heading': 'Transport',
+              'name': 'Bus Desk',
+              'designation': null,
+              'phone': null,
+              'email': null,
+              'timings': null,
+              'note': 'Ask about routes',
+            },
+          ],
+        };
       case 'GET /exams/mine/date-sheets':
         return {
           'children': [
@@ -1819,6 +1882,96 @@ void main() {
     expect(find.byKey(const Key('contactMasked')), findsNothing);
   });
 
+  testWidgets('Messages and Notices as on the website: channels, delivery, filters, tags', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (t, _) = await pumpFamily(tester);
+    await tester.tap(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('Messages')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Messages from school'), findsOneWidget);
+    expect(find.textContaining('Kid Sample · SMS + WhatsApp'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('message-m1')));
+    await tester.pumpAndSettle();
+    expect(find.text('SMS: Delivered · WhatsApp: Sent'), findsOneWidget);
+    expect(find.byKey(const Key('openEmail')), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    // notices: how many and still to acknowledge, the tags, a type and words
+    await tester.tap(find.text('Notices'));
+    await tester.pumpAndSettle();
+    expect(find.text('Notices and circulars'), findsOneWidget);
+    expect(find.text('1 in all · latest first · 1 to acknowledge'), findsOneWidget);
+    expect(find.text('Circular'), findsOneWidget);
+    expect(find.text('Acknowledge'), findsOneWidget);
+    expect(find.text('Sports day is on Friday.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('noticeKind-circular')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/academics/notices').query!['kind'], 'circular');
+    await tester.enterText(find.byKey(const Key('noticeWords')), 'sports');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/academics/notices').query!['q'], 'sports');
+    expect(find.text('1 found · latest first · 1 to acknowledge'), findsOneWidget);
+  });
+
+  testWidgets('Calendar as on the website: the month grid, a day, the holiday list and events', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (t, _) = await pumpFamily(tester);
+    await tester.tap(find.text('Academics'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calendar').last);
+    await tester.pumpAndSettle();
+    final s = S(false);
+    // the whole session, read once
+    expect(t.calls.lastWhere((c) => c.path == '/academics/calendar').query ?? const {}, isEmpty);
+    expect(find.textContaining('Next holiday: Festival break'), findsOneWidget);
+    // today is picked: what falls on it
+    expect(find.byKey(const Key('calPicked')), findsOneWidget);
+    expect(find.text('Annual sports'), findsWidgets);
+    expect(find.text('Wear the house T-shirt.'), findsWidgets);
+    expect(find.bySemanticsLabel('${s.dayShort(day(0))}: Annual sports'), findsOneWidget);
+    // the holiday list: how many and how long, upcoming and earlier
+    await tester.tap(find.byKey(const Key('calView-holidays')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 holidays this session · 4 days in all'), findsOneWidget);
+    expect(find.text('Festival break'), findsOneWidget);
+    expect(find.text('Founders day'), findsOneWidget);
+    // events: upcoming and earlier
+    await tester.tap(find.byKey(const Key('calView-events')));
+    await tester.pumpAndSettle();
+    expect(find.text('Annual sports'), findsOneWidget);
+    expect(find.text('Unit test 1'), findsOneWidget);
+    expect(find.text('Exam'), findsOneWidget);
+  });
+
+  testWidgets('School directory in the app: headings, people, a number to call', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (t, _) = await pumpFamily(tester, kind: 'student');
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.widgetWithText(ListTile, 'School directory'));
+    await tester.tap(find.widgetWithText(ListTile, 'School directory'));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/academics/directory'), isTrue);
+    expect(find.text('Whom to contact at the school, and when.'), findsOneWidget);
+    expect(find.text('Office'), findsOneWidget);
+    expect(find.text('Transport'), findsOneWidget);
+    expect(find.text('Office Head'), findsOneWidget);
+    expect(find.text('Administrator'), findsOneWidget);
+    expect(find.bySemanticsLabel('Call Office Head'), findsOneWidget);
+    expect(find.text('Timings: 08:00–14:00'), findsOneWidget);
+    expect(find.text('Ask about routes'), findsOneWidget);
+    expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
+  });
+
   Future<void> openMore(WidgetTester tester, String label) async {
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('More')));
     await tester.pumpAndSettle();
@@ -2446,6 +2599,12 @@ void main() {
         ]) {
           await tester.tap(find.text(screen).last);
           await check(screen);
+          if (screen == s.calendar) {
+            for (final v in ['holidays', 'events']) {
+              await tester.tap(find.byKey(Key('calView-$v')));
+              await check('$screen, $v');
+            }
+          }
           if (screen == s.timetable) {
             await tester.tap(find.byKey(const Key('ttView-day')));
             await check('$screen, day');
@@ -2503,7 +2662,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.widgetWithText(ListTile, s.menu('Session plan and date sheets')));
         await check('Session plan and date sheets');
-        for (final page in ['Health', 'Certificates']) {
+        for (final page in ['Health', 'Certificates', 'School directory']) {
           await tester.tap(find.byType(BackButton));
           await tester.pumpAndSettle();
           await scrollTo(tester, find.widgetWithText(ListTile, s.menu(page)));
@@ -2595,12 +2754,20 @@ void main() {
     await tester.tap(find.text('Messages').last);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Messages');
+    await scrollTo(tester, find.byKey(const Key('message-m1')));
     await tester.tap(find.byKey(const Key('message-m1')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'message in full');
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Notices').last);
+    await tester.pumpAndSettle();
+    // the filters have a search box: move the notices' own list
+    await tester.dragUntilVisible(
+      find.byKey(const Key('notice-601')),
+      find.byType(ListView).last,
+      const Offset(0, -300),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('notice-601')));
     await tester.pumpAndSettle();
@@ -2636,7 +2803,7 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, 'Session plan and date sheets'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Session plan and date sheets');
-    for (final page in ['Health', 'Certificates']) {
+    for (final page in ['Health', 'Certificates', 'School directory']) {
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       await scrollTo(tester, find.widgetWithText(ListTile, page));

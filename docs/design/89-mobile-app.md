@@ -730,3 +730,23 @@ tab; Academics → Homework for a parent):
   the school gives one —, copies, a note), `POST certificate-requests/mine`.
 - The certificate request's body type in the API is now `CertificateRequestDto` (it shared the name
   `CreateRequestDto` with the comms module, which the app's generator refuses); the request is unchanged.
+
+## As built — Messages, Notices, Calendar and School directory as on the website (20 Nov 2026)
+
+- **Messages** (`family/messages.dart`): "Messages from school" with its line; each message with when, the child
+  and the channels (SMS + WhatsApp + Email) and its first words; in full: the subject, the text, **Open the email**
+  (the e-mail as the school formatted it, shown in the app with scripts off), the attachments (View / Download) and
+  how it reached the family on each channel (Delivered, Sent, Queued, Failed, Read on WhatsApp). Opening marks it
+  read. (The website's "turn on notifications" is the app's own push.)
+- **Notices** (`NoticesList`): "Notices and circulars", how many, latest first, and how many to acknowledge; All /
+  Notices / Circulars, From / To, words in the notice, Clear (`GET academics/notices?kind=&q=&studentId=&size=200`,
+  dates kept on the phone as the website does); a card each with the date block, Pinned / kind / Acknowledge, the
+  first lines, for whom, how many attachments and who published it; in full with the kind, the long date, the tags
+  and for whom.
+- **Calendar** (`family/calendar.dart`): the session read once (`GET academics/calendar`); **Calendar**: Previous /
+  Today / Next, the next holiday, the month grid (a day coloured by holiday, vacation, exam, working day or event;
+  Sunday in red; a tap lists the day), the key, the day's list and the month's; **Holiday list**: how many this
+  session and how many days, upcoming and earlier with the days each; **Events**: upcoming and earlier.
+- **School directory** (`family/directory.dart`, menu `/directory`, no web page): "Whom to contact at the school,
+  and when."; under each heading the name, designation and note, the number (a tap calls), the e-mail (a tap
+  writes) and the timings (`GET academics/directory`).
