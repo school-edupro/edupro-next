@@ -199,3 +199,10 @@ ConsentFormsController_mineForm
 ConsentFormsController_respond
 ConsentFormsController_edit
 ConsentFormsController_minePdf !file
+
+# the family assistant in the app, as the web Assistant page has it, with no web page (docs/design/89,
+# "Assistant and Help in the app"): what may be asked, the conversations, asking
+InsightsController_catalogue
+InsightsController_conversations
+InsightsController_conversation
+InsightsController_ask

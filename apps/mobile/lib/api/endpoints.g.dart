@@ -699,6 +699,22 @@ class EduProApi {
   /// GET /engagement/mine/consent-forms/responses/{rid}/pdf
   Future<ApiFile> consentFormsMinePdf({required String rid}) =>
       _t.file('GET', '/engagement/mine/consent-forms/responses/${Uri.encodeComponent(rid)}/pdf');
+
+  /// GET /insights/assistant/catalogue — The query catalogue with what the caller may run
+  Future<dynamic> insightsCatalogue() =>
+      _t.send('GET', '/insights/assistant/catalogue');
+
+  /// GET /insights/assistant/conversations
+  Future<dynamic> insightsConversations() =>
+      _t.send('GET', '/insights/assistant/conversations');
+
+  /// GET /insights/assistant/conversations/{id}
+  Future<dynamic> insightsConversation({required String id}) =>
+      _t.send('GET', '/insights/assistant/conversations/${Uri.encodeComponent(id)}');
+
+  /// POST /insights/assistant — Ask the assistant a question about school data (English or Hindi)
+  Future<dynamic> insightsAsk({required AskAssistantDto body}) =>
+      _t.send('POST', '/insights/assistant', body: body.toJson());
 }
 
 /** The OtpStartDto the API takes. */
@@ -1461,5 +1477,20 @@ class ConsentEditDto {
   Map<String, Object?> toJson() => {
         'answers': answers,
         if (signedName != null) 'signedName': signedName,
+      };
+}
+
+/** The AskAssistantDto the API takes. */
+class AskAssistantDto {
+  const AskAssistantDto({required this.question, this.conversationId, this.language, this.surface});
+  final String question;
+  final String? conversationId;
+  final String? language;
+  final String? surface;
+  Map<String, Object?> toJson() => {
+        'question': question,
+        if (conversationId != null) 'conversationId': conversationId,
+        if (language != null) 'language': language,
+        if (surface != null) 'surface': surface,
       };
 }

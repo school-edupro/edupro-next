@@ -854,3 +854,20 @@ next) — text, long text, number, e-mail, phone, date, time, radio, select (typ
 require rules, the required check per step, the fee worked out as answered, the signer's name; changing an answer
 keeps an earlier signature or file unless replaced. Calls: `engagement/mine/consent-forms` (list, `/:id`,
 `/:id/responses`, `responses/:rid` PUT, `responses/:rid/pdf`), `payments/mine/misc`.
+
+## As built — Assistant and Help as on the website (21 Nov 2026)
+
+**Assistant in the app, with no web page** (`family/assistant.dart`, menu `/assistant`, parents only): the title and
+what it answers; the conversation in use (the person's questions and the assistant's answers, each with its sources as
+tags); the question (2 to 1,000 letters) with Auto / English / हिन्दी / Hinglish; **Ask** (`surface: parent`; the next
+question goes on in the same conversation) and **New conversation**; folded until tapped: **What you can ask** (only
+what the person may run, with the note on masked questions) and **Recent conversations** (ten, latest first; a tap
+opens one). A school that has not opened it to families shows that line instead; asking without the consent says so
+with **Open profile** (the app's Profile, where Your consents is). Calls: `insights/assistant/catalogue`,
+`insights/assistant/conversations` (and `/:id`), `insights/assistant` (POST).
+
+**Help in the app, with no web page** (`family/help.dart`, menu `/help`): the website's common questions, each answer
+folded until tapped, in English or Hindi. Three answers say the app's way where the website names a web-only place:
+leave is Attendance → Apply for leave, a payment shows under Online payments as Waiting / Paid / Failed, the language
+is in Settings. A question about a page the person does not have is left out: a student has no child switch, paying or
+appointments (seven questions; a parent ten).

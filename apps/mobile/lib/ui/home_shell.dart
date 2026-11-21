@@ -18,6 +18,8 @@ import '../family/certificates.dart';
 import '../family/consents.dart';
 import '../family/academics.dart';
 import '../family/appointments.dart';
+import '../family/assistant.dart';
+import '../family/help.dart';
 import '../family/fees.dart';
 import '../family/profile.dart';
 import '../family/queries.dart';
@@ -121,6 +123,9 @@ Widget? nativeScreen(Profile p, String href, S s) {
     // consent forms: answer (the school's questions, a signature, files, the fee), change, pay, the PDF copy
     '/consents' => ConsentsScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
+    // the family assistant (own children only, with the consent) and the help centre: no web page
+    '/assistant' => AssistantScreen(profile: p),
+    '/help' => HelpScreen(profile: p),
     _ => null,
   };
 }
