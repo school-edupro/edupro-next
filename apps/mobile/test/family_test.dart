@@ -6,6 +6,7 @@ import 'package:edupro/app_services.dart';
 import 'package:edupro/auth/session_store.dart';
 import 'package:edupro/family/attendance.dart';
 import 'package:edupro/family/data.dart';
+import 'package:edupro/family/queries.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/staff/data.dart' show PickedFile;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1478,6 +1479,10 @@ void main() {
     await pumpFamily(tester, school: school);
     expect(find.byKey(const Key('shortcut-queries')), findsOneWidget);
     expect(find.byKey(const Key('shortcut-messages')), findsNothing);
+    // Queries opens in the app, not as a web page
+    await tester.tap(find.byKey(const Key('shortcut-queries')));
+    await tester.pumpAndSettle();
+    expect(find.byType(QueriesScreen), findsOneWidget);
   });
 
   testWidgets(

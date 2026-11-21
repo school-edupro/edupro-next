@@ -603,6 +603,82 @@ class EduProApi {
   /// POST /gate-passes/mine/{id}/cancel
   Future<dynamic> gatePassMineCancel({required PassCancelDto body, required String id}) =>
       _t.send('POST', '/gate-passes/mine/${Uri.encodeComponent(id)}/cancel', body: body.toJson());
+
+  /// GET /engagement/mine/queries
+  Future<dynamic> engagementMine({String? status, String? kind, String? categoryCode, String? studentId, String? q, String? order, int? page, int? size}) =>
+      _t.send('GET', '/engagement/mine/queries', query: {if (status != null) 'status': status, if (kind != null) 'kind': kind, if (categoryCode != null) 'categoryCode': categoryCode, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (order != null) 'order': order, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// POST /engagement/mine/queries — Raise a query, complaint or leave request for my child
+  Future<dynamic> engagementCreate({required CreateQueryDto body}) =>
+      _t.send('POST', '/engagement/mine/queries', body: body.toJson());
+
+  /// GET /engagement/mine/queries/{id}
+  Future<dynamic> engagementGetMine({required String id}) =>
+      _t.send('GET', '/engagement/mine/queries/${Uri.encodeComponent(id)}');
+
+  /// POST /engagement/mine/queries/{id}/responses
+  Future<dynamic> engagementReply({required RespondDto body, required String id}) =>
+      _t.send('POST', '/engagement/mine/queries/${Uri.encodeComponent(id)}/responses', body: body.toJson());
+
+  /// POST /engagement/mine/queries/{id}/reopen — Reopen my closed query within the reopen window
+  Future<dynamic> engagementReopen({required ReopenTicketDto body, required String id}) =>
+      _t.send('POST', '/engagement/mine/queries/${Uri.encodeComponent(id)}/reopen', body: body.toJson());
+
+  /// GET /engagement/mine/queries/{id}/files/{fileId}
+  Future<ApiFile> engagementMyFile({required String id, required String fileId}) =>
+      _t.file('GET', '/engagement/mine/queries/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
+  /// GET /engagement/mine/queries/{id}/timeline
+  Future<dynamic> engagementMyTimeline({required String id}) =>
+      _t.send('GET', '/engagement/mine/queries/${Uri.encodeComponent(id)}/timeline');
+
+  /// POST /engagement/mine/queries/{id}/rate
+  Future<dynamic> engagementRate({required RateDto body, required String id}) =>
+      _t.send('POST', '/engagement/mine/queries/${Uri.encodeComponent(id)}/rate', body: body.toJson());
+
+  /// GET /appointments/mine — My children's appointments, latest first
+  Future<dynamic> appointmentsMine({String? state, String? studentId, String? q, int? page, String? from, String? to, int? size}) =>
+      _t.send('GET', '/appointments/mine', query: {if (state != null) 'state': state, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (page != null) 'page': page, if (from != null) 'from': from, if (to != null) 'to': to, if (size != null) 'size': size});
+
+  /// POST /appointments/mine — A parent asks for a slot
+  Future<dynamic> appointmentsMineBook({required FamilyBookDto body}) =>
+      _t.send('POST', '/appointments/mine', body: body.toJson());
+
+  /// GET /appointments/mine/hosts — Whom a parent can meet, with visiting hours
+  Future<dynamic> appointmentsMineHosts() =>
+      _t.send('GET', '/appointments/mine/hosts');
+
+  /// GET /appointments/mine/days — The next days a person or desk has free times for a parent
+  Future<dynamic> appointmentsMineDays({required String hostId, String? studentId}) =>
+      _t.send('GET', '/appointments/mine/days', query: {'hostId': hostId, if (studentId != null) 'studentId': studentId});
+
+  /// GET /appointments/mine/slots — Free slots of a person or desk on a day
+  Future<dynamic> appointmentsMineSlots({required String hostId, required String date, String? studentId}) =>
+      _t.send('GET', '/appointments/mine/slots', query: {'hostId': hostId, 'date': date, if (studentId != null) 'studentId': studentId});
+
+  /// GET /appointments/mine/{id} — One of my children's appointments with its history
+  Future<dynamic> appointmentsMineGet({required String id}) =>
+      _t.send('GET', '/appointments/mine/${Uri.encodeComponent(id)}');
+
+  /// GET /appointments/mine/{id}/card — The same card for the parent app (the bytes as base64)
+  Future<ApiFile> appointmentsMineCardData({required String id}) =>
+      _t.file('GET', '/appointments/mine/${Uri.encodeComponent(id)}/card');
+
+  /// POST /appointments/mine/{id}/cancel
+  Future<dynamic> appointmentsMineCancel({required AppointmentCancelDto body, required String id}) =>
+      _t.send('POST', '/appointments/mine/${Uri.encodeComponent(id)}/cancel', body: body.toJson());
+
+  /// GET /engagement/mine/categories
+  Future<dynamic> engagementMyCategories() =>
+      _t.send('GET', '/engagement/mine/categories');
+
+  /// POST /engagement/feedback
+  Future<dynamic> engagementCreateFeedback({required CreateFeedbackDto body}) =>
+      _t.send('POST', '/engagement/feedback', body: body.toJson());
+
+  /// POST /engagement/change-requests
+  Future<dynamic> engagementCreateChange({required CreateChangeRequestDto body}) =>
+      _t.send('POST', '/engagement/change-requests', body: body.toJson());
 }
 
 /** The OtpStartDto the API takes. */
@@ -1224,6 +1300,120 @@ class PassCancelDto {
   const PassCancelDto({this.reason});
   final String? reason;
   Map<String, Object?> toJson() => {
+        if (reason != null) 'reason': reason,
+      };
+}
+
+/** The CreateQueryDto the API takes. */
+class CreateQueryDto {
+  const CreateQueryDto({required this.studentId, this.kind, this.categoryCode, required this.subject, required this.body, this.fileIds, this.leaveFrom, this.leaveTo});
+  final String studentId;
+  final String? kind;
+  final String? categoryCode;
+  final String subject;
+  final String body;
+  final List<String>? fileIds;
+  final String? leaveFrom;
+  final String? leaveTo;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        if (kind != null) 'kind': kind,
+        if (categoryCode != null) 'categoryCode': categoryCode,
+        'subject': subject,
+        'body': body,
+        if (fileIds != null) 'fileIds': fileIds,
+        if (leaveFrom != null) 'leaveFrom': leaveFrom,
+        if (leaveTo != null) 'leaveTo': leaveTo,
+      };
+}
+
+/** The RespondDto the API takes. */
+class RespondDto {
+  const RespondDto({required this.body, this.isInternal, this.fileIds});
+  final String body;
+  final bool? isInternal;
+  final List<String>? fileIds;
+  Map<String, Object?> toJson() => {
+        'body': body,
+        if (isInternal != null) 'isInternal': isInternal,
+        if (fileIds != null) 'fileIds': fileIds,
+      };
+}
+
+/** The ReopenTicketDto the API takes. */
+class ReopenTicketDto {
+  const ReopenTicketDto({required this.reason, this.fileIds});
+  final String reason;
+  final List<String>? fileIds;
+  Map<String, Object?> toJson() => {
+        'reason': reason,
+        if (fileIds != null) 'fileIds': fileIds,
+      };
+}
+
+/** The RateDto the API takes. */
+class RateDto {
+  const RateDto({required this.rating, this.comment});
+  final int rating;
+  final String? comment;
+  Map<String, Object?> toJson() => {
+        'rating': rating,
+        if (comment != null) 'comment': comment,
+      };
+}
+
+/** The FamilyBookDto the API takes. */
+class FamilyBookDto {
+  const FamilyBookDto({required this.studentId, required this.hostId, required this.startsAt, required this.purpose});
+  final String studentId;
+  final String hostId;
+  final String startsAt;
+  final String purpose;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'hostId': hostId,
+        'startsAt': startsAt,
+        'purpose': purpose,
+      };
+}
+
+/** The AppointmentCancelDto the API takes. */
+class AppointmentCancelDto {
+  const AppointmentCancelDto({this.reason});
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        if (reason != null) 'reason': reason,
+      };
+}
+
+/** The CreateFeedbackDto the API takes. */
+class CreateFeedbackDto {
+  const CreateFeedbackDto({this.studentId, required this.category, required this.rating, this.comment});
+  final String? studentId;
+  final String category;
+  final int rating;
+  final String? comment;
+  Map<String, Object?> toJson() => {
+        if (studentId != null) 'studentId': studentId,
+        'category': category,
+        'rating': rating,
+        if (comment != null) 'comment': comment,
+      };
+}
+
+/** The CreateChangeRequestDto the API takes. */
+class CreateChangeRequestDto {
+  const CreateChangeRequestDto({required this.studentId, required this.entity, this.entityId, required this.changes, this.reason});
+  final String studentId;
+  final String entity;
+  final String? entityId;
+  final Object? changes;
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'entity': entity,
+        if (entityId != null) 'entityId': entityId,
+        'changes': changes,
         if (reason != null) 'reason': reason,
       };
 }

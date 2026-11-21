@@ -153,7 +153,7 @@ export const RescheduleSchema = z.object({
 });
 export class RescheduleDto extends createZodDto(RescheduleSchema) {}
 export const CancelSchema = z.object({ reason: Note });
-export class CancelDto extends createZodDto(CancelSchema) {}
+export class AppointmentCancelDto extends createZodDto(CancelSchema) {}
 export const GateFindSchema = z.object({ code: z.string().trim().min(2).max(300) });
 export class GateFindDto extends createZodDto(GateFindSchema) {}
 export const CheckInSchema = z.object({ badgeNo: blank(z.string().trim().max(20)) });

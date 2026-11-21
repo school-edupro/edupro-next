@@ -19,7 +19,7 @@ import type {
   AppointmentState,
   ApproveDto,
   CalendarQueryDto,
-  CancelDto,
+  AppointmentCancelDto,
   CheckInDto,
   DaysQueryDto,
   DeskBookDto,
@@ -1146,7 +1146,7 @@ export class AppointmentsService {
     await this.notify(c, id, 'cancelled', reason);
   }
 
-  async cancel(ctx: RequestContext, id: string, dto: CancelDto) {
+  async cancel(ctx: RequestContext, id: string, dto: AppointmentCancelDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.cancelWith(c, id, dto.reason ?? null, 'front_desk');
       await this.audit.stage(ctx, c, {
@@ -2014,7 +2014,7 @@ export class AppointmentsService {
     });
   }
 
-  async familyCancel(ctx: RequestContext, id: string, dto: CancelDto) {
+  async familyCancel(ctx: RequestContext, id: string, dto: AppointmentCancelDto) {
     const v = await this.family(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const own = await c.query(
@@ -2254,7 +2254,12 @@ export class AppointmentsService {
     });
   }
 
-  async publicCancel(schoolCode: string, applicant: Applicant, id: string, dto: CancelDto) {
+  async publicCancel(
+    schoolCode: string,
+    applicant: Applicant,
+    id: string,
+    dto: AppointmentCancelDto,
+  ) {
     const tenant = await this.ownSchool(schoolCode, applicant);
     return this.db.tenant(tenant, async (c) => {
       const own = await c.query(`SELECT 1 FROM appointments WHERE id = $1 AND applicant_id = $2`, [

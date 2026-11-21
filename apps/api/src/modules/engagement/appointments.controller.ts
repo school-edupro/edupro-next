@@ -9,7 +9,7 @@ import {
   AppointmentSettingsDto,
   ApproveDto,
   CalendarQueryDto,
-  CancelDto,
+  AppointmentCancelDto,
   CheckInDto,
   DaysQueryDto,
   DeskBookDto,
@@ -106,7 +106,11 @@ export class AppointmentsController {
   @Post('mine/:id/cancel')
   @HttpCode(200)
   @RequirePermission(P.family)
-  mineCancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CancelDto) {
+  mineCancel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: AppointmentCancelDto,
+  ) {
     return this.svc.familyCancel(ctx, id, dto);
   }
 
@@ -309,7 +313,11 @@ export class AppointmentsController {
   @Post(':id/cancel')
   @HttpCode(200)
   @RequirePermission(P.decide)
-  cancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CancelDto) {
+  cancel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: AppointmentCancelDto,
+  ) {
     return this.svc.cancel(ctx, id, dto);
   }
 

@@ -18,6 +18,7 @@ import '../family/certificates.dart';
 import '../family/academics.dart';
 import '../family/fees.dart';
 import '../family/profile.dart';
+import '../family/queries.dart';
 import '../family/messages.dart';
 import '../family/common.dart';
 import '../family/data.dart' show unreadProvider;
@@ -111,6 +112,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/hostel' => HostelScreen(profile: p),
     // gate passes: ask (leaving early, arriving late, hostel home leave and outings), follow, the pass card
     '/gate-passes' => GatePassesScreen(profile: p),
+    // queries and complaints to the school, with quick feedback: no web page
+    '/queries' => QueriesScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };

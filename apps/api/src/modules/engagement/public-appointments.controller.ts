@@ -15,7 +15,12 @@ import type { FastifyReply } from 'fastify';
 import { Public } from '../../common/auth/decorators';
 import { ApplicantGuard, type ApplicantRequest } from '../admissions/public/applicant.guard';
 import { PublicThrottle, PublicThrottleGuard } from '../admissions/public/public-throttle.guard';
-import { CancelDto, DaysQueryDto, PublicBookDto, SlotsQueryDto } from './appointments.dto';
+import {
+  AppointmentCancelDto,
+  DaysQueryDto,
+  PublicBookDto,
+  SlotsQueryDto,
+} from './appointments.dto';
 import { AppointmentsService } from './appointments.service';
 
 /**
@@ -124,7 +129,7 @@ export class PublicAppointmentsController {
     @Req() req: ApplicantRequest,
     @Param('schoolCode') schoolCode: string,
     @Param('id') id: string,
-    @Body() dto: CancelDto,
+    @Body() dto: AppointmentCancelDto,
   ) {
     return this.svc.publicCancel(schoolCode, req.applicant!, id, dto);
   }

@@ -811,3 +811,18 @@ is used (the one-time code), the details, Cancel, and the approval steps. Calls:
 the Calendar's: **Books on loan** (ready to collect, the books, the dues), **Reservations (n open)** (earlier ones
 folded), **Find a book** (the catalogue itself, under the same figures and tabs), **History** (the filters, the rows,
 Excel and PDF, the six months and the most read) and **Digital library**. "Read this session" opens History.
+
+## As built — Queries as on the website (21 Nov 2026)
+
+**Queries in the app, with no web page** (`family/queries.dart`, menu `/queries`, Home's Queries shortcut and the
+icon on Messages): **the list** ("Queries, complaints and leave", how many, latest first; status — All, Not closed,
+Open, In progress, Answered, Closed —, type — Query, Complaint, Leave request —, a search by number or subject, ten
+a page), each with its subject, number, type, about, child, day, status, the leave decision and the stars given;
+**New request** (`QueryForm`: query or complaint, about (type to search), subject, details, up to five PDFs or
+photos of 5 MB; leave is applied for under Attendance); **Quick feedback** (area, five stars, a comment);
+**a query in full** (`QueryDetail`: what was written with its files, the school's answers and yours, Reply with
+files while it is open, the resolution, Reopen with a reason and files within the school's window, and the rating —
+five stars and a comment — once answered). Calls: `engagement/mine/queries` (list, POST, `/:id`, `/:id/responses`,
+`/:id/reopen`, `/:id/rate`, `/:id/timeline`, `/:id/files/:fileId`), `engagement/mine/categories`,
+`engagement/feedback`. The API's appointment cancel body is now `AppointmentCancelDto` (it shared `CancelDto` with
+other modules, which the app's generator refuses); the request is unchanged.

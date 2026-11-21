@@ -210,7 +210,7 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
                   icon: const Icon(Icons.chevron_left),
                   onPressed: _page > 1 ? () => setState(() => _page -= 1) : null,
                 ),
-                Text(s.pageOf(_page, pages)),
+                Flexible(child: Text(s.pageOf(_page, pages), textAlign: TextAlign.center)),
                 IconButton(
                   key: const Key('healthNext'),
                   tooltip: s.next,

@@ -1,6 +1,5 @@
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../api/endpoints.g.dart';
@@ -11,9 +10,10 @@ import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'common.dart';
 import 'data.dart';
+import 'queries.dart';
 
 /// A parent's Messages tab: the school's messages about the child, the notices and circulars, and the queries to
-/// the school (its web page).
+/// the school.
 class MessagesScreen extends ConsumerStatefulWidget {
   const MessagesScreen({super.key, required this.profile});
   final Profile profile;
@@ -48,16 +48,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
               IconButton(
                 tooltip: s.queries,
                 icon: const Icon(Icons.support_agent_outlined),
-                onPressed: () => context.push(
-                  Uri(
-                    path: '/web',
-                    queryParameters: {
-                      'app': widget.profile.app,
-                      'to': '/queries',
-                      'title': s.queries,
-                    },
-                  ).toString(),
-                ),
+                onPressed: () =>
+                    pushPage(context, s.queries, QueriesScreen(profile: widget.profile)),
               ),
             ],
           ),

@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/strings.dart';
@@ -7,6 +6,7 @@ import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import 'attendance.dart';
 import 'calendar.dart';
+import 'queries.dart';
 import 'common.dart';
 import 'data.dart';
 import 'date_sheet.dart';
@@ -198,16 +198,7 @@ class TodayScreen extends ConsumerWidget {
                     'queries',
                     s.menu(queries.label),
                     Icons.help_outline,
-                    () => context.push(
-                      Uri(
-                        path: '/web',
-                        queryParameters: {
-                          'app': menu!.app,
-                          'to': queries.href,
-                          'title': s.menu(queries.label),
-                        },
-                      ).toString(),
-                    ),
+                    () => open(s.menu(queries.label), QueriesScreen(profile: p)),
                   )
                 else
                   (
