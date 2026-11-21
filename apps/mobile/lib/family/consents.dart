@@ -351,9 +351,13 @@ int? _daysTo(String? at) {
   if (at == null || at.length < 16) return null;
   final to = DateTime.tryParse('${at.substring(0, 16)}:00Z');
   if (to == null) return null;
+  // by the calendar in India: tomorrow 17:00 is "tomorrow" at 19:00 today too
   final now = DateTime.now().toUtc().add(const Duration(minutes: 330));
-  final nowWall = DateTime.utc(now.year, now.month, now.day, now.hour, now.minute);
-  return (to.difference(nowWall).inMinutes / (24 * 60)).floor();
+  return DateTime.utc(
+    to.year,
+    to.month,
+    to.day,
+  ).difference(DateTime.utc(now.year, now.month, now.day)).inDays;
 }
 
 double _due(Json r) =>

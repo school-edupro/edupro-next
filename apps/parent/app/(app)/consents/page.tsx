@@ -44,10 +44,10 @@ interface Form {
 type Tab = 'todo' | 'answered' | 'closed';
 
 const dmy = (s: string) => `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}`;
-/** Whole days from now (IST) to a "YYYY-MM-DDTHH:MM" wall-clock time. */
+/** Calendar days from today (IST) to a "YYYY-MM-DDTHH:MM" wall-clock time: tomorrow 17:00 is 1 at 19:00 today too. */
 const daysTo = (s: string) => {
-  const now = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 16);
-  return Math.floor((Date.parse(`${s}:00Z`) - Date.parse(`${now}:00Z`)) / 86_400_000);
+  const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+  return Math.round((Date.parse(s.slice(0, 10)) - Date.parse(today)) / 86_400_000);
 };
 const due = (a: Answer) =>
   a.lineId ? Math.max(0, Number(a.lineAmount ?? 0) - Number(a.paid ?? 0)) : 0;
