@@ -111,3 +111,15 @@ parent`). The matcher joins apostrophes, counts two-letter Hindi words, and take
   "you", no reach to another student or staff queries, the own records, the school today, every chip question of
   every role in English and Hindi); the evaluation set 97 %, 0 leaks; family-layout and family-help tests now use a
   parents' screen (Queries) as the one a student cannot open.
+- **C (21 Nov 2026).** Migration **0410** `assistant_settings` (audiences on / off, the daily limit, topics off and
+  starters per audience; no row: all on, 30 a day, the standard starters). The audiences are students, parents,
+  teachers (section-scoped staff) and office and admin (unscoped staff). Every question checks the audience
+  (`assistant-off`, 403), the person's questions today (`ai.daily_limit`, 429) and leaves out the topics switched off;
+  the catalogue ("What you can ask") too. `GET insights/assistant/start`: on, consent (`granted`, `needed` for a
+  parent, `ask_parent` for a student), the starters the person may ask, their five recent questions, today's count.
+  `GET / PUT insights/assistant/settings` (the audit right to read, the settings right to change; starters checked
+  against the audience's questions; audited). Admin: **Insights → Assistant → Assistant set-up**
+  (`/insights/assistant/setup`): who may use it, questions a day, a topics table, starter questions per audience
+  (move, remove, add with search, "Use the standard ones"), save with an unsaved-changes guard, read-only without the
+  right. Tests: `apps/api/test/chatbot-setup.e2e-spec.ts`; the evaluation and chip suites raise their test school's
+  daily limit (they ask hundreds of questions) and run in their own batch.

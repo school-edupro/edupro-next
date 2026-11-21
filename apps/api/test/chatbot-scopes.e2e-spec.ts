@@ -117,6 +117,18 @@ describe('the chatbot for students and staff (e2e, docs/design/91 phase B)', () 
       expect(r.statusCode).toBe(201);
       return r.json().id as string;
     };
+    // every chip of every role is asked: the school's daily limit (docs/design/91) raised
+    await inject({
+      method: 'PUT',
+      url: '/insights/assistant/settings',
+      headers: h(admin),
+      json: {
+        audiences: { student: true, parent: true, teacher: true, admin: true },
+        dailyLimit: 500,
+        topicsOff: { student: [], parent: [], teacher: [], admin: [] },
+        starters: { student: [], parent: [], teacher: [], admin: [] },
+      },
+    });
     ids.asha = await student('Asha', '1', '9876500066');
     ids.bhanu = await student('Bhanu', '2');
     await withMigrator(async (c) => {

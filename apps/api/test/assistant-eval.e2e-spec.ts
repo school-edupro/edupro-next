@@ -145,6 +145,18 @@ describe('assistant evaluation set (e2e, Sprint 16)', () => {
       json: { purposeCode: 'ai.assistant', status: 'granted' },
     });
     await inject({ method: 'POST', url: '/insights/marts/refresh', headers: h(admin) });
+    // many questions from one person: the school's daily limit (docs/design/91) raised for the set
+    await inject({
+      method: 'PUT',
+      url: '/insights/assistant/settings',
+      headers: h(users.admin),
+      json: {
+        audiences: { student: true, parent: true, teacher: true, admin: true },
+        dailyLimit: 500,
+        topicsOff: { student: [], parent: [], teacher: [], admin: [] },
+        starters: { student: [], parent: [], teacher: [], admin: [] },
+      },
+    });
   }, 120_000);
 
   afterAll(async () => {

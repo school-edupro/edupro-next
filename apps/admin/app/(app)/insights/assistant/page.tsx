@@ -2,7 +2,7 @@ import { Badge, Button, Card, FormActions, PageHeader, SelectField } from '@edup
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { askAssistant } from '@/lib/actions';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getMe } from '@/lib/api';
 import type { AssistantConversation, CatalogueEntryView } from '@/lib/types';
 
 /** Sprint 14 (AI track): the staff assistant over the query catalogue, with history and citations. */
@@ -12,7 +12,8 @@ export default async function AssistantPage({
   searchParams: Promise<{ ok?: string; error?: string; detail?: string; c?: string }>;
 }) {
   const sp = await searchParams;
-  const [t, s, i, conversations, catalogue] = await Promise.all([
+  const [me, t, s, i, conversations, catalogue] = await Promise.all([
+    getMe(),
     getTranslations('pages.insights_assistant'),
     getTranslations('assistant'),
     getTranslations('insights'),
@@ -36,9 +37,16 @@ export default async function AssistantPage({
         title={t('title')}
         description={t('description')}
         actions={
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/insights/assistant">
-            {s('newConversation')}
-          </a>
+          <>
+            {me.permissions.includes('insights.assistant.audit') ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/insights/assistant/setup">
+                Assistant set-up
+              </a>
+            ) : null}
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/insights/assistant">
+              {s('newConversation')}
+            </a>
+          </>
         }
       />
       <Notice params={sp} />

@@ -299,6 +299,7 @@ const PAGES = [
   '/system/service-keys',
   '/insights/reports',
   '/insights/assistant/costs',
+  '/insights/assistant/setup',
   // master-data framework
   '/masters/fees?tab=fee_heads',
   '/masters/academics?tab=class_sections&add=1',

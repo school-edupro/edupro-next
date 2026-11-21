@@ -26,6 +26,16 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { ENV, type Env } from '../../config/env';
 import { buildCatalogue, runEntry, type CatalogueEntry } from './catalogue';
 import { META, genericAnswer, tableCard, type Card } from './catalogue-meta';
+import {
+  AUDIENCES,
+  DEFAULT_SETTINGS,
+  DEFAULT_STARTERS,
+  TOPICS,
+  audienceOfKind,
+  entriesOfAudience,
+  type AssistantSettings,
+  type Audience,
+} from './assistant-settings';
 
 export interface AskDto {
   question: string;
@@ -382,8 +392,12 @@ export class AssistantService {
     const entries = buildCatalogue({ academicYearId: yearId, today, ...scope }).filter(
       (e) => e.scope === scopeOf || (e.scope === 'self' && scope.employeeId !== null),
     );
+    const settings = await this.db.tenant(tenant, (c) => this.loadSettings(c));
+    const off = new Set(settings.topicsOff[audienceOfKind(scope.kind)]);
     const allowed = new Set(
-      this.allowed(ctx, entries, scope.kind, scope.employeeId).map((e) => e.id),
+      this.allowed(ctx, entries, scope.kind, scope.employeeId)
+        .filter((e) => !off.has(e.department))
+        .map((e) => e.id),
     );
     return entries.map((e) => ({
       id: e.id,
@@ -405,7 +419,17 @@ export class AssistantService {
     const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
     const scope = await this.scope(ctx);
     const entries = buildCatalogue({ academicYearId: yearId, today, ...scope });
-    const mine = this.allowed(ctx, entries, scope.kind, scope.employeeId);
+    // the school's set-up (docs/design/91 phase C): the audience on, its topics, the daily limit
+    const audience = audienceOfKind(scope.kind);
+    const settings = await this.db.tenant(tenant, (c) => this.loadSettings(c));
+    if (!settings.audiences[audience])
+      throw new DomainError('assistant-off', 'The assistant is not on for you at this school', {
+        status: 403,
+      });
+    const off = new Set(settings.topicsOff[audience]);
+    const mine = this.allowed(ctx, entries, scope.kind, scope.employeeId).filter(
+      (e) => !off.has(e.department),
+    );
     const language = dto.language ?? detectLanguage(dto.question);
     // the surface follows the caller: families are parents, scoped teachers are teachers; unscoped staff
     // may say which staff app asked (admin or teacher) but can never pose as a parent
@@ -447,6 +471,14 @@ export class AssistantService {
             { status: 403, extra: { purpose: 'ai.assistant', whose: 'parent' } },
           );
       }
+      // questions a person may ask a day (the school's limit)
+      const asked = await this.askedToday(c);
+      if (asked >= settings.dailyLimit)
+        throw new DomainError(
+          'ai.daily_limit',
+          `You have asked ${asked} questions today, the most this school allows; try again tomorrow`,
+          { status: 429, extra: { limit: settings.dailyLimit } },
+        );
       if (this.local)
         return this.askLocal(c, ctx, dto, {
           entries: mine,
@@ -832,6 +864,190 @@ export class AssistantService {
       [words, words.filter((w) => !/\d/.test(w))],
     );
     return r.rows;
+  }
+
+  /** The school's set-up, or the defaults (a starter list left empty: the standard one). */
+  private async loadSettings(c: PoolClient): Promise<AssistantSettings> {
+    const r = await c.query<{
+      audiences: Record<string, boolean>;
+      daily_limit: number;
+      topics_off: Record<string, string[]>;
+      starters: Record<string, string[]>;
+      updated_at: string;
+      updated_by: string | null;
+    }>(
+      `SELECT s.audiences, s.daily_limit, s.topics_off, s.starters, s.updated_at, u.display_name AS updated_by
+         FROM assistant_settings s LEFT JOIN users u ON u.id = s.updated_by`,
+    );
+    const row = r.rows[0];
+    if (!row) return { ...DEFAULT_SETTINGS, starters: { ...DEFAULT_STARTERS } };
+    const per = <T>(o: Record<string, T> | undefined, fallback: Record<Audience, T>) =>
+      Object.fromEntries(AUDIENCES.map((a) => [a, o?.[a] ?? fallback[a]])) as Record<Audience, T>;
+    const starters = per(row.starters, DEFAULT_STARTERS);
+    for (const a of AUDIENCES) if (!starters[a]?.length) starters[a] = DEFAULT_STARTERS[a];
+    return {
+      audiences: per(row.audiences, DEFAULT_SETTINGS.audiences),
+      dailyLimit: row.daily_limit,
+      topicsOff: per(row.topics_off, DEFAULT_SETTINGS.topicsOff),
+      starters,
+      updatedAt: row.updated_at,
+      updatedBy: row.updated_by,
+    };
+  }
+
+  /** Questions the caller asked today (the school's day). */
+  private async askedToday(c: PoolClient): Promise<number> {
+    const r = await c.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM ai_messages m JOIN ai_conversations v ON v.id = m.conversation_id
+        WHERE v.user_id = app.current_user_id() AND m.role = 'user'
+          AND m.created_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')`,
+    );
+    return r.rows[0]?.n ?? 0;
+  }
+
+  /** Assistant set-up for the office: the settings, the topics, and each audience's questions to choose from. */
+  async settings(ctx: RequestContext) {
+    const tenant = requireTenant(ctx);
+    const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    const all = buildCatalogue({
+      academicYearId: '0',
+      today,
+      sectionIds: [],
+      studentIds: [],
+      employeeId: '0',
+    });
+    const settings = await this.db.tenant(tenant, (c) => this.loadSettings(c));
+    return {
+      ...settings,
+      defaults: { starters: DEFAULT_STARTERS, dailyLimit: DEFAULT_SETTINGS.dailyLimit },
+      topics: TOPICS,
+      catalogue: Object.fromEntries(
+        AUDIENCES.map((a) => [
+          a,
+          entriesOfAudience(all, a).map((e) => ({
+            id: e.id,
+            department: e.department,
+            ask: META[e.id]?.ask ?? e.title,
+            askHi: META[e.id]?.askHi ?? e.titleHi,
+          })),
+        ]),
+      ),
+    };
+  }
+
+  /** The office saves the set-up (starters must be questions of their audience). */
+  async saveSettings(
+    ctx: RequestContext,
+    dto: {
+      audiences: Record<Audience, boolean>;
+      dailyLimit: number;
+      topicsOff: Record<Audience, string[]>;
+      starters: Record<Audience, string[]>;
+    },
+  ) {
+    const tenant = requireTenant(ctx);
+    const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    const all = buildCatalogue({
+      academicYearId: '0',
+      today,
+      sectionIds: [],
+      studentIds: [],
+      employeeId: '0',
+    });
+    const problems: string[] = [];
+    for (const a of AUDIENCES) {
+      const ids = new Set(entriesOfAudience(all, a).map((e) => e.id));
+      for (const id of dto.starters[a])
+        if (!ids.has(id)) problems.push(`${id} is not a question for ${a}s.`);
+      if (new Set(dto.starters[a]).size !== dto.starters[a].length)
+        problems.push(`A starter question is there twice for ${a}s.`);
+    }
+    if (problems.length)
+      throw new DomainError('validation-failed', problems.join(' '), {
+        status: 400,
+        extra: { errors: problems },
+      });
+    await this.db.tenant(tenant, (c) =>
+      c.query(
+        `INSERT INTO assistant_settings (school_id, audiences, daily_limit, topics_off, starters, updated_by, updated_at)
+         VALUES (app.current_school_id(), $1::jsonb, $2, $3::jsonb, $4::jsonb, app.current_user_id(), now())
+         ON CONFLICT (school_id) DO UPDATE SET audiences = EXCLUDED.audiences, daily_limit = EXCLUDED.daily_limit,
+           topics_off = EXCLUDED.topics_off, starters = EXCLUDED.starters, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+        [
+          JSON.stringify(dto.audiences),
+          dto.dailyLimit,
+          JSON.stringify(dto.topicsOff),
+          JSON.stringify(dto.starters),
+        ],
+      ),
+    );
+    ctx.audit = {
+      action: 'insights.assistant.settings_saved',
+      entityType: 'assistant_settings',
+      after: dto,
+    };
+    return this.settings(ctx);
+  }
+
+  /**
+   * The chat's start screen for the caller: whether it is on for them, their consent (a parent's own; a student's
+   * parent's), the starter questions (the school's, those they may ask), their recent questions, today's count.
+   */
+  async start(ctx: RequestContext) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    const scope = await this.scope(ctx);
+    const audience = audienceOfKind(scope.kind);
+    const entries = buildCatalogue({ academicYearId: yearId, today, ...scope });
+    return this.db.tenant(tenant, async (c) => {
+      const settings = await this.loadSettings(c);
+      const off = new Set(settings.topicsOff[audience]);
+      const mine = new Map(
+        this.allowed(ctx, entries, scope.kind, scope.employeeId)
+          .filter((e) => !off.has(e.department))
+          .map((e) => [e.id, e]),
+      );
+      let consent: 'granted' | 'needed' | 'ask_parent' | null = null;
+      if (scope.kind === 'family') {
+        const r = await c.query<{ status: string | null }>(
+          `SELECT app.consent_status(app.current_user_id(), 'ai.assistant')::text AS status`,
+        );
+        consent = r.rows[0]?.status === 'granted' ? 'granted' : 'needed';
+      } else if (scope.kind === 'student') {
+        const r = await c.query<{ ok: boolean }>(
+          `SELECT COALESCE(bool_or(app.consent_status(g.user_id, 'ai.assistant')::text = 'granted'), false) AS ok
+             FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+            WHERE sg.student_id = ANY($1::bigint[]) AND g.user_id IS NOT NULL AND g.deleted_at IS NULL`,
+          [scope.studentIds],
+        );
+        consent = r.rows[0]?.ok ? 'granted' : 'ask_parent';
+      }
+      const recent = await c.query<{ question: string }>(
+        `SELECT question FROM (
+           SELECT DISTINCT ON (lower(m.content)) m.content AS question, m.id
+             FROM ai_messages m JOIN ai_conversations v ON v.id = m.conversation_id
+            WHERE v.user_id = app.current_user_id() AND m.role = 'user'
+            ORDER BY lower(m.content), m.id DESC) q
+          ORDER BY id DESC LIMIT 5`,
+      );
+      return {
+        audience,
+        on: settings.audiences[audience],
+        consent,
+        dailyLimit: settings.dailyLimit,
+        askedToday: await this.askedToday(c),
+        starters: settings.starters[audience]
+          .map((id) => mine.get(id))
+          .filter((e): e is CatalogueEntry => !!e)
+          .map((e) => ({
+            id: e.id,
+            question: META[e.id]?.ask ?? e.title,
+            questionHi: META[e.id]?.askHi ?? e.titleHi,
+          })),
+        recent: recent.rows.map((r) => ({ question: r.question })),
+      };
+    });
   }
 
   private nearest(question: string, entries: CatalogueEntry[]): CatalogueEntry[] {

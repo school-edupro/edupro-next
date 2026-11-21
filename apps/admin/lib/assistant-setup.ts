@@ -1,0 +1,96 @@
+/**
+ * Assistant set-up (0410, docs/design/91 phase C): the shapes of GET /insights/assistant/settings and the editor's
+ * helpers. The API checks again on save.
+ */
+
+export const SETUP_AUDIENCES = ['student', 'parent', 'teacher', 'admin'] as const;
+export type SetupAudience = (typeof SETUP_AUDIENCES)[number];
+
+export const AUDIENCE_LABEL: Record<SetupAudience, string> = {
+  student: 'Students',
+  parent: 'Parents',
+  teacher: 'Teachers',
+  admin: 'Office and admin',
+};
+
+/** The most starter questions an audience may have (the API's limit). */
+export const MAX_STARTERS = 8;
+export const DAILY_LIMIT = { min: 1, max: 500 } as const;
+
+export interface AssistantSetupValues {
+  audiences: Record<SetupAudience, boolean>;
+  dailyLimit: number;
+  /** departments switched off per audience */
+  topicsOff: Record<SetupAudience, string[]>;
+  /** query ids in order; empty: the standard ones */
+  starters: Record<SetupAudience, string[]>;
+}
+
+export interface AssistantSetup extends AssistantSetupValues {
+  updatedAt: string | null;
+  updatedBy: string | null;
+  defaults: { starters: Record<SetupAudience, string[]>; dailyLimit: number };
+  topics: Array<{ key: string; label: string; labelHi: string }>;
+  catalogue: Record<
+    SetupAudience,
+    Array<{ id: string; department: string; ask: string; askHi: string }>
+  >;
+}
+
+const same = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** The editor's values: a starter list equal to the standard one shows as empty ("the standard ones"). */
+export function editableValues(s: AssistantSetup): AssistantSetupValues {
+  const starters = Object.fromEntries(
+    SETUP_AUDIENCES.map((a) => [
+      a,
+      same(s.starters[a] ?? [], s.defaults.starters[a] ?? []) ? [] : [...(s.starters[a] ?? [])],
+    ]),
+  ) as Record<SetupAudience, string[]>;
+  return {
+    audiences: { ...s.audiences },
+    dailyLimit: s.dailyLimit,
+    topicsOff: Object.fromEntries(
+      SETUP_AUDIENCES.map((a) => [a, [...(s.topicsOff[a] ?? [])]]),
+    ) as Record<SetupAudience, string[]>,
+    starters,
+  };
+}
+
+/** Two sets of values the same (topics compared as sets, starters in order). */
+export function sameValues(a: AssistantSetupValues, b: AssistantSetupValues): boolean {
+  if (a.dailyLimit !== b.dailyLimit) return false;
+  return SETUP_AUDIENCES.every(
+    (k) =>
+      a.audiences[k] === b.audiences[k] &&
+      same([...a.topicsOff[k]].sort(), [...b.topicsOff[k]].sort()) &&
+      same(a.starters[k], b.starters[k]),
+  );
+}
+
+/** What is wrong before saving (the API checks too). */
+export function setupProblems(v: AssistantSetupValues): string[] {
+  const problems: string[] = [];
+  if (
+    !Number.isInteger(v.dailyLimit) ||
+    v.dailyLimit < DAILY_LIMIT.min ||
+    v.dailyLimit > DAILY_LIMIT.max
+  )
+    problems.push('Questions a day: a whole number from 1 to 500.');
+  for (const a of SETUP_AUDIENCES)
+    if (v.starters[a].length > MAX_STARTERS)
+      problems.push(`${AUDIENCE_LABEL[a]}: at most ${String(MAX_STARTERS)} starter questions.`);
+  return problems;
+}
+
+export const whenChanged = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata',
+      })
+    : '';

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -8,6 +8,10 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { AiReportsService } from './ai-reports.service';
 import { AlertsService } from './alerts.service';
 import { AssistantService } from './assistant.service';
+import { AssistantSettingsDto } from './assistant-settings';
+import { PLATFORM } from '../platform/platform.permissions';
+
+const PLATFORM_SETTINGS_EDIT = PLATFORM.settingsEdit;
 import { DEPARTMENTS, DepartmentsService, type Department } from './departments.service';
 import { InsightsService } from './insights.service';
 import { MisService } from './mis.service';
@@ -111,6 +115,30 @@ export class InsightsController {
   @RequirePermission(INSIGHTS.assistantUse)
   ask(@ReqCtx() ctx: RequestContext, @Body() body: AskAssistantDto) {
     return this.assistant.ask(ctx, body);
+  }
+
+  // ---- docs/design/91: the chat's start screen and Assistant set-up ----
+  @Get('assistant/start')
+  @ApiOperation({
+    summary: "The chat's start screen: on for me, my consent, starter and recent questions",
+  })
+  @RequirePermission(INSIGHTS.assistantUse)
+  start(@ReqCtx() ctx: RequestContext) {
+    return this.assistant.start(ctx);
+  }
+
+  @Get('assistant/settings')
+  @ApiOperation({ summary: 'Assistant set-up: audiences, daily limit, topics, starter questions' })
+  @RequirePermission(INSIGHTS.assistantAudit)
+  assistantSettings(@ReqCtx() ctx: RequestContext) {
+    return this.assistant.settings(ctx);
+  }
+
+  @Put('assistant/settings')
+  @ApiOperation({ summary: 'Save the Assistant set-up' })
+  @RequirePermission(PLATFORM_SETTINGS_EDIT)
+  saveAssistantSettings(@ReqCtx() ctx: RequestContext, @Body() dto: AssistantSettingsDto) {
+    return this.assistant.saveSettings(ctx, dto);
   }
 
   @Get('assistant/conversations')
