@@ -22,6 +22,8 @@ const PAGES = [
   '/health',
   '/date-sheet',
   '/subject-choices',
+  // the assistant (docs/design/91 phase E): the start, starters, the folds
+  '/assistant',
   '/bus-attendance',
   '/documents',
   '/office-orders',

@@ -21,8 +21,10 @@ export async function askParentAssistant(fd: FormData) {
   } catch (error) {
     if (error instanceof ApiError) {
       const detail = typeof error.problem.detail === 'string' ? error.problem.detail : '';
+      // back to the conversation it was asked in, with the refusal (consent, today's limit, switched off)
+      const c = str(fd, 'conversationId');
       redirect(
-        `/assistant?error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 160))}`,
+        `/assistant?${c ? `c=${encodeURIComponent(c)}&` : ''}error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 160))}`,
       );
     }
     throw error;

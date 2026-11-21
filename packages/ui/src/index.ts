@@ -98,3 +98,15 @@ export {
   type AdmissionReviewData,
   type ReviewRemark,
 } from './components/AdmissionReview';
+export {
+  AssistantChat,
+  assistantMoney,
+  assistantWords,
+  type AssistantAudience,
+  type AssistantCardView,
+  type AssistantChatProps,
+  type AssistantChipView,
+  type AssistantLinkView,
+  type AssistantMessageView,
+  type AssistantStartView,
+} from './components/AssistantChat';

@@ -557,6 +557,13 @@ const DICT: Record<string, string> = {
   'New conversation': 'नई बातचीत',
   'What you can ask': 'आप क्या पूछ सकते हैं',
   'Recent conversations': 'हाल की बातचीत',
+  'The assistant is not open to you at this school.':
+    'इस विद्यालय में सहायक आपके लिए खुला नहीं है।',
+  'Your questions are stored with personal details masked. Nothing is sent outside the school’s system.':
+    'आपके प्रश्न व्यक्तिगत विवरण छिपाकर संग्रहीत होते हैं। विद्यालय की प्रणाली से बाहर कुछ नहीं भेजा जाता।',
+  'kind of question': 'तरह का प्रश्न',
+  'kinds of question': 'तरह के प्रश्न',
+  'latest first': 'नवीनतम पहले',
   turns: 'संदेश',
   'No conversations yet.': 'अभी कोई बातचीत नहीं।',
   // Queries

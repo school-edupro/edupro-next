@@ -595,6 +595,12 @@ const DICT: Record<string, string> = {
   'Your questions are stored with personal details masked and can be withdrawn with the consent.':
     'आपके प्रश्न व्यक्तिगत विवरण छिपाकर संग्रहीत होते हैं और सहमति वापस लेने पर हटाए जा सकते हैं।',
   'Recent conversations': 'हाल की बातचीत',
+  'The assistant is not open to you at this school.':
+    'इस विद्यालय में सहायक आपके लिए खुला नहीं है।',
+  'Your questions are stored with personal details masked. Nothing is sent outside the school’s system.':
+    'आपके प्रश्न व्यक्तिगत विवरण छिपाकर संग्रहीत होते हैं। विद्यालय की प्रणाली से बाहर कुछ नहीं भेजा जाता।',
+  'kind of question': 'तरह का प्रश्न',
+  'kinds of question': 'तरह के प्रश्न',
   Home: 'होम',
   'Sign out': 'साइन आउट',
   Homework: 'गृहकार्य',

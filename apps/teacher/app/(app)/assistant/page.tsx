@@ -1,4 +1,11 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import {
+  AssistantChat,
+  assistantWords,
+  Card,
+  PageHeader,
+  type AssistantMessageView,
+  type AssistantStartView,
+} from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
@@ -17,16 +24,13 @@ interface Conversation {
   title: string | null;
   turns: number;
   updatedAt: string;
-  messages?: Array<{
-    role: 'user' | 'assistant';
-    content: string;
-    refused: boolean;
-    citations: Array<{ query: string; title: string; rows: number }>;
-    createdAt: string;
-  }>;
+  messages?: AssistantMessageView[];
 }
 
-/** Sprint 15 (AI track): the assistant for a teacher — own sections only, English, Hindi or Hinglish. */
+/**
+ * The assistant for teachers (docs/design/91 phase E), as the app has it: own sections and own records (attendance,
+ * leave, timetable, payslip), the start, each answer's records, the screen to open and what to ask next.
+ */
 export default async function TeacherAssistantPage({
   searchParams,
 }: {
@@ -34,10 +38,12 @@ export default async function TeacherAssistantPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
-  let entries: Entry[];
-  let conversations: Conversation[];
+  let start: AssistantStartView | null = null;
+  let entries: Entry[] = [];
+  let conversations: Conversation[] = [];
   try {
-    [entries, conversations] = await Promise.all([
+    [start, entries, conversations] = await Promise.all([
+      bff.api.fetch<AssistantStartView>('/insights/assistant/start'),
       bff.api.fetch<{ data: Entry[] }>('/insights/assistant/catalogue').then((r) => r.data),
       bff.api
         .fetch<{ data: Conversation[] }>('/insights/assistant/conversations')
@@ -49,7 +55,7 @@ export default async function TeacherAssistantPage({
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
           <PageHeader kicker="EduPro" title={t(lang, 'Assistant')} />
-          <Card>{t(lang, 'The assistant is not enabled for your role in this school.')}</Card>
+          <Card>{t(lang, 'The assistant is not open to you at this school.')}</Card>
         </main>
       );
     throw error;
@@ -59,142 +65,70 @@ export default async function TeacherAssistantPage({
         .fetch<Conversation>(`/insights/assistant/conversations/${sp.c}`)
         .catch(() => null)
     : null;
+  const words = assistantWords(start?.audience === 'admin' ? 'admin' : 'teacher', lang);
+  const allowed = entries.filter((e) => e.allowed);
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
         kicker={t(lang, 'Assistant')}
-        title={t(lang, 'Ask about your sections')}
-        description={t(
-          lang,
-          'Attendance, absentees, homework, queries and mark entry of the sections you hold. Every answer names the query it came from.',
-        )}
+        title={words.title}
+        description={words.intro}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
             {t(lang, 'Home')}
           </a>
         }
       />
-      {sp.error ? (
-        <div
-          className="ep-alert ep-alert--danger"
-          role="alert"
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          {sp.error}
-          {sp.detail ? ` — ${sp.detail}` : ''}
-        </div>
-      ) : null}
-      <Card style={{ marginBottom: 'var(--sp-3)' }}>
-        {current?.messages?.length ? (
-          <div style={{ display: 'grid', gap: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }}>
-            {current.messages.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  borderLeft: `3px solid ${m.role === 'user' ? 'var(--color-border)' : 'var(--color-accent, #0aa)'}`,
-                  paddingLeft: 'var(--sp-3)',
-                }}
-              >
-                <div className="ep-kicker">
-                  {m.role === 'user' ? t(lang, 'You') : t(lang, 'Assistant')}
-                </div>
-                <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                {m.citations?.length ? (
-                  <div
-                    style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', marginTop: 4 }}
-                  >
-                    {m.citations.map((c) => (
-                      <Badge key={c.query} tone="neutral">
-                        {c.title} · {c.rows} {t(lang, 'rows')}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
-        <form action={askTeacherAssistant}>
-          <input type="hidden" name="conversationId" value={current?.id ?? ''} />
-          <label className="ep-field">
-            <span className="ep-field__label">{t(lang, 'Your question')}</span>
-            <textarea
-              className="ep-input"
-              name="question"
-              rows={3}
-              minLength={2}
-              maxLength={1000}
-              required
-              placeholder={t(
-                lang,
-                'Who was absent today? · Aaj kaun absent hai? · मेरे अनुभाग की उपस्थिति',
-              )}
-            />
-          </label>
-          <div
-            style={{
-              display: 'flex',
-              gap: 'var(--sp-3)',
-              alignItems: 'flex-end',
-              flexWrap: 'wrap',
-              marginTop: 'var(--sp-2)',
-            }}
-          >
-            <label className="ep-field">
-              <span className="ep-field__label">{t(lang, 'Language')}</span>
-              <select className="ep-input" name="language" defaultValue="">
-                <option value="">{t(lang, 'Auto')}</option>
-                <option value="en">English</option>
-                <option value="hi">हिन्दी</option>
-                <option value="hinglish">Hinglish</option>
-              </select>
-            </label>
-            <Button type="submit">{t(lang, 'Ask')}</Button>
-            {current ? (
-              <a className="ep-btn ep-btn--ghost" href="/assistant">
-                {t(lang, 'New conversation')}
-              </a>
-            ) : null}
-          </div>
-        </form>
-      </Card>
-      <div
-        style={{
-          display: 'grid',
-          gap: 'var(--sp-3)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        }}
-      >
-        <Card title={t(lang, 'What you can ask')}>
-          <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
-            {entries
-              .filter((e) => e.allowed)
-              .map((e) => (
-                <li key={e.id}>
-                  <strong>{e.title}</strong>{' '}
-                  <span className="ep-field__help">— {e.description}</span>
-                </li>
-              ))}
-          </ul>
-        </Card>
-        <Card title={t(lang, 'Recent conversations')}>
-          {conversations.length ? (
-            <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
-              {conversations.slice(0, 10).map((c) => (
-                <li key={c.id}>
-                  <a href={`/assistant?c=${c.id}`}>{c.title ?? c.id.slice(0, 8)}</a>
-                  <span className="ep-field__help">
-                    {' '}
-                    · {c.turns} {t(lang, 'turns')} · {c.updatedAt.slice(0, 10)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="ep-field__help">{t(lang, 'No conversations yet.')}</p>
+      <AssistantChat
+        lang={lang}
+        start={start}
+        conversationId={current?.id ?? null}
+        messages={current?.messages ?? []}
+        action={askTeacherAssistant}
+        newHref="/assistant"
+        error={sp.error ? { type: sp.error, detail: sp.detail } : null}
+      />
+      <details className="ep-card" style={{ marginTop: 'var(--sp-3)' }}>
+        <summary>
+          <strong>{t(lang, 'What you can ask')}</strong>{' '}
+          <span className="ep-field__help">
+            · {allowed.length}{' '}
+            {t(lang, allowed.length === 1 ? 'kind of question' : 'kinds of question')}
+          </span>
+        </summary>
+        <ul style={{ margin: 'var(--sp-2) 0 0', paddingLeft: '1.2em' }}>
+          {allowed.map((e) => (
+            <li key={e.id}>
+              <strong>{lang === 'hi' ? e.titleHi : e.title}</strong>
+              {lang === 'hi' ? null : <span className="ep-field__help"> — {e.description}</span>}
+            </li>
+          ))}
+        </ul>
+        <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
+          {t(
+            lang,
+            'Your questions are stored with personal details masked. Nothing is sent outside the school’s system.',
           )}
-        </Card>
-      </div>
+        </p>
+      </details>
+      {conversations.length ? (
+        <details className="ep-card" style={{ marginTop: 'var(--sp-3)' }}>
+          <summary>
+            <strong>{t(lang, 'Recent conversations')}</strong>{' '}
+            <span className="ep-field__help">
+              · {Math.min(conversations.length, 10)} · {t(lang, 'latest first')}
+            </span>
+          </summary>
+          <ul style={{ margin: 'var(--sp-2) 0 0', paddingLeft: '1.2em' }}>
+            {conversations.slice(0, 10).map((c) => (
+              <li key={c.id}>
+                <a href={`/assistant?c=${c.id}`}>{c.title ?? c.id.slice(0, 8)}</a>
+                <span className="ep-field__help"> · {c.updatedAt.slice(0, 10)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </main>
   );
 }

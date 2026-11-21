@@ -123,3 +123,23 @@ parent`). The matcher joins apostrophes, counts two-letter Hindi words, and take
   (move, remove, add with search, "Use the standard ones"), save with an unsaved-changes guard, read-only without the
   right. Tests: `apps/api/test/chatbot-setup.e2e-spec.ts`; the evaluation and chip suites raise their test school's
   daily limit (they ask hundreds of questions) and run in their own batch.
+- **D (21 Nov 2026).** The app (`apps/mobile/lib/family/assistant.dart`) has one chat for students, parents and staff:
+  the start (`insightsStart`: the school's starter chips, **Ask again** from the person's recent questions, "n of N
+  questions asked today"); each answer's figures (`FigureGrid`) or short table (record cards with money and dates),
+  **Open <screen>** — the app's own screen when the person's menu has it (a screen the school hides is not offered),
+  else the website's page inside the app — the sources, and on the latest answer **Ask next**, **Did you mean** or
+  **You can ask** chips that ask on a tap; switched off, a parent's consent (Open profile, the start read again on
+  return), a student's "ask a parent", a consent withdrawn meanwhile and today's limit (at the start or when asking).
+  Title, intro and examples follow the audience; staff ask as the teachers' app and `/assistant` opens natively for
+  them too. **Ask** (a floating button) on every Home when the person's menu has the assistant. Voice is the
+  keyboard's mic (a line under the question box says so). Tests: `apps/mobile/test/assistant_help_test.dart` (13 on
+  the assistant; light, dark, Hindi, 2× text and the accessibility guidelines), Home's Ask in `app_flow_test.dart`.
+- **E (21 Nov 2026).** The websites share one server component, `AssistantChat` in `@edupro/ui` (no script: each
+  question chip is a small form posting to the page's action), with `assistantWords(audience, lang)` for the title,
+  intro and examples, so the parent (students and parents), teacher and admin pages show what the app shows: the
+  start (starters, Ask again, today's count), the answer's figures or table, **Open <screen>** (the asking website's
+  page), the sources, Ask next / Did you mean / You can ask, the language as radio buttons (Auto, English, हिन्दी,
+  Hinglish), and the notes for switched off, consent ("Open profile"), "ask a parent" and today's limit. A refused
+  question returns to its conversation. "What you can ask" and "Recent conversations" are folded with a count.
+  Checked with axe at 1280 and 375 px on a made-up test school's conversations with cards; `/assistant` added to the
+  parent and teacher accessibility lists.

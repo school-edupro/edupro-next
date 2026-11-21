@@ -48,6 +48,8 @@ const PAGES = [
   '/library?view=find&q=a',
   '/help',
   '/help?q=fee',
+  // the assistant (docs/design/91 phase E): the start, consent or "ask a parent", the folds
+  '/assistant',
   '/academics',
   // the family app layout (docs/design/90): Home's shortcuts and cards, and Edit shortcuts
   '/home/shortcuts',
