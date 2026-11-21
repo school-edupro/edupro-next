@@ -2,7 +2,8 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { ApiError } from '@edupro/bff';
-import { FamilyShell } from '@/components/FamilyShell';
+import { FamilyShell, audienceOf } from '@/components/FamilyShell';
+import { homeLayout } from '@/lib/home-layout';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 
@@ -37,8 +38,11 @@ export default async function FamilyLayout({ children }: { children: ReactNode }
         {ended ? <p role="status">{t(lang, 'Portal access has ended')}</p> : children}
       </main>
     );
+  // the school's published layout (docs/design/90): the side menu and the phone bar follow it; else as built
+  const got = ended ? null : await homeLayout(audienceOf(me));
+  const layout = got?.published ? got : null;
   return (
-    <FamilyShell me={me} lang={lang} currentPath={currentPath} unread={unread}>
+    <FamilyShell me={me} lang={lang} currentPath={currentPath} unread={unread} layout={layout}>
       {ended ? (
         <div className="ep-card" role="status">
           <h1>{t(lang, 'Portal access has ended')}</h1>

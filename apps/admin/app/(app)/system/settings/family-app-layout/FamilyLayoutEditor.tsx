@@ -5,16 +5,19 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import {
   ACADEMICS_TAB,
   AUDIENCE_NAME,
+  GROUP_NAME_MAX,
+  MENU_GROUP_NAME,
   layoutProblems,
   sameLayout,
   when,
   type FamilyAudience,
   type FamilyLayout,
   type FamilyLayoutSetup,
+  type FamilyMenuGroup,
 } from '@/lib/family-layout';
 import { discardLayout, publishLayout, saveLayoutDraft } from './actions';
 
-type Part = keyof FamilyLayout;
+type Part = Exclude<keyof FamilyLayout, 'menu'>;
 
 /** One ordered list of the draft: its rows (move up / down, remove) and "Add" from what is not in it yet. */
 function OrderedList({
@@ -187,6 +190,244 @@ function OrderedList({
   );
 }
 
+/**
+ * The website's side menu and the app's More list (docs/design/90): the groups in order (move up / down), each with
+ * the school's name for it in English and Hindi (empty: the standard name) and its screens in order — moved up / down
+ * inside the group or to another group. Every screen stays in one group.
+ */
+function MenuEditor({
+  audience,
+  menu,
+  labelOf,
+  canEdit,
+  onChange,
+}: {
+  audience: FamilyAudience;
+  menu: FamilyMenuGroup[];
+  labelOf: (key: string) => { label: string };
+  canEdit: boolean;
+  onChange: (next: FamilyMenuGroup[]) => void;
+}) {
+  const standard = MENU_GROUP_NAME[audience];
+  const nameOf = (g: FamilyMenuGroup) => g.label?.trim() || standard[g.key] || g.key;
+  const swap = <T,>(xs: T[], i: number, j: number) => {
+    const next = [...xs];
+    [next[i], next[j]] = [next[j]!, next[i]!];
+    return next;
+  };
+  const setGroup = (gi: number, g: FamilyMenuGroup) =>
+    onChange(menu.map((x, i) => (i === gi ? g : x)));
+  const moveTo = (gi: number, href: string, key: string) =>
+    onChange(
+      menu.map((x, i) =>
+        i === gi
+          ? { ...x, items: x.items.filter((h) => h !== href) }
+          : x.key === key
+            ? { ...x, items: [...x.items, href] }
+            : x,
+      ),
+    );
+  const name = (v: string) => (v.trim() ? v : null);
+  return (
+    <section
+      className="ep-card"
+      aria-labelledby={`fal-menu-${audience}-h`}
+      style={{ marginBottom: 'var(--sp-4)' }}
+    >
+      <h2 id={`fal-menu-${audience}-h`} className="ep-cdash__h3" style={{ margin: 0 }}>
+        Website menu and app More
+      </h2>
+      <p className="ep-field__help" style={{ marginTop: 'var(--sp-1)' }}>
+        The groups of the website&apos;s side menu and of the app&apos;s More list, in this order,
+        with their screens. Home stays first. Every screen is in one group; to stop someone seeing a
+        screen, use Access → Roles.
+      </p>
+      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 'var(--sp-3)' }}>
+        {menu.map((g, gi) => {
+          const groupName = nameOf(g);
+          const others = menu.filter((x) => x.key !== g.key);
+          return (
+            <li
+              key={g.key}
+              data-testid="fal-menu-group"
+              style={{
+                padding: 'var(--sp-3)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--surface-card)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--sp-2)',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span className="ep-field__help" style={{ margin: 0, minWidth: '1.5rem' }}>
+                  {String(gi + 1)}.
+                </span>
+                <strong style={{ flex: '1 1 10rem' }}>{groupName}</strong>
+                {canEdit ? (
+                  <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={gi === 0}
+                      aria-label={`Move the group ${groupName} up`}
+                      onClick={() => onChange(swap(menu, gi, gi - 1))}
+                    >
+                      Move up
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={gi === menu.length - 1}
+                      aria-label={`Move the group ${groupName} down`}
+                      onClick={() => onChange(swap(menu, gi, gi + 1))}
+                    >
+                      Move down
+                    </Button>
+                  </span>
+                ) : null}
+              </div>
+              {canEdit ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 'var(--sp-3)',
+                    flexWrap: 'wrap',
+                    marginTop: 'var(--sp-2)',
+                  }}
+                >
+                  <div className="ep-field" style={{ flex: '1 1 12rem', marginBottom: 0 }}>
+                    <label
+                      className="ep-field__label"
+                      htmlFor={`fal-menu-${audience}-${g.key}-name`}
+                    >
+                      Name
+                    </label>
+                    <input
+                      id={`fal-menu-${audience}-${g.key}-name`}
+                      className="ep-input"
+                      value={g.label ?? ''}
+                      placeholder={standard[g.key]}
+                      maxLength={GROUP_NAME_MAX}
+                      onChange={(e) => setGroup(gi, { ...g, label: name(e.target.value) })}
+                    />
+                  </div>
+                  <div className="ep-field" style={{ flex: '1 1 12rem', marginBottom: 0 }}>
+                    <label className="ep-field__label" htmlFor={`fal-menu-${audience}-${g.key}-hi`}>
+                      Name in Hindi (optional)
+                    </label>
+                    <input
+                      id={`fal-menu-${audience}-${g.key}-hi`}
+                      className="ep-input"
+                      lang="hi"
+                      value={g.labelHi ?? ''}
+                      maxLength={GROUP_NAME_MAX}
+                      onChange={(e) => setGroup(gi, { ...g, labelHi: name(e.target.value) })}
+                    />
+                  </div>
+                </div>
+              ) : g.labelHi ? (
+                <span className="ep-field__help" style={{ display: 'block', margin: 0 }} lang="hi">
+                  {g.labelHi}
+                </span>
+              ) : null}
+              {g.items.length === 0 ? (
+                <p className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
+                  No screens — it does not show.
+                </p>
+              ) : (
+                <ol
+                  style={{
+                    listStyle: 'none',
+                    margin: 'var(--sp-2) 0 0',
+                    padding: 0,
+                    display: 'grid',
+                    gap: 'var(--sp-1)',
+                  }}
+                >
+                  {g.items.map((href, i) => {
+                    const { label } = labelOf(href);
+                    return (
+                      <li
+                        key={href}
+                        data-testid="fal-menu-row"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--sp-2)',
+                          flexWrap: 'wrap',
+                          padding: 'var(--sp-1) var(--sp-2)',
+                          borderTop: i === 0 ? undefined : '1px solid var(--border-subtle)',
+                        }}
+                      >
+                        <span style={{ flex: '1 1 10rem' }}>{label}</span>
+                        {canEdit ? (
+                          <span
+                            style={{
+                              display: 'flex',
+                              gap: 'var(--sp-1)',
+                              flexWrap: 'wrap',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={i === 0}
+                              aria-label={`Move ${label} up`}
+                              onClick={() => setGroup(gi, { ...g, items: swap(g.items, i, i - 1) })}
+                            >
+                              Move up
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={i === g.items.length - 1}
+                              aria-label={`Move ${label} down`}
+                              onClick={() => setGroup(gi, { ...g, items: swap(g.items, i, i + 1) })}
+                            >
+                              Move down
+                            </Button>
+                            <select
+                              className="ep-select"
+                              value=""
+                              aria-label={`Move ${label} to another group`}
+                              style={{ width: 'auto' }}
+                              onChange={(e) => {
+                                if (e.target.value) moveTo(gi, href, e.target.value);
+                              }}
+                            >
+                              <option value="">Move to…</option>
+                              {others.map((o) => (
+                                <option key={o.key} value={o.key}>
+                                  {nameOf(o)}
+                                </option>
+                              ))}
+                            </select>
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 /** The draft as families would see it: the Home band, the shortcut grid, the cards and the tab bar. */
 function Preview({
   audience,
@@ -229,9 +470,9 @@ function Preview({
     </div>
   );
   return (
-    <figure style={{ margin: 0 }} aria-labelledby="fal-preview-cap">
+    <figure style={{ margin: 0 }} aria-labelledby={`fal-preview-cap-${audience}`}>
       <figcaption
-        id="fal-preview-cap"
+        id={`fal-preview-cap-${audience}`}
         className="ep-field__help"
         style={{ marginBottom: 'var(--sp-2)' }}
       >
@@ -316,6 +557,40 @@ function Preview({
           ))}
         </div>
       </div>
+      {draft.menu?.length ? (
+        <div
+          data-testid="fal-preview-menu"
+          style={{
+            marginTop: 'var(--sp-3)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--surface-card)',
+            padding: 'var(--sp-3)',
+            maxWidth: '22rem',
+            fontSize: 'var(--fs-small)',
+            color: 'var(--text-body)',
+          }}
+        >
+          <div className="ep-field__help" style={{ margin: '0 0 var(--sp-2)' }}>
+            Side menu (website) and More (app)
+          </div>
+          <div style={{ fontWeight: 'var(--fw-semibold)' }}>Home</div>
+          {draft.menu
+            .filter((g) => g.items.length > 0)
+            .map((g) => (
+              <div key={g.key} style={{ marginTop: 'var(--sp-2)' }}>
+                <div style={{ fontWeight: 'var(--fw-semibold)' }}>
+                  {g.label?.trim() || MENU_GROUP_NAME[audience][g.key] || g.key}
+                </div>
+                <ul style={{ margin: 'var(--sp-1) 0 0', paddingLeft: 'var(--sp-4)' }}>
+                  {g.items.map((h) => (
+                    <li key={h}>{labelOf(h).label}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+        </div>
+      ) : null}
     </figure>
   );
 }
@@ -504,7 +779,7 @@ export function FamilyLayoutEditor({
       >
         <div style={{ flex: '1 1 28rem', minWidth: 0 }}>
           <OrderedList
-            id="fal-tabs"
+            id={`fal-${audience}-tabs`}
             title="Bottom tabs"
             help="Home is always first and More always last; choose the three in between. A tab someone cannot open gives its place to the next of the shortcuts."
             items={draft.tabs}
@@ -522,7 +797,7 @@ export function FamilyLayoutEditor({
             onChange={set('tabs')}
           />
           <OrderedList
-            id="fal-shortcuts"
+            id={`fal-${audience}-shortcuts`}
             title="Home shortcuts"
             help="The tiles on Home, four a row; the app adds an All tile that opens More. Each person may pin their own instead."
             items={draft.shortcuts}
@@ -535,7 +810,7 @@ export function FamilyLayoutEditor({
             onChange={set('shortcuts')}
           />
           <OrderedList
-            id="fal-cards"
+            id={`fal-${audience}-cards`}
             title="Home cards"
             help="The cards under the shortcuts, in this order. A card about a screen someone cannot open is left out for them."
             items={draft.cards}
@@ -548,7 +823,7 @@ export function FamilyLayoutEditor({
             onChange={set('cards')}
           />
           <OrderedList
-            id="fal-academics"
+            id={`fal-${audience}-academics`}
             title="Academics tab"
             help={
               draft.tabs.includes(ACADEMICS_TAB)
@@ -564,6 +839,18 @@ export function FamilyLayoutEditor({
             canEdit={canEdit}
             onChange={set('academics')}
           />
+          {draft.menu ? (
+            <MenuEditor
+              audience={audience}
+              menu={draft.menu}
+              labelOf={labelOf}
+              canEdit={canEdit}
+              onChange={(menu) => {
+                setMsg(null);
+                setDraft({ ...draft, menu });
+              }}
+            />
+          ) : null}
         </div>
         <div style={{ flex: '0 1 22rem', minWidth: 0 }}>
           <Preview audience={audience} draft={draft} labelOf={labelOf} cardLabel={cardLabel} />

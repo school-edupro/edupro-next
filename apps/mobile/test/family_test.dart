@@ -53,6 +53,9 @@ class School {
 
   /// the person's own Home shortcuts saved here
   List<String>? own;
+
+  /// the school's published side menu for the menu call (docs/design/90); none: the menu as built
+  List<Map<String, Object?>>? menuGroups;
   int statusPolls = 0;
   final leaves = <Map<String, Object?>>[
     {
@@ -125,6 +128,8 @@ class School {
         return {
           'data': [profile(kind)],
         };
+      case 'GET /me/menu' when menuGroups != null:
+        return {'app': 'parent', 'groups': menuGroups};
       case 'GET /me/menu':
         return {
           'app': 'parent',
@@ -1698,6 +1703,57 @@ void main() {
       expect(tab('Library'), findsOneWidget);
       expect(find.byKey(const Key('shortcut-health')), findsOneWidget);
     });
+
+    for (final hindi in [false, true]) {
+      testWidgets(
+        'More follows the school\'s side menu: its order and its names${hindi ? ' (Hindi)' : ''}',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(420, 1600));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          Map<String, Object?> item(String h, String l) => {
+            'href': h,
+            'label': l,
+            'help': null,
+            'icon': 'book',
+          };
+          final school = School()
+            ..menuGroups = [
+              {
+                'id': 'home',
+                'label': 'Home',
+                'labelHi': null,
+                'icon': 'home',
+                'items': [item('/', 'Home')],
+              },
+              {
+                'id': 'school',
+                'label': 'Campus life',
+                'labelHi': 'परिसर',
+                'icon': 'book',
+                'items': [item('/library', 'Library'), item('/notices', 'Notices')],
+              },
+              {
+                'id': 'child',
+                'label': 'My child',
+                'labelHi': null,
+                'icon': 'users',
+                'items': [item('/profile', 'Profile')],
+              },
+            ];
+          {
+            await pumpFamily(tester, kind: 'student', school: school, hindi: hindi);
+            await tester.tap(tab(hindi ? 'अधिक' : 'More'));
+            await tester.pumpAndSettle();
+            final campus = find.text(hindi ? 'परिसर' : 'Campus life');
+            final child = find.text(hindi ? 'मेरा बच्चा' : 'My child');
+            expect(campus, findsOneWidget);
+            expect(child, findsOneWidget);
+            // the school's order: Campus life above My child
+            expect(tester.getTopLeft(campus).dy, lessThan(tester.getTopLeft(child).dy));
+          }
+        },
+      );
+    }
 
     testWidgets('in Hindi: the cards and the words of Edit shortcuts', (tester) async {
       await tester.binding.setSurfaceSize(const Size(420, 1600));

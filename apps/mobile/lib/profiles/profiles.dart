@@ -111,8 +111,11 @@ class MenuItem {
 }
 
 class MenuGroup {
-  const MenuGroup({required this.label, required this.icon, required this.items});
+  const MenuGroup({required this.label, required this.icon, required this.items, this.labelHi});
   final String label;
+
+  /// The school's own Hindi name for the group (docs/design/90); none: the standard name put in Hindi.
+  final String? labelHi;
   final String icon;
   final List<MenuItem> items;
 }
@@ -134,6 +137,7 @@ final menuProvider = FutureProvider.family<ProfileMenu, String>((ref, profileId)
         if ((g['items'] as List).any((i) => (i as Map)['href'] != '/'))
           MenuGroup(
             label: '${g['label']}',
+            labelHi: g['labelHi'] as String?,
             icon: '${g['icon']}',
             items: [
               // Home is the app's own tab

@@ -23,6 +23,6 @@ import { YearsService } from './years.service';
     FamilyLayoutService,
     AuditService,
   ],
-  exports: [SettingsService, YearsService, SchoolService],
+  exports: [SettingsService, YearsService, SchoolService, FamilyLayoutService],
 })
 export class PlatformModule {}

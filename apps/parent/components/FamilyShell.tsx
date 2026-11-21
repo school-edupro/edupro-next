@@ -2,8 +2,10 @@ import type { ReactNode } from 'react';
 import type { Me } from '@edupro/bff';
 import { FAMILY_MENU, FAMILY_TABS, type Audience, type FamilyGroup } from '@edupro/menus';
 import { t, type Lang } from '@/lib/i18n';
+import { iconOf, type HomeLayout } from '@/lib/home-layout';
 import { canOpen } from '@/lib/portal-menu';
 import { Icon, type IconName } from './nav-icons';
+import { PhoneMenu } from './PhoneMenu';
 import { SidebarToggle } from './SidebarToggle';
 
 export type { Audience };
@@ -19,13 +21,29 @@ export function audienceOf(me: Me): Audience {
   return here.length > 0 && here.every((m) => m.personType === 'student') ? 'student' : 'parent';
 }
 
-/** The parent and student portal frame, laid out like the admin portal (sidebar, header, content). */
+/** The phone bar's short names (the bar has five narrow places). */
+const SHORT: Record<string, string> = { '/fees': 'Fees', '/date-sheet': 'Date sheet' };
+
+/** A menu group as the shell draws it: its name already in the page's language, its screens' English names. */
+interface NavGroup {
+  section: string;
+  label: string;
+  icon: IconName;
+  items: Array<{ href: string; label: string }>;
+}
+
+/**
+ * The parent and student portal frame, laid out like the admin portal (sidebar, header, content). With the school's
+ * published layout (docs/design/90) the side menu and the phone bar follow it: the groups in its order and names, the
+ * phone bar = the app's tabs with a Menu that opens the side menu; without one, as built.
+ */
 export function FamilyShell({
   me,
   lang,
   currentPath,
   children,
   unread = 0,
+  layout = null,
 }: {
   me: Me;
   lang: Lang;
@@ -33,14 +51,50 @@ export function FamilyShell({
   children: ReactNode;
   /** messages from the school not opened yet (header badge) */
   unread?: number;
+  /** The school's published layout for this person; null: the menu and the phone bar as built. */
+  layout?: HomeLayout | null;
 }) {
   const audience = audienceOf(me);
   const isCurrent = (href: string) =>
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
-  const groups = NAV.map((g) => ({
-    ...g,
-    items: g.items.filter((i) => (audience === 'parent' || !i.parentOnly) && canOpen(me, i.href)),
-  })).filter((g) => g.items.length > 0);
+  const groups: NavGroup[] = (
+    layout
+      ? [
+          {
+            section: 'home',
+            label: t(lang, 'Home'),
+            icon: 'home' as IconName,
+            items: [{ href: '/', label: 'Home' }],
+          },
+          ...layout.menu.map((g) => ({
+            section: g.key,
+            label: lang === 'hi' && g.labelHi ? g.labelHi : t(lang, g.label),
+            icon: iconOf(g.icon),
+            items: g.items.filter((i) => canOpen(me, i.href)),
+          })),
+        ]
+      : NAV.map((g) => ({
+          section: g.section,
+          label: t(lang, g.label[audience]),
+          icon: g.icon,
+          items: g.items.filter(
+            (i) => (audience === 'parent' || !i.parentOnly) && canOpen(me, i.href),
+          ),
+        }))
+  ).filter((g) => g.items.length > 0);
+  // the phone bar: the app's tabs (Home, the three, then Menu) or as built
+  const tabs: Array<{ href: string; label: string; icon: IconName }> = layout
+    ? layout.tabs
+        .filter((x) => x.href !== 'more')
+        .map((x) =>
+          x.href === '/'
+            ? { href: '/', label: 'Home', icon: 'home' as IconName }
+            : x.href === 'academics'
+              ? { href: '/academics', label: 'Academics', icon: 'book' as IconName }
+              : { href: x.href, label: SHORT[x.href] ?? x.label, icon: iconOf(x.icon) },
+        )
+        .filter((x) => x.href === '/academics' || canOpen(me, x.href))
+    : TABS[audience].filter((tab) => canOpen(me, tab.href));
   const school =
     me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0] ?? null;
   const back = encodeURIComponent(currentPath);
@@ -58,7 +112,7 @@ export function FamilyShell({
         </div>
         <nav className="ep-nav" aria-label={t(lang, 'Main menu')}>
           {groups.map((g) => {
-            const label = t(lang, g.label[audience]);
+            const label = g.label;
             if (g.items.length === 1) {
               const item = g.items[0]!;
               return (
@@ -208,18 +262,52 @@ export function FamilyShell({
         {children}
       </div>
       <nav className="fp-tabbar" aria-label={t(lang, 'Quick menu')}>
-        {TABS[audience]
-          .filter((tab) => canOpen(me, tab.href))
-          .map((tab) => (
-            <a
-              key={tab.href}
-              href={tab.href}
-              aria-current={isCurrent(tab.href) ? 'page' : undefined}
-            >
-              <Icon name={tab.icon} size={22} />
-              <span>{t(lang, tab.label)}</span>
-            </a>
-          ))}
+        {tabs.map((tab) => (
+          <a key={tab.href} href={tab.href} aria-current={isCurrent(tab.href) ? 'page' : undefined}>
+            <Icon name={tab.icon} size={22} />
+            <span>{t(lang, tab.label)}</span>
+          </a>
+        ))}
+        {layout ? (
+          <PhoneMenu
+            label={t(lang, 'Menu')}
+            closeLabel={t(lang, 'Close the menu')}
+            icon={<Icon name="menu" size={22} />}
+            closeIcon={<span aria-hidden="true">×</span>}
+          >
+            <nav aria-label={t(lang, 'Main menu')} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+              {groups.map((g) => (
+                <section key={g.section} aria-label={g.label}>
+                  <h2
+                    className="ep-field__help"
+                    style={{ margin: '0 0 var(--sp-1)', textTransform: 'uppercase' }}
+                  >
+                    {g.label}
+                  </h2>
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid' }}>
+                    {g.items.map((i) => (
+                      <li key={i.href}>
+                        <a
+                          href={i.href}
+                          aria-current={isCurrent(i.href) ? 'page' : undefined}
+                          style={{
+                            display: 'block',
+                            padding: 'var(--sp-2) 0',
+                            minHeight: '2.75rem',
+                            color: 'var(--text-body)',
+                            fontWeight: isCurrent(i.href) ? 'var(--fw-semibold)' : undefined,
+                          }}
+                        >
+                          {t(lang, i.label)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </nav>
+          </PhoneMenu>
+        ) : null}
       </nav>
     </div>
   );

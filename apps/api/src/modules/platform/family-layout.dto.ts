@@ -5,11 +5,32 @@ import { z } from 'zod';
 
 const Path = z.string().trim().min(1).max(40);
 
+const GroupName = z
+  .string()
+  .trim()
+  .max(80)
+  .transform((v) => (v === '' ? null : v))
+  .nullable()
+  .optional()
+  .transform((v) => v ?? null);
+
 export const FamilyLayoutSchema = z.object({
   tabs: z.array(Path).max(10),
   shortcuts: z.array(Path).max(30),
   cards: z.array(z.string().trim().min(1).max(40)).max(20),
   academics: z.array(Path).max(30),
+  // the website's side menu and the app's More: groups in order, renamed or not, with their screens
+  menu: z
+    .array(
+      z.object({
+        key: z.string().trim().min(1).max(40),
+        label: GroupName,
+        labelHi: GroupName,
+        items: z.array(Path).max(40),
+      }),
+    )
+    .max(10)
+    .optional(),
 });
 export class FamilyLayoutDto extends createZodDto(FamilyLayoutSchema) {}
 

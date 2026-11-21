@@ -1,4 +1,5 @@
 import type { Audience } from '@edupro/menus';
+import { cache } from 'react';
 import type { IconName } from '@/components/nav-icons';
 import { bff } from '@/lib/bff';
 
@@ -20,12 +21,27 @@ export interface HomeLayout {
   screens: LayoutEntry[];
   /** The school has published a layout (until then the website's Home stays as it was). */
   published: boolean;
+  /** Home, the three the school chose (a screen or `academics`), `more`: the phone bar. */
+  tabs: LayoutEntry[];
+  /** The screens of the Academics tab (the website's /academics page). */
+  academics: LayoutEntry[];
+  /**
+   * The side menu: the school's groups in its order with their names (`labelHi` only when the school gave one; else
+   * the name goes through t()), each with the screens the person may open.
+   */
+  menu: Array<{
+    key: string;
+    label: string;
+    labelHi: string | null;
+    icon: string;
+    items: LayoutEntry[];
+  }>;
 }
 
 /** The layout for this parent or student; null when the API has none to give (Home then shows what it always did). */
-export function homeLayout(audience: Audience): Promise<HomeLayout | null> {
-  return bff.api.fetch<HomeLayout>(`/me/app-layout?kind=${audience}`).catch(() => null);
-}
+export const homeLayout = cache((audience: Audience): Promise<HomeLayout | null> =>
+  bff.api.fetch<HomeLayout>(`/me/app-layout?kind=${audience}`).catch(() => null),
+);
 
 const ICONS = new Set<string>([
   'home',

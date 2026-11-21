@@ -48,6 +48,7 @@ const PAGES = [
   '/library?view=find&q=a',
   '/help',
   '/help?q=fee',
+  '/academics',
   // the family app layout (docs/design/90): Home's shortcuts and cards, and Edit shortcuts
   '/home/shortcuts',
   '/home/shortcuts?add=/library',
@@ -56,8 +57,8 @@ const PAGES = [
 for (const sub of ['dev-parent', 'dev-student']) {
   for (const width of [1280, 375]) {
     test(`family ${sub} @${width}`, async ({ page }) => {
-      // many screens in one sign-in: allow more than the default half minute
-      test.setTimeout(120_000);
+      // many screens in one sign-in (some 50 pages): allow four minutes
+      test.setTimeout(240_000);
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`${BASE}/login`);
       await page.selectOption('select[name=sub]', sub);

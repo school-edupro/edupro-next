@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
-import { familyIcon, familyScreens, screenIcon, staffScreens } from '@edupro/menus';
+import { familyIcon, familyScreens, myFamilyLayout, screenIcon, staffScreens } from '@edupro/menus';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { DomainError } from '../../common/errors/domain-error';
@@ -10,6 +10,7 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { AccessService } from '../access/access.service';
 import { DbService } from '../../common/db/db.service';
 import { ProfilesService } from './profiles.service';
+import { FamilyLayoutService } from '../platform/family-layout.service';
 
 /** How and where a sign-in happened (the web apps' BFF and the mobile app send it). */
 const MeSignInSchema = z
@@ -43,6 +44,7 @@ export class MeController {
     private readonly access: AccessService,
     private readonly db: DbService,
     private readonly profilesOf: ProfilesService,
+    private readonly layouts: FamilyLayoutService,
   ) {}
 
   /** The mobile app's profiles (docs/design/89): each school as staff, as the parent of each child, as a student. */
@@ -83,7 +85,34 @@ export class MeController {
           })),
         })),
       };
-    if (kind === 'parent' || kind === 'student')
+    if (kind === 'parent' || kind === 'student') {
+      // the school's published side menu (docs/design/90): its groups, names and order; else as built
+      const published = await this.layouts.published(ctx, kind);
+      if (published)
+        return {
+          app: 'parent',
+          groups: [
+            {
+              id: 'home',
+              label: 'Home',
+              labelHi: null,
+              icon: 'home',
+              items: [{ href: '/', label: 'Home', help: null, icon: 'home' }],
+            },
+            ...myFamilyLayout(kind, permissions, published, null).menu.map((g) => ({
+              id: g.key,
+              label: g.label,
+              labelHi: g.labelHi,
+              icon: g.icon,
+              items: g.items.map((i) => ({
+                href: i.href,
+                label: i.label,
+                help: null,
+                icon: i.icon,
+              })),
+            })),
+          ],
+        };
       return {
         app: 'parent',
         groups: familyScreens(kind, permissions).map((g) => ({
@@ -98,6 +127,7 @@ export class MeController {
           })),
         })),
       };
+    }
     throw new DomainError('validation-failed', 'kind is staff, parent or student', { status: 400 });
   }
 

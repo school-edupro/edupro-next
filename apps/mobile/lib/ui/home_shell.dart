@@ -191,7 +191,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     final p = ref.read(profilesProvider).value?.current;
-    if (p != null && !p.isStaff) ref.invalidate(familyLayoutProvider(p));
+    if (p != null && !p.isStaff) {
+      ref.invalidate(familyLayoutProvider(p));
+      // the side menu's order and names (More) may have been published too
+      ref.invalidate(menuProvider(p.id));
+    }
   }
 
   @override
@@ -411,7 +415,7 @@ class MoreList extends ConsumerWidget {
               child: Semantics(
                 header: true,
                 child: Text(
-                  s.menu(g.label),
+                  s.hindi && g.labelHi != null ? g.labelHi! : s.menu(g.label),
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: Tokens.fwSemibold,

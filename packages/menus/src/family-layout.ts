@@ -18,6 +18,19 @@ export interface FamilyLayout {
   cards: string[];
   /** The screens the Academics tab lists, in order. */
   academics: string[];
+  /**
+   * The website's side menu and the app's More list: the groups in order, each with the school's name for it (null:
+   * the standard one) and its screens in order — every screen of the audience in exactly one group. None: as built.
+   */
+  menu?: FamilyMenuGroupLayout[];
+}
+
+export interface FamilyMenuGroupLayout {
+  /** A group of the family menu (its section in FAMILY_MENU; Home stays first and is not one). */
+  key: string;
+  label: string | null;
+  labelHi: string | null;
+  items: string[];
 }
 
 export interface FamilyCard {
@@ -64,6 +77,55 @@ export function familyLayoutScreens(
   );
 }
 
+/** The groups of the side menu a school may arrange (Home is always first and alone). */
+const MENU_GROUPS = FAMILY_MENU.filter((g) => g.section !== 'home');
+
+/** The side menu as built: the groups and their screens for an audience, with the standard names. */
+export function defaultFamilyMenu(audience: Audience): FamilyMenuGroupLayout[] {
+  return MENU_GROUPS.map((g) => ({
+    key: g.section,
+    label: null,
+    labelHi: null,
+    items: g.items.filter((i) => audience === 'parent' || !i.parentOnly).map((i) => i.href),
+  }));
+}
+
+/**
+ * A layout's side menu made whole: the school's groups in its order (unknown ones dropped, missing ones added at the
+ * end), each screen once (one the school's menu does not place — e.g. a new screen — goes into its standard group).
+ */
+export function familyMenuOf(
+  audience: Audience,
+  l: Pick<FamilyLayout, 'menu'>,
+): FamilyMenuGroupLayout[] {
+  const screens = new Set(familyLayoutScreens(audience).map((x) => x.href));
+  const standard = defaultFamilyMenu(audience);
+  if (!l.menu?.length) return standard;
+  const known = new Set(standard.map((g) => g.key));
+  const seen = new Set<string>();
+  const groups: FamilyMenuGroupLayout[] = [];
+  for (const g of l.menu) {
+    if (!known.has(g.key) || groups.some((x) => x.key === g.key)) continue;
+    const items = g.items.filter((h) => screens.has(h) && !seen.has(h));
+    items.forEach((h) => seen.add(h));
+    groups.push({ key: g.key, label: g.label ?? null, labelHi: g.labelHi ?? null, items });
+  }
+  for (const g of standard)
+    if (!groups.some((x) => x.key === g.key)) groups.push({ ...g, items: [] });
+  for (const g of standard)
+    for (const h of g.items)
+      if (!seen.has(h)) {
+        groups.find((x) => x.key === g.key)!.items.push(h);
+        seen.add(h);
+      }
+  return groups;
+}
+
+/** The standard name of a menu group for an audience (e.g. My child / My school day). */
+export function familyGroupLabel(audience: Audience, key: string): string {
+  return FAMILY_MENU.find((g) => g.section === key)?.label[audience] ?? key;
+}
+
 /** The layout every school starts with: the app as it was before the school arranged it. */
 export const DEFAULT_FAMILY_LAYOUT: Record<Audience, FamilyLayout> = {
   student: {
@@ -80,6 +142,7 @@ export const DEFAULT_FAMILY_LAYOUT: Record<Audience, FamilyLayout> = {
     ],
     cards: ['attendance_today', 'classes_today', 'homework_due', 'next_exam', 'notices'],
     academics: ['/attendance', '/homework', '/timetable', '/date-sheet', '/results', '/calendar'],
+    menu: defaultFamilyMenu('student'),
   },
   parent: {
     tabs: [ACADEMICS_TAB, '/fees', '/messages'],
@@ -95,6 +158,7 @@ export const DEFAULT_FAMILY_LAYOUT: Record<Audience, FamilyLayout> = {
     ],
     cards: ['attendance_today', 'classes_today', 'homework_due', 'next_exam', 'notices'],
     academics: ['/attendance', '/homework', '/timetable', '/date-sheet', '/results', '/calendar'],
+    menu: defaultFamilyMenu('parent'),
   },
 };
 
@@ -103,6 +167,7 @@ export const LAYOUT_LIMITS = {
   shortcuts: { min: 4, max: 12 },
   cards: { min: 1, max: FAMILY_CARDS.length },
   academics: { min: 2, max: 12 },
+  groupName: 40,
 } as const;
 
 /** What is wrong with a layout for an audience (empty: it may be saved). */
@@ -138,6 +203,26 @@ export function checkFamilyLayout(audience: Audience, l: FamilyLayout): string[]
     if (!screens.has(a)) problems.push(`${a} cannot be in the Academics list here.`);
   if (l.tabs.includes(ACADEMICS_TAB) && l.academics.length < LAYOUT_LIMITS.academics.min)
     problems.push('With an Academics tab, its list needs at least two screens.');
+  if (l.menu) {
+    const keys = new Set(MENU_GROUPS.map((g) => g.section));
+    const given = l.menu.map((g) => g.key);
+    if (!distinct(given)) problems.push('A menu group is there twice.');
+    for (const k of given) if (!keys.has(k)) problems.push(`${k} is not a menu group.`);
+    for (const k of keys) if (!given.includes(k)) problems.push(`The menu group ${k} is missing.`);
+    const placed = l.menu.flatMap((g) => g.items);
+    if (!distinct(placed)) problems.push('A screen is in the menu twice.');
+    for (const h of placed) if (!screens.has(h)) problems.push(`${h} cannot be in the menu here.`);
+    for (const h of screens)
+      if (!placed.includes(h)) problems.push(`${h} is not in any menu group.`);
+    for (const g of l.menu) {
+      for (const [name, v] of [
+        ['name', g.label],
+        ['Hindi name', g.labelHi],
+      ] as const)
+        if (v !== null && (v.trim().length < 1 || v.trim().length > LAYOUT_LIMITS.groupName))
+          problems.push(`A menu group's ${name} takes 1 to ${LAYOUT_LIMITS.groupName} letters.`);
+    }
+  }
   return problems;
 }
 
@@ -157,6 +242,17 @@ export interface MyFamilyLayout {
   academics: FamilyEntry[];
   /** Every screen the person may open (the choices of "Edit shortcuts"). */
   screens: FamilyEntry[];
+  /**
+   * The side menu (website) and More (app): the groups in the school's order with their names (`labelHi` only when
+   * the school gave one; else put the standard name in Hindi), each with the screens the person may open.
+   */
+  menu: Array<{
+    key: string;
+    label: string;
+    labelHi: string | null;
+    icon: string;
+    items: FamilyEntry[];
+  }>;
 }
 
 /**
@@ -210,5 +306,14 @@ export function myFamilyLayout(
       .map((c) => ({ key: c.key, label: c.label, labelHi: c.labelHi, href: c.needs })),
     academics,
     screens: open,
+    menu: familyMenuOf(audience, layout)
+      .map((g) => ({
+        key: g.key,
+        label: g.label ?? familyGroupLabel(audience, g.key),
+        labelHi: g.labelHi,
+        icon: FAMILY_MENU.find((x) => x.section === g.key)?.icon ?? 'grid',
+        items: pick(g.items),
+      }))
+      .filter((g) => g.items.length > 0),
   };
 }

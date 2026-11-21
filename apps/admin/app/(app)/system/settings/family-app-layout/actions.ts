@@ -48,6 +48,17 @@ export async function saveLayoutDraft(audience: string, layout: FamilyLayout): P
         shortcuts: layout.shortcuts,
         cards: layout.cards,
         academics: layout.academics,
+        // the side menu as edited (an empty name: the standard one)
+        ...(layout.menu
+          ? {
+              menu: layout.menu.map((g) => ({
+                key: g.key,
+                label: g.label?.trim() ? g.label : null,
+                labelHi: g.labelHi?.trim() ? g.labelHi : null,
+                items: g.items,
+              })),
+            }
+          : {}),
       }),
     }),
   );

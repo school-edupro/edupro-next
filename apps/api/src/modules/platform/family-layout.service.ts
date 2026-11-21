@@ -4,6 +4,7 @@ import {
   FAMILY_CARDS,
   LAYOUT_LIMITS,
   checkFamilyLayout,
+  familyMenuOf,
   familyLayoutScreens,
   myFamilyLayout,
   type Audience,
@@ -30,14 +31,16 @@ const AUDIENCES: Audience[] = ['student', 'parent'];
 const prefKey = (a: Audience) => `family.shortcuts.${a}`;
 
 /** The four lists in a fixed order (so two layouts compare by their JSON). */
-const tidy = (l: FamilyLayout): FamilyLayout => ({
+const tidy = (a: Audience, l: FamilyLayout): FamilyLayout => ({
   tabs: [...l.tabs],
   shortcuts: [...l.shortcuts],
   cards: [...l.cards],
   academics: [...l.academics],
+  // a layout kept before the side menu was arranged has none: the menu as built
+  menu: familyMenuOf(a, l),
 });
-const same = (a: FamilyLayout, b: FamilyLayout) =>
-  JSON.stringify(tidy(a)) === JSON.stringify(tidy(b));
+const same = (a: Audience, x: FamilyLayout, y: FamilyLayout) =>
+  JSON.stringify(tidy(a, x)) === JSON.stringify(tidy(a, y));
 
 /**
  * The family app's layout kept by the school (0407, docs/design/90): the office edits a draft per audience and
@@ -66,15 +69,15 @@ export class FamilyLayoutService {
             return [
               a,
               {
-                draft: tidy(draft),
-                published: tidy(live),
+                draft: tidy(a, draft),
+                published: tidy(a, live),
                 // never published: families get the app as it was
                 everPublished: !!r?.published,
                 publishedAt: r?.publishedAt ?? null,
                 publishedBy: r?.publishedBy ?? null,
                 draftUpdatedAt: r ? r.draftUpdatedAt : null,
                 draftUpdatedBy: r?.draftUpdatedBy ?? null,
-                changed: !same(draft, live),
+                changed: !same(a, draft, live),
               },
             ] as const;
           }),
@@ -97,8 +100,9 @@ export class FamilyLayoutService {
 
   /** The draft saved (checked first); families see nothing until it is published. */
   async saveDraft(ctx: RequestContext, audience: Audience, dto: FamilyLayoutDto) {
-    const layout = tidy(dto);
-    const problems = checkFamilyLayout(audience, layout);
+    // the menu is checked as sent (a screen twice or left out is an error, not mended)
+    const problems = checkFamilyLayout(audience, dto);
+    const layout = tidy(audience, dto);
     if (problems.length)
       throw new DomainError('validation-failed', problems.join(' '), {
         status: 400,
@@ -128,7 +132,7 @@ export class FamilyLayoutService {
   async publish(ctx: RequestContext, audience: Audience) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.row(c, audience);
-      const layout = tidy(before?.draft ?? DEFAULT_FAMILY_LAYOUT[audience]);
+      const layout = tidy(audience, before?.draft ?? DEFAULT_FAMILY_LAYOUT[audience]);
       await c.query(
         `INSERT INTO family_app_layouts (school_id, audience, draft, draft_updated_by, published, published_by, published_at)
          VALUES (app.current_school_id(), $1, $2::jsonb, app.current_user_id(), $2::jsonb, app.current_user_id(), now())
@@ -152,7 +156,7 @@ export class FamilyLayoutService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.row(c, audience);
       if (!before) return { ok: true };
-      const live = tidy(before.published ?? DEFAULT_FAMILY_LAYOUT[audience]);
+      const live = tidy(audience, before.published ?? DEFAULT_FAMILY_LAYOUT[audience]);
       await c.query(
         `UPDATE family_app_layouts SET draft = $2::jsonb, draft_updated_by = app.current_user_id(), draft_updated_at = now()
           WHERE audience = $1`,
@@ -189,6 +193,14 @@ export class FamilyLayoutService {
         published: !!r?.published,
       };
     });
+  }
+
+  /** The published layout of an audience (null: never published — the app and website as built). */
+  async published(ctx: RequestContext, audience: Audience): Promise<FamilyLayout | null> {
+    return this.db.tenant(
+      requireTenant(ctx),
+      async (c) => (await this.row(c, audience))?.published ?? null,
+    );
   }
 
   /** A person's own Home shortcuts (4 to 12 screens they can open), kept for them in this school. */

@@ -17,11 +17,18 @@ import {
   type SeededUser,
 } from './helpers';
 
+interface Group {
+  key: string;
+  label: string | null;
+  labelHi: string | null;
+  items: string[];
+}
 interface Layout {
   tabs: string[];
   shortcuts: string[];
   cards: string[];
   academics: string[];
+  menu?: Group[];
 }
 interface Mine {
   audience: string;
@@ -31,6 +38,12 @@ interface Mine {
   cards: Array<{ key: string; label: string; labelHi: string; href: string }>;
   academics: Array<{ href: string; label: string }>;
   screens: Array<{ href: string }>;
+  menu: Array<{
+    key: string;
+    label: string;
+    labelHi: string | null;
+    items: Array<{ href: string }>;
+  }>;
 }
 interface Setup {
   layouts: Record<
@@ -317,6 +330,105 @@ describe('family app layout (e2e)', () => {
       [...live.shortcuts].reverse().filter((x) => x !== '/assistant'),
     );
     expect((await mine(parent, 'parent')).ownShortcuts).toBe(true);
+  });
+
+  it('the side menu: groups in the school’s order, renamed, screens moved; the website and More follow once published', async () => {
+    const start = (await setup()).layouts.parent.published;
+    expect(start.menu!.map((g) => g.key)).toEqual(['child', 'school', 'fees', 'help']);
+    expect(start.menu![0]).toMatchObject({ label: null, labelHi: null });
+    expect(start.menu![0]!.items[0]).toBe('/profile');
+    const bad = async (menu: Group[], audience = 'parent') => {
+      const r = await save(audience, { ...start, menu });
+      return r.statusCode === 400 ? (r.json().errors as string[]) : r.statusCode;
+    };
+    const without = (h: string) =>
+      start.menu!.map((g) => ({ ...g, items: g.items.filter((x) => x !== h) }));
+    expect(await bad(without('/library'))).toContain('/library is not in any menu group.');
+    expect(
+      await bad(
+        start.menu!.map((g) => (g.key === 'fees' ? { ...g, items: [...g.items, '/library'] } : g)),
+      ),
+    ).toContain('A screen is in the menu twice.');
+    expect(
+      await bad([...start.menu!, { key: 'extra', label: null, labelHi: null, items: [] }]),
+    ).toContain('extra is not a menu group.');
+    expect(await bad(start.menu!.filter((g) => g.key !== 'fees'))).toContain(
+      'The menu group fees is missing.',
+    );
+    expect(
+      await bad(start.menu!.map((g) => (g.key === 'school' ? { ...g, label: 'x'.repeat(41) } : g))),
+    ).toContain("A menu group's name takes 1 to 40 letters.");
+    // a student's menu has no parents' screens
+    const studentMenu = (await setup()).layouts.student.published.menu!;
+    expect(
+      await bad(
+        studentMenu.map((g) => (g.key === 'help' ? { ...g, items: [...g.items, '/queries'] } : g)),
+        'student',
+      ),
+    ).toContain('/queries cannot be in the menu here.');
+
+    // Help desk first; School renamed (English and Hindi); Library moved under My child
+    const byKey = Object.fromEntries(start.menu!.map((g) => [g.key, g]));
+    const menu: Group[] = [
+      byKey.help!,
+      { ...byKey.child!, items: [...byKey.child!.items, '/library'] },
+      {
+        ...byKey.school!,
+        label: 'Campus life',
+        labelHi: 'परिसर',
+        items: byKey.school!.items.filter((x) => x !== '/library'),
+      },
+      byKey.fees!,
+    ];
+    expect((await save('parent', { ...start, menu })).statusCode).toBe(200);
+    // not published: the menu call is as built
+    const before = await inject({ method: 'GET', url: '/me/menu?kind=parent', headers: h(parent) });
+    expect(before.json().groups.map((g: { id: string }) => g.id)).toEqual([
+      'home',
+      'child',
+      'school',
+      'fees',
+      'help',
+    ]);
+    expect((await act('parent', 'publish')).statusCode).toBe(200);
+
+    const pa = await mine(parent, 'parent');
+    expect(pa.menu.map((g) => g.key)).toEqual(['help', 'child', 'school', 'fees']);
+    expect(pa.menu[1]).toMatchObject({ label: 'My child', labelHi: null });
+    expect(pa.menu[2]).toMatchObject({ label: 'Campus life', labelHi: 'परिसर' });
+    expect(hrefs(pa.menu[1]!.items).at(-1)).toBe('/library');
+    expect(hrefs(pa.menu[2]!.items)).not.toContain('/library');
+    // the app's More (the menu call) follows
+    const more = await inject({ method: 'GET', url: '/me/menu?kind=parent', headers: h(parent) });
+    const groups = more.json().groups as Array<{
+      id: string;
+      label: string;
+      labelHi: string | null;
+      items: Array<{ href: string }>;
+    }>;
+    expect(groups.map((g) => g.id)).toEqual(['home', 'help', 'child', 'school', 'fees']);
+    expect(groups[3]).toMatchObject({ label: 'Campus life', labelHi: 'परिसर' });
+    expect(hrefs(groups[2]!.items)).toContain('/library');
+    // the students' menu is apart (its standard names)
+    const st = await mine(student, 'student');
+    expect(st.menu[0]).toMatchObject({ key: 'child', label: 'My school day' });
+
+    // a layout kept before the menu could be arranged: the menu as built
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE family_app_layouts SET published = published - 'menu', draft = draft - 'menu' WHERE school_id = $1 AND audience = 'student'`,
+        [school.id],
+      ),
+    );
+    const old = await mine(student, 'student');
+    expect(old.menu.map((g) => g.key)).toEqual(['child', 'school', 'fees', 'help']);
+    expect((await setup()).layouts.student.draft.menu!.map((g) => g.key)).toEqual([
+      'child',
+      'school',
+      'fees',
+      'help',
+    ]);
+    expect((await setup()).layouts.student.changed).toBe(false);
   });
 
   it('only the settings rights arrange it; each school keeps its own', async () => {

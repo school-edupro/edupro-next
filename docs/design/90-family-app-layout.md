@@ -80,6 +80,31 @@ bar, the shortcut grid, the cards by name) of the draft; **Publish** (what famil
   side menu unchanged; family a11y.
 - **E. Docs and the full checks** — this doc's "As built", doc 89, the pre-push checks.
 
+## The website's side menu (added 21 Nov 2026)
+
+The user chose option (a): the website's side menu and its phone bar follow the same layout. Decisions: the school
+may **order** the groups, **order** the screens in a group, **move** a screen to another group and **rename** a group
+(English, Hindi optional); the website's **phone bar** is the app's tabs (Home, the three, and **Menu**, which opens the
+side menu); the app's **More** list follows the same order and names. Home stays first; every screen stays in exactly
+one group (hiding a screen is still Access → Roles); nothing changes until the school publishes.
+
+- **Data:** `menu` in the layout JSON — the groups (`child`, `school`, `fees`, `help`) in order, each with `label` /
+  `labelHi` (null: the standard name, e.g. My child / My school day) and its screens; a layout kept without it, or a
+  screen the school's menu does not place (a new one), falls back to the standard group (`familyMenuOf`).
+- **API:** `checkFamilyLayout` checks the menu as sent (every screen once, the four groups once, names 1–40 letters);
+  `GET me/app-layout` gives `menu` (rights applied, empty groups dropped); `GET me/menu?kind=` (the app's More) follows
+  the published menu, with `labelHi`. Tests in `apps/api/test/family-layout.e2e-spec.ts`.
+- **App:** More shows the groups in the school's order with its names (its Hindi name when given); the app reads the
+  menu again when it comes back to the screen.
+- **Admin:** a "Website menu and app More" section in the editor — the groups (move up / down; Name and Name in Hindi,
+  empty = the standard name), each group's screens (move up / down, Move to another group); an empty group says it
+  does not show; the preview lists the side menu. Students and Parents are both on the page (their element ids carry
+  the audience).
+- **Website:** with a published layout, the side menu is Home then the school's groups (its names; Hindi when given),
+  and the phone bar is Home, the three tabs (Academics → the new `/academics` page) and **Menu**, which opens the side
+  menu as a full-height panel (the website hides its sidebar on phones). Without one, as built. The layout is read once
+  per page (`homeLayout`, React `cache`).
+
 ## Not in this plan
 
 Layouts per class group, a person's own tabs or cards, the staff app, the website's side menu order, branding

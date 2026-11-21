@@ -290,6 +290,11 @@ const DICT: Record<string, string> = {
   'The \u0939\u093f\u0928\u094d\u0926\u0940 / English link on the home page switches every screen.':
     'होम पेज पर हिन्दी / English लिंक हर स्क्रीन बदल देता है।',
   'Search the questions': 'प्रश्न खोजें',
+  Academics: 'शैक्षणिक',
+  'The screens of the school day, one tap each.': 'स्कूल दिवस की स्क्रीन, एक टैप में।',
+  Menu: 'मेनू',
+  'Close the menu': 'मेनू बंद करें',
+  'Date sheet': 'डेट शीट',
   Shortcuts: 'शॉर्टकट',
   'Edit shortcuts': 'शॉर्टकट बदलें',
   'Next exam': 'अगली परीक्षा',
