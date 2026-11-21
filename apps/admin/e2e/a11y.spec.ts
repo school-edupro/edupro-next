@@ -474,6 +474,10 @@ const PAGES = [
   '/reports/mis',
   // Sprints 22-23
   '/system/school',
+  // the family app layout kept by the school (0407, docs/design/90)
+  '/system/settings',
+  '/system/settings/family-app-layout',
+  '/system/settings/family-app-layout?for=parent',
   '/masters/system?tab=countries',
   '/masters/fees?tab=bank_accounts&add=1',
   '/system/cutover',

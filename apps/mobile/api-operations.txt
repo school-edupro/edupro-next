@@ -211,3 +211,9 @@ InsightsController_ask
 # "Was this helpful?"
 FamilyHelpController_mine
 FamilyHelpController_vote
+
+# the family app's layout kept by the school (0407, docs/design/90): my tabs, Home shortcuts (mine or the
+# school's), cards and Academics list; my own shortcuts and going back to the school's
+FamilyLayoutController_mine
+FamilyLayoutController_saveMine
+FamilyLayoutController_resetMine

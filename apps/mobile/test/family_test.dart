@@ -45,6 +45,12 @@ class School {
 
   /// the school shows the teachers' numbers and e-mails in full (otherwise in part)
   bool teachersFull = false;
+
+  /// the school's layout for this person (docs/design/90); none: the app as it was (the call fails)
+  Map<String, Object?>? layout;
+
+  /// the person's own Home shortcuts saved here
+  List<String>? own;
   int statusPolls = 0;
   final leaves = <Map<String, Object?>>[
     {
@@ -104,6 +110,15 @@ class School {
     if (offline) throw const ApiException(0, 'offline', 'No connection');
     final key = '${c.method} ${c.path}';
     switch (key) {
+      case 'GET /me/app-layout':
+        if (layout == null) throw const ApiException(404, 'not-found', 'no layout');
+        return withOwn(layout!, own);
+      case 'PUT /me/app-layout/shortcuts':
+        own = [for (final x in c.body!['shortcuts'] as List) '$x'];
+        return withOwn(layout!, own);
+      case 'DELETE /me/app-layout/shortcuts':
+        own = null;
+        return withOwn(layout!, own);
       case 'GET /me/profiles':
         return {
           'data': [profile(kind)],
@@ -1372,6 +1387,70 @@ class School {
   }
 }
 
+const _layoutLabels = {
+  '/': 'Home',
+  'more': 'More',
+  'academics': 'Academics',
+  '/attendance': 'Attendance',
+  '/homework': 'Homework',
+  '/timetable': 'Timetable',
+  '/results': 'Results',
+  '/library': 'Library',
+  '/health': 'Health',
+  '/certificates': 'Certificates',
+  '/help': 'Help',
+  '/notices': 'Notices',
+  '/calendar': 'Calendar',
+};
+const _cardLabels = {
+  'attendance_today': 'Attendance today',
+  'notices': 'Latest notices',
+  'coming_up': 'Coming up (holidays and events)',
+  'library': 'Library books',
+  'fees_due': 'Fees due',
+};
+Map<String, Object?> entry(String h) => {'href': h, 'label': _layoutLabels[h] ?? h, 'icon': 'book'};
+
+/// A layout as `GET me/app-layout` gives it (made-up school choices).
+Map<String, Object?> layoutJson({
+  required List<String> tabs,
+  required List<String> shortcuts,
+  required List<String> cards,
+  required List<String> academics,
+  List<String> screens = const [
+    '/attendance',
+    '/homework',
+    '/timetable',
+    '/results',
+    '/library',
+    '/health',
+    '/certificates',
+    '/help',
+    '/notices',
+    '/calendar',
+  ],
+}) => {
+  'audience': 'student',
+  'tabs': [entry('/'), for (final t in tabs) entry(t), entry('more')],
+  'shortcuts': [for (final x in shortcuts) entry(x)],
+  'ownShortcuts': false,
+  'cards': [
+    for (final k in cards)
+      {'key': k, 'label': _cardLabels[k] ?? k, 'labelHi': _cardLabels[k] ?? k, 'href': '/'},
+  ],
+  'academics': [for (final a in academics) entry(a)],
+  'screens': [for (final x in screens) entry(x)],
+  'published': true,
+};
+
+Map<String, Object?> withOwn(Map<String, Object?> l, List<String>? own) => own == null
+    ? l
+    : {
+        ...l,
+        'shortcuts': [for (final x in own) entry(x)],
+        'ownShortcuts': true,
+      };
+
 Future<(FakeTransport, School)> pumpFamily(
   WidgetTester tester, {
   String kind = 'parent',
@@ -1438,6 +1517,176 @@ Future<void> scrollTo(WidgetTester tester, Finder f) async {
 }
 
 void main() {
+  group('the school\'s layout (docs/design/90)', () {
+    Map<String, Object?> studentLayout() => layoutJson(
+      tabs: ['academics', '/library', '/results'],
+      shortcuts: ['/library', '/health', '/certificates', '/help'],
+      cards: ['notices', 'coming_up', 'library'],
+      academics: ['/timetable', '/homework'],
+    );
+    Finder tab(String label) =>
+        find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+
+    testWidgets('its tabs, its shortcuts (with All), its cards in order, its Academics list', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final school = School()..layout = studentLayout();
+      final (t, _) = await pumpFamily(tester, kind: 'student', school: school);
+      expect(t.calls.firstWhere((c) => c.path == '/me/app-layout').query, {'kind': 'student'});
+      for (final label in ['Home', 'Academics', 'Library', 'Results', 'More']) {
+        expect(tab(label), findsOneWidget, reason: label);
+      }
+      expect(tab('Homework'), findsNothing);
+      for (final k in ['library', 'health', 'certificates', 'help', 'all']) {
+        expect(find.byKey(Key('shortcut-$k')), findsOneWidget, reason: k);
+      }
+      expect(find.byKey(const Key('shortcut-attendance')), findsNothing);
+      // the cards the school chose, in its order; the others not
+      final notices = tester.getTopLeft(find.text('Latest notices')).dy;
+      await scrollTo(tester, find.text('Library books'));
+      expect(find.text('Coming up'), findsOneWidget);
+      expect(find.text('No books out now.'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('Coming up')).dy, greaterThan(notices - 2000));
+      expect(find.text('Attendance today'), findsNothing);
+
+      // All opens every screen (More)
+      await scrollTo(tester, find.byKey(const Key('shortcut-all')));
+      await tester.tap(find.byKey(const Key('shortcut-all')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('moreList')), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      // the Academics tab lists the school's Academics screens
+      await tester.tap(tab('Academics'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('academics-timetable')), findsOneWidget);
+      expect(find.byKey(const Key('academics-homework')), findsOneWidget);
+      expect(find.byKey(const Key('academics-results')), findsNothing);
+    });
+
+    testWidgets('Edit shortcuts: pin, remove, reorder, save; then back to the school\'s', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(420, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final school = School()..layout = studentLayout();
+      final (t, _) = await pumpFamily(tester, kind: 'student', school: school);
+      expect(find.text('Shortcuts'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('editShortcuts')));
+      await tester.pumpAndSettle();
+      expect(find.text('Your shortcuts (4 of 12)'), findsOneWidget);
+      expect(find.byKey(const Key('resetShortcuts')), findsNothing);
+      // fewer than four cannot be kept
+      await tester.tap(find.byKey(const Key('remove-help')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('saveShortcuts')));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose at least 4 shortcuts.'), findsOneWidget);
+      expect(t.calls.where((c) => c.method == 'PUT'), isEmpty);
+      // pin Attendance and Notices, Attendance first
+      await scrollTo(tester, find.byKey(const Key('add-attendance')));
+      await tester.tap(find.byKey(const Key('add-attendance')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('findScreen')), 'noti');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('add-homework')), findsNothing);
+      await tester.tap(find.byKey(const Key('add-notices')));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.byKey(const Key('mine-attendance')));
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.byTooltip('Move Attendance up'));
+        await tester.pumpAndSettle();
+      }
+      await scrollTo(tester, find.byKey(const Key('saveShortcuts')));
+      await tester.tap(find.byKey(const Key('saveShortcuts')));
+      await tester.pumpAndSettle();
+      final put = t.calls.lastWhere((c) => c.method == 'PUT');
+      expect(put.path, '/me/app-layout/shortcuts');
+      expect(put.query, {'kind': 'student'});
+      expect(put.body, {
+        'shortcuts': ['/attendance', '/library', '/health', '/certificates', '/notices'],
+      });
+      // Home has them, as the person's own
+      expect(find.text('Your own shortcuts'), findsOneWidget);
+      expect(find.byKey(const Key('shortcut-attendance')), findsOneWidget);
+      expect(find.byKey(const Key('shortcut-help')), findsNothing);
+      // back to the school's
+      await tester.tap(find.byKey(const Key('editShortcuts')));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.byKey(const Key('resetShortcuts')));
+      await tester.tap(find.byKey(const Key('resetShortcuts')));
+      await tester.pumpAndSettle();
+      final reset = t.calls.lastWhere((c) => c.method == 'DELETE');
+      expect(reset.path, '/me/app-layout/shortcuts');
+      expect(reset.query, {'kind': 'student'});
+      expect(find.text('Shortcuts'), findsOneWidget);
+      expect(find.byKey(const Key('shortcut-help')), findsOneWidget);
+    });
+
+    for (final dark in [false, true]) {
+      testWidgets(
+        'accessibility (${dark ? 'dark' : 'light'}): Home by the layout, Edit shortcuts',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(420, 2400));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final handle = tester.ensureSemantics();
+          tester.platformDispatcher.platformBrightnessTestValue = dark
+              ? Brightness.dark
+              : Brightness.light;
+          addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+          final school = School()..layout = studentLayout();
+          await pumpFamily(tester, kind: 'student', school: school);
+          Future<void> check(String where) async {
+            for (final g in [
+              androidTapTargetGuideline,
+              iOSTapTargetGuideline,
+              labeledTapTargetGuideline,
+              textContrastGuideline,
+            ]) {
+              await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+            }
+          }
+
+          await check('Home');
+          await tester.tap(find.byKey(const Key('editShortcuts')));
+          await tester.pumpAndSettle();
+          await check('Edit shortcuts');
+          handle.dispose();
+        },
+      );
+    }
+
+    testWidgets('large text (2×): Home by the layout and Edit shortcuts lay out', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 3600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final school = School()..layout = studentLayout();
+      await pumpFamily(tester, kind: 'student', school: school);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('editShortcuts')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('in Hindi: the cards and the words of Edit shortcuts', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final school = School()..layout = studentLayout();
+      await pumpFamily(tester, kind: 'student', school: school, hindi: true);
+      expect(find.text('सभी'), findsOneWidget);
+      await scrollTo(tester, find.text('पुस्तकालय की पुस्तकें'));
+      expect(find.text('आगे'), findsOneWidget);
+      await scrollTo(tester, find.byKey(const Key('editShortcuts')));
+      await tester.tap(find.byKey(const Key('editShortcuts')));
+      await tester.pumpAndSettle();
+      expect(find.text('आपके शॉर्टकट (12 में से 4)'), findsOneWidget);
+    });
+  });
+
   testWidgets(
     'Home\'s shortcuts: eight tiles four a row; Messages when the school takes no queries',
     (tester) async {

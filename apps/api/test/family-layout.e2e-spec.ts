@@ -1,0 +1,332 @@
+/**
+ * The family app's layout kept by the school (0407, docs/design/90): a school starts with the app as it was; the
+ * office saves a draft (checked), families get it only once published; discard goes back; a person gets only what they
+ * can open (a tab they cannot open gives its place to the next shortcut); a person's own Home shortcuts and reset; the
+ * rights, the audit trail and the school boundary.
+ */
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import {
+  createApp,
+  headersFor,
+  injector,
+  seedSchool,
+  seedUser,
+  stamp,
+  withMigrator,
+  type SeededSchool,
+  type SeededUser,
+} from './helpers';
+
+interface Layout {
+  tabs: string[];
+  shortcuts: string[];
+  cards: string[];
+  academics: string[];
+}
+interface Mine {
+  audience: string;
+  tabs: Array<{ href: string; label: string; icon: string }>;
+  shortcuts: Array<{ href: string; label: string; icon: string }>;
+  ownShortcuts: boolean;
+  cards: Array<{ key: string; label: string; labelHi: string; href: string }>;
+  academics: Array<{ href: string; label: string }>;
+  screens: Array<{ href: string }>;
+}
+interface Setup {
+  layouts: Record<
+    'student' | 'parent',
+    {
+      draft: Layout;
+      published: Layout;
+      everPublished: boolean;
+      publishedAt: string | null;
+      publishedBy: string | null;
+      changed: boolean;
+    }
+  >;
+  catalogue: {
+    screens: Record<'student' | 'parent', Array<{ href: string; label: string; icon: string }>>;
+    cards: Array<{ key: string }>;
+  };
+}
+
+const STUDENT_START: Layout = {
+  tabs: ['/homework', '/timetable', '/results'],
+  shortcuts: [
+    '/attendance',
+    '/homework',
+    '/timetable',
+    '/fees',
+    '/calendar',
+    '/date-sheet',
+    '/notices',
+    '/messages',
+  ],
+  cards: ['attendance_today', 'classes_today', 'homework_due', 'next_exam', 'notices'],
+  academics: ['/attendance', '/homework', '/timetable', '/date-sheet', '/results', '/calendar'],
+};
+
+describe('family app layout (e2e)', () => {
+  let app: NestFastifyApplication;
+  let inject: ReturnType<typeof injector>;
+  let school: SeededSchool;
+  let other: SeededSchool;
+  let admin: SeededUser;
+  let otherAdmin: SeededUser;
+  let teacher: SeededUser;
+  let parent: SeededUser;
+  let student: SeededUser;
+  const h = (u: SeededUser, sc: SeededSchool = school) => headersFor(u.sub, sc.id);
+  const hrefs = (xs: Array<{ href: string }>) => xs.map((x) => x.href);
+
+  const setup = async (u: SeededUser = admin, sc: SeededSchool = school) => {
+    const r = await inject({
+      method: 'GET',
+      url: '/platform/family-app-layout',
+      headers: h(u, sc),
+    });
+    expect(r.statusCode).toBe(200);
+    return r.json() as Setup;
+  };
+  const mine = async (u: SeededUser, kind: 'student' | 'parent') => {
+    const r = await inject({ method: 'GET', url: `/me/app-layout?kind=${kind}`, headers: h(u) });
+    expect(r.statusCode).toBe(200);
+    return r.json() as Mine;
+  };
+  const save = (audience: string, json: Layout, u: SeededUser = admin) =>
+    inject({
+      method: 'PUT',
+      url: `/platform/family-app-layout/${audience}`,
+      headers: h(u),
+      json,
+    });
+  const act = (audience: string, what: 'publish' | 'discard', u: SeededUser = admin) =>
+    inject({
+      method: 'POST',
+      url: `/platform/family-app-layout/${audience}/${what}`,
+      headers: h(u),
+    });
+
+  beforeAll(async () => {
+    const s = stamp('FL');
+    await withMigrator(async (c) => {
+      school = await seedSchool(c, `${s}A`);
+      other = await seedSchool(c, `${s}B`);
+      admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
+      otherAdmin = await seedUser(c, other, `${s}-admin-b`, 'school_admin');
+      teacher = await seedUser(c, school, `${s}-teacher`, 'subject_teacher');
+      parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
+      student = await seedUser(c, school, `${s}-pupil`, 'student', 'student');
+    });
+    app = await createApp();
+    inject = injector(app);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('a school starts with the app as it was', async () => {
+    const s = await setup();
+    expect(s.layouts.student).toMatchObject({
+      draft: STUDENT_START,
+      published: STUDENT_START,
+      everPublished: false,
+      publishedAt: null,
+      changed: false,
+    });
+    expect(s.layouts.parent.draft.tabs).toEqual(['academics', '/fees', '/messages']);
+    // a student's layout cannot name the parents' screens; Home is never one
+    expect(hrefs(s.catalogue.screens.student)).not.toContain('/queries');
+    expect(hrefs(s.catalogue.screens.parent)).toContain('/queries');
+    expect(hrefs(s.catalogue.screens.parent)).not.toContain('/');
+    expect(s.catalogue.screens.student).toContainEqual({
+      href: '/library',
+      label: 'Library',
+      icon: 'book',
+    });
+    expect(s.catalogue.cards).toHaveLength(8);
+
+    const st = await mine(student, 'student');
+    expect(hrefs(st.tabs)).toEqual(['/', '/homework', '/timetable', '/results', 'more']);
+    expect(hrefs(st.shortcuts)).toEqual(STUDENT_START.shortcuts);
+    expect(st.ownShortcuts).toBe(false);
+    expect((st as Mine & { published: boolean }).published).toBe(false);
+    expect(st.cards.map((c) => c.key)).toEqual(STUDENT_START.cards);
+    expect(st.cards[0]).toMatchObject({ label: 'Attendance today', labelHi: 'आज की उपस्थिति' });
+    expect(hrefs(st.screens)).not.toContain('/queries');
+    expect(hrefs(st.screens)).not.toContain('/assistant');
+
+    const pa = await mine(parent, 'parent');
+    expect(hrefs(pa.tabs)).toEqual(['/', 'academics', '/fees', '/messages', 'more']);
+    expect(pa.tabs[1]).toMatchObject({ label: 'Academics' });
+    expect(hrefs(pa.shortcuts)).toContain('/queries');
+    expect(hrefs(pa.academics)).toEqual(STUDENT_START.academics);
+  });
+
+  it('checks a layout before saving it', async () => {
+    const bad = async (patch: Partial<Layout>, audience = 'student') => {
+      const r = await save(audience, { ...STUDENT_START, ...patch });
+      return r.statusCode === 400 ? (r.json().errors as string[]) : r.statusCode;
+    };
+    expect(await bad({ tabs: ['/homework', '/results'] })).toContain(
+      'Choose three tabs between Home and More.',
+    );
+    expect(await bad({ shortcuts: ['/homework', '/results', '/library'] })).toContain(
+      'Choose 4 to 12 Home shortcuts.',
+    );
+    expect(await bad({ cards: ['notices', 'weather'] })).toContain('weather is not a Home card.');
+    expect(await bad({ cards: [] })).toContain('Choose at least one Home card.');
+    expect(await bad({ tabs: ['/queries', '/homework', '/results'] })).toContain(
+      '/queries cannot be a tab here.',
+    );
+    expect(
+      await bad({ tabs: ['academics', '/homework', '/results'], academics: ['/homework'] }),
+    ).toContain('With an Academics tab, its list needs at least two screens.');
+    expect(await bad({ shortcuts: ['/', '/homework', '/results', '/library'] })).toContain(
+      '/ cannot be a shortcut here.',
+    );
+    // the parents' screens are fine for parents
+    expect(await bad({ tabs: ['/queries', '/homework', '/results'] }, 'parent')).toBe(200);
+    expect((await save('staff', STUDENT_START)).statusCode).toBe(404);
+  });
+
+  it('a draft reaches families only when published; a tab they cannot open gives its place', async () => {
+    const draft: Layout = {
+      tabs: ['academics', '/assistant', '/results'],
+      shortcuts: [
+        '/attendance',
+        '/library',
+        '/assistant',
+        '/health',
+        '/certificates',
+        '/transport',
+        '/help',
+        '/calendar',
+      ],
+      cards: ['notices', 'coming_up', 'library', 'homework_due'],
+      academics: ['/timetable', '/homework', '/date-sheet'],
+    };
+    expect((await save('student', draft)).statusCode).toBe(200);
+    const s = await setup();
+    expect(s.layouts.student).toMatchObject({ draft, changed: true, everPublished: false });
+    // not published: the student still has the app as it was
+    expect(hrefs((await mine(student, 'student')).tabs)).toEqual([
+      '/',
+      '/homework',
+      '/timetable',
+      '/results',
+      'more',
+    ]);
+
+    expect((await act('student', 'publish')).statusCode).toBe(200);
+    const after = await setup();
+    expect(after.layouts.student).toMatchObject({
+      published: draft,
+      everPublished: true,
+      changed: false,
+    });
+    expect(after.layouts.student.publishedAt).toBeTruthy();
+
+    const st = await mine(student, 'student');
+    expect((st as Mine & { published: boolean }).published).toBe(true);
+    // the Assistant is not a student's: its tab goes to the first shortcut not yet a tab
+    expect(hrefs(st.tabs)).toEqual(['/', 'academics', '/results', '/attendance', 'more']);
+    expect(hrefs(st.shortcuts)).toEqual([
+      '/attendance',
+      '/library',
+      '/health',
+      '/certificates',
+      '/transport',
+      '/help',
+      '/calendar',
+    ]);
+    expect(st.cards.map((c) => c.key)).toEqual(['notices', 'coming_up', 'library', 'homework_due']);
+    expect(hrefs(st.academics)).toEqual(['/timetable', '/homework', '/date-sheet']);
+    // the parents' layout is apart
+    expect(hrefs((await mine(parent, 'parent')).tabs)).toEqual([
+      '/',
+      'academics',
+      '/fees',
+      '/messages',
+      'more',
+    ]);
+    // a parent reading the students' layout gets their own rights on it (the Assistant is theirs)
+    expect(hrefs((await mine(parent, 'student')).tabs)).toContain('/assistant');
+
+    const audit = await withMigrator((c) =>
+      c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM audit_logs WHERE school_id = $1 AND action = 'platform.family_layout.published'`,
+        [school.id],
+      ),
+    );
+    expect(audit.rows[0]!.n).toBe(1);
+  });
+
+  it('discarding a draft goes back to what families have', async () => {
+    const live = (await setup()).layouts.student.published;
+    expect((await save('student', { ...live, cards: ['notices'] })).statusCode).toBe(200);
+    expect((await setup()).layouts.student.changed).toBe(true);
+    expect((await act('student', 'discard')).statusCode).toBe(200);
+    const s = await setup();
+    expect(s.layouts.student).toMatchObject({ draft: live, changed: false });
+  });
+
+  it('a person keeps their own Home shortcuts, and can go back to the school’s', async () => {
+    const put = (shortcuts: string[], u: SeededUser = student, kind = 'student') =>
+      inject({
+        method: 'PUT',
+        url: `/me/app-layout/shortcuts?kind=${kind}`,
+        headers: h(u),
+        json: { shortcuts },
+      });
+    const ok = await put(['/library', '/health', '/certificates', '/help', '/notices']);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({ ownShortcuts: true });
+    expect(hrefs((ok.json() as Mine).shortcuts)).toEqual([
+      '/library',
+      '/health',
+      '/certificates',
+      '/help',
+      '/notices',
+    ]);
+    // the school's next layout leaves them as they are
+    const live = (await setup()).layouts.student.published;
+    await save('student', { ...live, shortcuts: [...live.shortcuts].reverse() });
+    await act('student', 'publish');
+    expect(hrefs((await mine(student, 'student')).shortcuts)[0]).toBe('/library');
+    // only screens the person can open, 4 to 12, once each
+    expect((await put(['/library', '/health', '/help', '/queries'])).statusCode).toBe(400);
+    expect((await put(['/library', '/health', '/help', '/assistant'])).statusCode).toBe(400);
+    expect((await put(['/library', '/health', '/help'])).statusCode).toBe(400);
+    expect((await put(['/library', '/health', '/help', '/help'])).statusCode).toBe(400);
+    // a parent's own are apart
+    expect(
+      (await put(['/queries', '/fees', '/appointments', '/consents'], parent, 'parent')).statusCode,
+    ).toBe(200);
+    expect((await mine(student, 'student')).ownShortcuts).toBe(true);
+
+    const reset = await inject({
+      method: 'DELETE',
+      url: '/me/app-layout/shortcuts?kind=student',
+      headers: h(student),
+    });
+    expect(reset.statusCode).toBe(200);
+    expect(reset.json()).toMatchObject({ ownShortcuts: false });
+    expect(hrefs((reset.json() as Mine).shortcuts)).toEqual(
+      [...live.shortcuts].reverse().filter((x) => x !== '/assistant'),
+    );
+    expect((await mine(parent, 'parent')).ownShortcuts).toBe(true);
+  });
+
+  it('only the settings rights arrange it; each school keeps its own', async () => {
+    expect(
+      (await inject({ method: 'GET', url: '/platform/family-app-layout', headers: h(teacher) }))
+        .statusCode,
+    ).toBe(403);
+    expect((await save('student', STUDENT_START, parent)).statusCode).toBe(403);
+    expect((await act('student', 'publish', teacher)).statusCode).toBe(403);
+    const b = await setup(otherAdmin, other);
+    expect(b.layouts.student).toMatchObject({ draft: STUDENT_START, everPublished: false });
+  });
+});

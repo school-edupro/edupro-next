@@ -8,6 +8,7 @@ import { currentLang, t } from '@/lib/i18n';
 import { ChildProfileCard, type FamilyChild } from '@/components/ChildProfileCard';
 import { audienceOf } from '@/components/FamilyShell';
 import { HomeDashboard } from '@/components/HomeDashboard';
+import { homeLayout } from '@/lib/home-layout';
 import { canOpen } from '@/lib/portal-menu';
 import { Icon, type IconName } from '@/components/nav-icons';
 
@@ -170,6 +171,10 @@ export default async function HomePage({
         .then((r) => r.children)
         .catch(() => [])
     : [];
+  // the school's layout for this person (docs/design/90): the Home shortcuts and cards once the school published
+  // one (or the person keeps their own shortcuts); until then Home stays as it was
+  const got = kids.length ? await homeLayout(audience) : null;
+  const layout = got && (got.published || got.ownShortcuts) ? got : null;
   const chosen = await chosenChild(sp.child);
   const child = kids.find((c) => c.id === chosen?.id) ?? kids[0];
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
@@ -237,7 +242,7 @@ export default async function HomePage({
         <>
           <ChildSwitch lang={lang} back="/" current={child.id} />
           <ChildProfileCard child={child} lang={lang} />
-          <HomeDashboard childId={child.id} audience={audience} lang={lang} />
+          <HomeDashboard childId={child.id} audience={audience} lang={lang} layout={layout} />
         </>
       ) : isFamily ? (
         <Card>

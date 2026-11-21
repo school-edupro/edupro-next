@@ -48,6 +48,9 @@ const PAGES = [
   '/library?view=find&q=a',
   '/help',
   '/help?q=fee',
+  // the family app layout (docs/design/90): Home's shortcuts and cards, and Edit shortcuts
+  '/home/shortcuts',
+  '/home/shortcuts?add=/library',
 ];
 
 for (const sub of ['dev-parent', 'dev-student']) {

@@ -1,5 +1,7 @@
+import { Fragment } from 'react';
 import { Badge, Card } from '@edupro/ui';
 import { bff } from '@/lib/bff';
+import { iconOf, type HomeLayout } from '@/lib/home-layout';
 import { t, type Lang } from '@/lib/i18n';
 import type { Audience } from './FamilyShell';
 import { Icon, type IconName } from './nav-icons';
@@ -95,6 +97,31 @@ interface LibraryGlance {
   waiting: number;
 }
 
+interface DateSheets {
+  children: Array<{
+    student: { id: string };
+    exams: Array<{
+      name: string;
+      papers: Array<{ subject: string; examOn: string; startsAt: string | null }>;
+    }>;
+  }>;
+}
+interface Period {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  isBreak: boolean;
+}
+interface Slot {
+  weekday: number;
+  periodId: string;
+  subjectName: string | null;
+  teacherName: string | null;
+}
+
+/** The Home before the school arranged it (docs/design/90): its glances and cards in their old order. */
+const BEFORE = ['attendance_today', 'fees_due', 'homework_due', 'library', 'notices', 'coming_up'];
+
 function Glance({
   icon,
   label,
@@ -127,57 +154,101 @@ export async function HomeDashboard({
   childId,
   audience,
   lang,
+  layout,
 }: {
   childId: string;
   audience: Audience;
   lang: Lang;
+  /** The school's layout for this person (docs/design/90); null: Home as it always was. */
+  layout: HomeLayout | null;
 }) {
   const today = istToday();
   const tomorrow = addDays(today, 1);
-  const [att, fees, viewer, notices, cal, birthdays, dayOf, consents, library] = await Promise.all([
-    bff.api.fetch<Attendance>(`/attendance/mine?month=${today.slice(0, 7)}`).catch(() => null),
-    audience === 'parent' ? bff.api.fetch<Fees>('/fees/mine').catch(() => null) : null,
-    bff.api.fetch<Viewer>('/academics/daily-work/viewer').catch(() => null),
-    bff.api
-      .fetch<{ data: Notice[] }>('/academics/notices?size=3')
-      .then((r) => r.data)
-      .catch(() => [] as Notice[]),
-    bff.api.fetch<Calendar>('/academics/calendar').catch(() => null),
-    bff.api
-      .fetch<{ data: Birthday[] }>(`/engagement/mine/birthdays/${childId}`)
-      .then((r) => r.data)
-      .catch(() => [] as Birthday[]),
-    // today on the bus, and what the school already knows of the day (approved leave, gate pass)
-    bff.api
-      .fetch<{ children: DayOf[] }>('/attendance/desk/mine/today')
-      .then((r) => r.children.find((c) => c.id === childId) ?? null)
-      .catch(() => null),
-    // consent forms waiting for an answer for this child (docs/design/28-consent-forms.md)
-    audience === 'parent'
-      ? bff.api
-          .fetch<{
-            forms: Array<{
-              id: string;
-              title: string;
-              people: Array<{ id: string; canAnswer: boolean }>;
-            }>;
-          }>('/engagement/mine/consent-forms')
-          .then((r) => r.forms.filter((x) => x.people.some((p) => p.id === childId && p.canAnswer)))
-          .catch(() => [])
-      : [],
-    // the child's library books: held, due soon, late, kept for them (docs/design/36-library.md)
-    bff.api
-      .fetch<{ people: LibraryGlance[] }>('/library/portal/summary')
-      .then((r) => r.people.find((p) => p.kind === 'student' && p.id === childId) ?? null)
-      .catch(() => null),
-  ]);
+  const isParent = audience === 'parent';
+  // the cards in the school's order (only those) once it published a layout, else the old set
+  const cardsByLayout = !!layout?.published;
+  const order = cardsByLayout ? layout!.cards.map((c) => c.key) : BEFORE;
+  const want = (key: string) => order.includes(key);
+  const none = Promise.resolve(null);
+  const [att, fees, viewer, notices, cal, birthdays, dayOf, consents, library, sheets] =
+    await Promise.all([
+      want('attendance_today')
+        ? bff.api.fetch<Attendance>(`/attendance/mine?month=${today.slice(0, 7)}`).catch(() => null)
+        : none,
+      // a student's fees are view only; the old Home showed them to parents alone
+      want('fees_due') && (isParent || cardsByLayout)
+        ? bff.api.fetch<Fees>('/fees/mine').catch(() => null)
+        : none,
+      want('homework_due') || want('classes_today')
+        ? bff.api.fetch<Viewer>('/academics/daily-work/viewer').catch(() => null)
+        : none,
+      want('notices')
+        ? bff.api
+            .fetch<{ data: Notice[] }>('/academics/notices?size=3')
+            .then((r) => r.data)
+            .catch(() => [] as Notice[])
+        : ([] as Notice[]),
+      want('coming_up') ? bff.api.fetch<Calendar>('/academics/calendar').catch(() => null) : none,
+      want('coming_up')
+        ? bff.api
+            .fetch<{ data: Birthday[] }>(`/engagement/mine/birthdays/${childId}`)
+            .then((r) => r.data)
+            .catch(() => [] as Birthday[])
+        : ([] as Birthday[]),
+      // today on the bus, and what the school already knows of the day (approved leave, gate pass)
+      want('attendance_today')
+        ? bff.api
+            .fetch<{ children: DayOf[] }>('/attendance/desk/mine/today')
+            .then((r) => r.children.find((c) => c.id === childId) ?? null)
+            .catch(() => null)
+        : none,
+      // consent forms waiting for an answer for this child (docs/design/28-consent-forms.md)
+      audience === 'parent'
+        ? bff.api
+            .fetch<{
+              forms: Array<{
+                id: string;
+                title: string;
+                people: Array<{ id: string; canAnswer: boolean }>;
+              }>;
+            }>('/engagement/mine/consent-forms')
+            .then((r) =>
+              r.forms.filter((x) => x.people.some((p) => p.id === childId && p.canAnswer)),
+            )
+            .catch(() => [])
+        : [],
+      // the child's library books: held, due soon, late, kept for them (docs/design/36-library.md)
+      want('library')
+        ? bff.api
+            .fetch<{ people: LibraryGlance[] }>('/library/portal/summary')
+            .then((r) => r.people.find((p) => p.kind === 'student' && p.id === childId) ?? null)
+            .catch(() => null)
+        : none,
+      want('next_exam')
+        ? bff.api.fetch<DateSheets>('/exams/mine/date-sheets').catch(() => null)
+        : none,
+    ]);
   const section = viewer?.students.find((s) => s.id === childId)?.classSectionId ?? null;
-  const work = section
-    ? await bff.api
-        .fetch<{ data: Work[] }>(`/academics/daily-work?size=50&classSectionId=${section}`)
-        .then((r) => r.data)
-        .catch(() => [] as Work[])
-    : [];
+  const [work, periods, slots] = await Promise.all([
+    section && want('homework_due')
+      ? bff.api
+          .fetch<{ data: Work[] }>(`/academics/daily-work?size=50&classSectionId=${section}`)
+          .then((r) => r.data)
+          .catch(() => [] as Work[])
+      : ([] as Work[]),
+    section && want('classes_today')
+      ? bff.api
+          .fetch<{ data: Period[] }>('/academics/timetable/periods')
+          .then((r) => r.data)
+          .catch(() => [] as Period[])
+      : ([] as Period[]),
+    section && want('classes_today')
+      ? bff.api
+          .fetch<{ data: Slot[] }>(`/academics/timetable/slots?classSectionId=${section}`)
+          .then((r) => r.data)
+          .catch(() => [] as Slot[])
+      : ([] as Slot[]),
+  ]);
 
   const a = att?.children.find((c) => c.id === childId);
   const todayCode = a?.days.find((d) => d.date === today)?.code;
@@ -193,7 +264,18 @@ export async function HomeDashboard({
     .filter((e) => e.startsOn >= today)
     .sort((x, y) => x.startsOn.localeCompare(y.startsOn))
     .slice(0, 2);
-  const isParent = audience === 'parent';
+  const nextPaper = (sheets?.children.find((c) => c.student.id === childId)?.exams ?? [])
+    .flatMap((e) => e.papers.map((p) => ({ ...p, exam: e.name })))
+    .filter((p) => p.examOn >= today)
+    .sort((x, y) =>
+      `${x.examOn} ${x.startsAt ?? ''}`.localeCompare(`${y.examOn} ${y.startsAt ?? ''}`),
+    )[0];
+  // Monday is 1 in the timetable; Sunday has no classes
+  const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+  const todays = periods
+    .filter((p) => !p.isBreak)
+    .map((p) => ({ p, s: slots.find((x) => x.weekday === weekday && x.periodId === p.id) }))
+    .filter((x): x is { p: Period; s: Slot } => !!x.s);
 
   const actions: Array<{ href: string; label: string; icon: IconName }> = isParent
     ? [
@@ -208,6 +290,247 @@ export async function HomeDashboard({
         { href: '/results', label: 'My results', icon: 'chart' },
         { href: '/library', label: 'My library books', icon: 'file' },
       ];
+
+  // each card of the layout and what it shows here: glances in the "Today at a glance" row, the rest as cards
+  const glance: Record<string, React.ReactNode> = {
+    attendance_today: (
+      <>
+        <Glance
+          icon="check"
+          label={t(lang, 'Attendance today')}
+          value={
+            todayCode ? (
+              <Badge tone={CODE[todayCode]?.[1] ?? 'info'}>
+                {t(lang, CODE[todayCode]?.[0] ?? todayCode)}
+              </Badge>
+            ) : (
+              t(lang, 'Not marked yet')
+            )
+          }
+          note={
+            pct !== null
+              ? `${pct}% ${t(lang, 'this month')} · ${a!.summary.present}/${a!.summary.days} ${t(lang, 'days')}`
+              : t(lang, 'No school days this month yet')
+          }
+          href="/attendance"
+        />
+        {dayOf?.rides ? (
+          <Glance
+            icon="bus"
+            label={t(lang, 'School bus today')}
+            value={
+              dayOf.busPick || dayOf.busDrop ? (
+                <Badge
+                  tone={dayOf.busPick === 'A' || dayOf.busDrop === 'A' ? 'warning' : 'success'}
+                >
+                  {[
+                    dayOf.busPick
+                      ? `${t(lang, 'Morning')}: ${t(lang, BUS[dayOf.busPick] ?? dayOf.busPick)}`
+                      : null,
+                    dayOf.busDrop
+                      ? `${t(lang, 'Afternoon')}: ${t(lang, BUS[dayOf.busDrop] ?? dayOf.busDrop)}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Badge>
+              ) : (
+                t(lang, 'Not marked yet')
+              )
+            }
+            note={
+              dayOf.hint?.leave
+                ? t(lang, 'Leave is approved for today')
+                : dayOf.hint?.pass
+                  ? t(
+                      lang,
+                      dayOf.hint.pass.kind === 'early_leave'
+                        ? 'Gate pass: leaves early today'
+                        : 'Gate pass: comes late today',
+                    )
+                  : t(lang, 'Marked by the bus teacher, morning and afternoon')
+            }
+            href="/attendance"
+          />
+        ) : null}
+      </>
+    ),
+    fees_due:
+      isParent || fees ? (
+        <Glance
+          icon="wallet"
+          label={t(lang, 'Fee due')}
+          value={
+            f
+              ? Number(f.payableNow) > 0
+                ? rupees(f.payableNow)
+                : nextDue
+                  ? rupees(nextDue.balance)
+                  : t(lang, 'All paid')
+              : '—'
+          }
+          note={
+            nextDue
+              ? `${nextDue.label} · ${t(lang, 'due')} ${dayLabel(nextDue.dueOn)}`
+              : f
+                ? t(lang, 'Nothing due now')
+                : undefined
+          }
+          href="/fees"
+        />
+      ) : null,
+    homework_due: (
+      <Glance
+        icon="book"
+        label={t(lang, 'Homework due tomorrow')}
+        value={dueTomorrow.length}
+        note={
+          dueTomorrow.length
+            ? dueTomorrow
+                .slice(0, 2)
+                .map((w) => w.subjectName ?? w.title)
+                .join(', ')
+            : t(lang, 'Nothing due tomorrow')
+        }
+        href={`/homework?child=${childId}`}
+      />
+    ),
+    library: library ? (
+      <Glance
+        icon="book"
+        label={t(lang, 'Library books')}
+        value={
+          library.ready.length ? (
+            <Badge tone="warning">
+              {library.ready.length} {t(lang, 'ready to collect')}
+            </Badge>
+          ) : library.late ? (
+            <Badge tone="danger">
+              {library.late} {t(lang, 'overdue')}
+            </Badge>
+          ) : (
+            library.holding
+          )
+        }
+        note={
+          library.ready.length
+            ? `${library.ready[0]!.title} · ${t(lang, 'until')} ${dayLabel(library.ready[0]!.until)}`
+            : library.holding
+              ? library.dueSoon
+                ? `${library.dueSoon} ${t(lang, 'due in the next 3 days')}`
+                : library.nextDue
+                  ? `${t(lang, 'Next due')} ${dayLabel(library.nextDue)}`
+                  : `${library.holding} ${t(lang, 'on loan')}`
+              : t(lang, 'No books on loan.')
+        }
+        href="/library"
+      />
+    ) : null,
+    next_exam: (
+      <Glance
+        icon="file"
+        label={t(lang, 'Next exam')}
+        value={nextPaper ? dayLabel(nextPaper.examOn) : '—'}
+        note={
+          nextPaper
+            ? `${nextPaper.subject} · ${nextPaper.exam}${nextPaper.startsAt ? ` · ${nextPaper.startsAt.slice(0, 5)}` : ''}`
+            : t(lang, 'No exam coming up.')
+        }
+        href="/date-sheet"
+      />
+    ),
+    coming_up: (
+      <Glance
+        icon="clipboard"
+        label={t(lang, 'Next holiday')}
+        value={upcomingHoliday ? dayLabel(upcomingHoliday.startsOn) : '—'}
+        note={upcomingHoliday ? upcomingHoliday.name : t(lang, 'None announced')}
+        href="/calendar"
+      />
+    ),
+  };
+  const card: Record<string, React.ReactNode> = {
+    notices: (
+      <Card title={t(lang, 'Latest notices')}>
+        {notices.length ? (
+          <ul className="fp-list">
+            {notices.map((n) => (
+              <li key={n.id}>
+                <a href="/notices">{n.title}</a>
+                <span className="fp-list__meta">
+                  {dayLabel(n.publishFrom.slice(0, 10))}
+                  {n.isPinned ? ` · ${t(lang, 'Pinned')}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ep-field__help">{t(lang, 'No notices yet.')}</p>
+        )}
+        <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/notices">
+          {t(lang, 'All notices')}
+        </a>
+      </Card>
+    ),
+    coming_up: (
+      <Card title={t(lang, 'Coming up')}>
+        <ul className="fp-list">
+          {birthdays.map((b) => (
+            <li key={`${b.name}-${b.day}`}>
+              <span>
+                {b.self
+                  ? b.day === today
+                    ? t(lang, isParent ? 'Happy birthday to your child!' : 'Happy birthday!')
+                    : t(lang, isParent ? 'Your child’s birthday' : 'Your birthday')
+                  : `${t(lang, 'Birthday')}: ${b.name}`}
+              </span>
+              <span className="fp-list__meta">
+                {b.day === today ? t(lang, 'Today') : dayLabel(b.day)}
+              </span>
+            </li>
+          ))}
+          {upcomingEvents.map((e) => (
+            <li key={e.id}>
+              <span>{e.title}</span>
+              <span className="fp-list__meta">{dayLabel(e.startsOn)}</span>
+            </li>
+          ))}
+          {!birthdays.length && !upcomingEvents.length ? (
+            <li className="ep-field__help">{t(lang, 'Nothing in the next few days.')}</li>
+          ) : null}
+        </ul>
+        <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/calendar">
+          {t(lang, 'School calendar')}
+        </a>
+      </Card>
+    ),
+    classes_today: (
+      <Card title={t(lang, 'Today’s classes')}>
+        {todays.length ? (
+          <ul className="fp-list">
+            {todays.map(({ p, s }) => (
+              <li key={p.id}>
+                <span>
+                  {s.subjectName ?? t(lang, 'Free period')}
+                  {s.teacherName ? ` · ${s.teacherName}` : ''}
+                </span>
+                <span className="fp-list__meta">
+                  {p.startsAt.slice(0, 5)}–{p.endsAt.slice(0, 5)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ep-field__help">{t(lang, 'No classes today.')}</p>
+        )}
+        <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/timetable?child=${childId}`}>
+          {t(lang, 'Timetable')}
+        </a>
+      </Card>
+    ),
+  };
+  const glances = order.filter((k) => glance[k]);
+  const cards = order.filter((k) => card[k]);
 
   return (
     <>
@@ -236,213 +559,72 @@ export async function HomeDashboard({
           </a>
         </p>
       ) : null}
-      <section aria-labelledby="glance-title">
-        <h2 id="glance-title" className="fp-section-title">
-          {t(lang, 'Today at a glance')}
-        </h2>
-        <div className="fp-glances">
-          <Glance
-            icon="check"
-            label={t(lang, 'Attendance today')}
-            value={
-              todayCode ? (
-                <Badge tone={CODE[todayCode]?.[1] ?? 'info'}>
-                  {t(lang, CODE[todayCode]?.[0] ?? todayCode)}
-                </Badge>
-              ) : (
-                t(lang, 'Not marked yet')
-              )
-            }
-            note={
-              pct !== null
-                ? `${pct}% ${t(lang, 'this month')} · ${a!.summary.present}/${a!.summary.days} ${t(lang, 'days')}`
-                : t(lang, 'No school days this month yet')
-            }
-            href="/attendance"
-          />
-          {dayOf?.rides ? (
-            <Glance
-              icon="bus"
-              label={t(lang, 'School bus today')}
-              value={
-                dayOf.busPick || dayOf.busDrop ? (
-                  <Badge
-                    tone={dayOf.busPick === 'A' || dayOf.busDrop === 'A' ? 'warning' : 'success'}
-                  >
-                    {[
-                      dayOf.busPick
-                        ? `${t(lang, 'Morning')}: ${t(lang, BUS[dayOf.busPick] ?? dayOf.busPick)}`
-                        : null,
-                      dayOf.busDrop
-                        ? `${t(lang, 'Afternoon')}: ${t(lang, BUS[dayOf.busDrop] ?? dayOf.busDrop)}`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Badge>
-                ) : (
-                  t(lang, 'Not marked yet')
-                )
-              }
-              note={
-                dayOf.hint?.leave
-                  ? t(lang, 'Leave is approved for today')
-                  : dayOf.hint?.pass
-                    ? t(
-                        lang,
-                        dayOf.hint.pass.kind === 'early_leave'
-                          ? 'Gate pass: leaves early today'
-                          : 'Gate pass: comes late today',
-                      )
-                    : t(lang, 'Marked by the bus teacher, morning and afternoon')
-              }
-              href="/attendance"
-            />
-          ) : null}
-          {isParent ? (
-            <Glance
-              icon="wallet"
-              label={t(lang, 'Fee due')}
-              value={
-                f
-                  ? Number(f.payableNow) > 0
-                    ? rupees(f.payableNow)
-                    : nextDue
-                      ? rupees(nextDue.balance)
-                      : t(lang, 'All paid')
-                  : '—'
-              }
-              note={
-                nextDue
-                  ? `${nextDue.label} · ${t(lang, 'due')} ${dayLabel(nextDue.dueOn)}`
-                  : f
-                    ? t(lang, 'Nothing due now')
-                    : undefined
-              }
-              href="/fees"
-            />
-          ) : null}
-          <Glance
-            icon="book"
-            label={t(lang, 'Homework due tomorrow')}
-            value={dueTomorrow.length}
-            note={
-              dueTomorrow.length
-                ? dueTomorrow
-                    .slice(0, 2)
-                    .map((w) => w.subjectName ?? w.title)
-                    .join(', ')
-                : t(lang, 'Nothing due tomorrow')
-            }
-            href={`/homework?child=${childId}`}
-          />
-          {library ? (
-            <Glance
-              icon="book"
-              label={t(lang, 'Library books')}
-              value={
-                library.ready.length ? (
-                  <Badge tone="warning">
-                    {library.ready.length} {t(lang, 'ready to collect')}
-                  </Badge>
-                ) : library.late ? (
-                  <Badge tone="danger">
-                    {library.late} {t(lang, 'overdue')}
-                  </Badge>
-                ) : (
-                  library.holding
-                )
-              }
-              note={
-                library.ready.length
-                  ? `${library.ready[0]!.title} · ${t(lang, 'until')} ${dayLabel(library.ready[0]!.until)}`
-                  : library.holding
-                    ? library.dueSoon
-                      ? `${library.dueSoon} ${t(lang, 'due in the next 3 days')}`
-                      : library.nextDue
-                        ? `${t(lang, 'Next due')} ${dayLabel(library.nextDue)}`
-                        : `${library.holding} ${t(lang, 'on loan')}`
-                    : t(lang, 'No books on loan.')
-              }
-              href="/library"
-            />
-          ) : null}
-          <Glance
-            icon="clipboard"
-            label={t(lang, 'Next holiday')}
-            value={upcomingHoliday ? dayLabel(upcomingHoliday.startsOn) : '—'}
-            note={upcomingHoliday ? upcomingHoliday.name : t(lang, 'None announced')}
-            href="/calendar"
-          />
-        </div>
-      </section>
-
-      <div className="fp-two">
-        <Card title={t(lang, 'Latest notices')}>
-          {notices.length ? (
-            <ul className="fp-list">
-              {notices.map((n) => (
-                <li key={n.id}>
-                  <a href="/notices">{n.title}</a>
-                  <span className="fp-list__meta">
-                    {dayLabel(n.publishFrom.slice(0, 10))}
-                    {n.isPinned ? ` · ${t(lang, 'Pinned')}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="ep-field__help">{t(lang, 'No notices yet.')}</p>
-          )}
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/notices">
-            {t(lang, 'All notices')}
-          </a>
-        </Card>
-        <Card title={t(lang, 'Coming up')}>
-          <ul className="fp-list">
-            {birthdays.map((b) => (
-              <li key={`${b.name}-${b.day}`}>
-                <span>
-                  {b.self
-                    ? b.day === today
-                      ? t(lang, isParent ? 'Happy birthday to your child!' : 'Happy birthday!')
-                      : t(lang, isParent ? 'Your child’s birthday' : 'Your birthday')
-                    : `${t(lang, 'Birthday')}: ${b.name}`}
-                </span>
-                <span className="fp-list__meta">
-                  {b.day === today ? t(lang, 'Today') : dayLabel(b.day)}
-                </span>
-              </li>
-            ))}
-            {upcomingEvents.map((e) => (
-              <li key={e.id}>
-                <span>{e.title}</span>
-                <span className="fp-list__meta">{dayLabel(e.startsOn)}</span>
-              </li>
-            ))}
-            {!birthdays.length && !upcomingEvents.length ? (
-              <li className="ep-field__help">{t(lang, 'Nothing in the next few days.')}</li>
-            ) : null}
-          </ul>
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/calendar">
-            {t(lang, 'School calendar')}
-          </a>
-        </Card>
-      </div>
-
-      <section aria-labelledby="actions-title">
-        <h2 id="actions-title" className="fp-section-title">
-          {t(lang, 'Quick actions')}
-        </h2>
-        <div className="fp-actions">
-          {actions.map((x) => (
-            <a key={x.label} className="fp-action" href={x.href}>
-              <Icon name={x.icon} size={22} />
-              <span>{t(lang, x.label)}</span>
+      {layout ? (
+        <section aria-labelledby="shortcuts-title">
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              gap: 'var(--sp-2)',
+              flexWrap: 'wrap',
+            }}
+          >
+            <h2 id="shortcuts-title" className="fp-section-title">
+              {t(lang, 'Shortcuts')}
+            </h2>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/home/shortcuts">
+              {t(lang, 'Edit shortcuts')}
             </a>
+          </div>
+          <div className="fp-actions">
+            {layout.shortcuts.map((x) => (
+              <a key={x.href} className="fp-action" href={x.href}>
+                <Icon name={iconOf(x.icon)} size={22} />
+                <span>{t(lang, x.label)}</span>
+              </a>
+            ))}
+            <a className="fp-action" href="#services-title">
+              <Icon name="grid" size={22} />
+              <span>{t(lang, 'All services')}</span>
+            </a>
+          </div>
+        </section>
+      ) : null}
+      {glances.length ? (
+        <section aria-labelledby="glance-title">
+          <h2 id="glance-title" className="fp-section-title">
+            {t(lang, 'Today at a glance')}
+          </h2>
+          <div className="fp-glances">
+            {glances.map((k) => (
+              <Fragment key={k}>{glance[k]}</Fragment>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {cards.length ? (
+        <div className="fp-two">
+          {cards.map((k) => (
+            <Fragment key={k}>{card[k]}</Fragment>
           ))}
         </div>
-      </section>
+      ) : null}
+      {layout ? null : (
+        <section aria-labelledby="actions-title">
+          <h2 id="actions-title" className="fp-section-title">
+            {t(lang, 'Quick actions')}
+          </h2>
+          <div className="fp-actions">
+            {actions.map((x) => (
+              <a key={x.label} className="fp-action" href={x.href}>
+                <Icon name={x.icon} size={22} />
+                <span>{t(lang, x.label)}</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
     </>
   );
 }

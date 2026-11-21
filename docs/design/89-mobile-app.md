@@ -880,3 +880,10 @@ Hindi where the school wrote it), **Open <screen>** opening the app's own screen
 Yes / No (`POST engagement/help/:id/vote`; the person's earlier vote shows, with a thank-you line). A search box
 searches questions and answers in both languages and opens every heading it finds something under. The list is
 kept on the phone for reading offline like the other screens. The fixed questions of the first Help screen are gone.
+
+## As built — the school's layout (21 Nov 2026)
+
+The family tabs, Home's shortcuts and cards and the Academics tab follow the school's layout (docs/design/90):
+`familyTabs` replaces the fixed parent / student tabs, Home's shortcut grid ends with **All** (the More list) and has
+**Edit** (the person's own shortcuts), and the cards come in the school's order (new: Coming up, Fees due, Library
+books). Until the school publishes, everything is as before.

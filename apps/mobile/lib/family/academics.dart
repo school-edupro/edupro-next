@@ -8,6 +8,7 @@ import 'calendar.dart';
 import 'common.dart';
 import 'date_sheet.dart';
 import 'homework.dart';
+import 'layout.dart';
 import 'results.dart';
 import 'timetable.dart';
 
@@ -20,12 +21,31 @@ export 'timetable.dart' show TimetableScreen;
 
 /// A parent's Academics tab: the child's school day screens, one tap each.
 class AcademicsScreen extends ConsumerWidget {
-  const AcademicsScreen({super.key, required this.profile});
+  const AcademicsScreen({super.key, required this.profile, this.items});
   final Profile profile;
+
+  /// The school's Academics list (docs/design/90); none: the list as it was.
+  final List<FamilyEntry>? items;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
+    final chosen = this.items;
+    if (chosen != null) {
+      return ListView(
+        key: const Key('academicsList'),
+        children: [
+          for (final e in chosen)
+            ListTile(
+              key: Key('academics-${screenKey(e.href)}'),
+              leading: Icon(screenIcon(e.href, e.icon)),
+              title: Text(shortLabel(s, e)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => openFamilyScreen(context, s, profile, e),
+            ),
+        ],
+      );
+    }
     final items = <(String, IconData, Widget)>[
       (s.attendance, Icons.fact_check_outlined, AttendanceScreen(profile: profile)),
       (s.homework, Icons.menu_book_outlined, HomeworkScreen(profile: profile)),

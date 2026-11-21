@@ -723,6 +723,18 @@ class EduProApi {
   /// POST /engagement/help/{id}/vote — Was this answer helpful? (once per question; a second answer replaces it)
   Future<dynamic> familyHelpVote({required FamilyHelpVoteDto body, required String id}) =>
       _t.send('POST', '/engagement/help/${Uri.encodeComponent(id)}/vote', body: body.toJson());
+
+  /// GET /me/app-layout — My family app layout: tabs, Home shortcuts (mine or the school’s), cards, Academics list
+  Future<dynamic> familyLayoutMine({String? kind}) =>
+      _t.send('GET', '/me/app-layout', query: {if (kind != null) 'kind': kind});
+
+  /// PUT /me/app-layout/shortcuts — My own Home shortcuts (4 to 12 screens I can open)
+  Future<dynamic> familyLayoutSaveMine({required FamilyShortcutsDto body, String? kind}) =>
+      _t.send('PUT', '/me/app-layout/shortcuts', body: body.toJson(), query: {if (kind != null) 'kind': kind});
+
+  /// DELETE /me/app-layout/shortcuts — Back to the school’s Home shortcuts
+  Future<dynamic> familyLayoutResetMine({String? kind}) =>
+      _t.send('DELETE', '/me/app-layout/shortcuts', query: {if (kind != null) 'kind': kind});
 }
 
 /** The OtpStartDto the API takes. */
@@ -1509,5 +1521,14 @@ class FamilyHelpVoteDto {
   final bool helpful;
   Map<String, Object?> toJson() => {
         'helpful': helpful,
+      };
+}
+
+/** The FamilyShortcutsDto the API takes. */
+class FamilyShortcutsDto {
+  const FamilyShortcutsDto({required this.shortcuts});
+  final List<String> shortcuts;
+  Map<String, Object?> toJson() => {
+        'shortcuts': shortcuts,
       };
 }

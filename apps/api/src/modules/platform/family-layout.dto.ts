@@ -1,0 +1,22 @@
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
+
+/** The family app's layout kept by the school (0407, docs/design/90): the bodies and queries of its calls. */
+
+const Path = z.string().trim().min(1).max(40);
+
+export const FamilyLayoutSchema = z.object({
+  tabs: z.array(Path).max(10),
+  shortcuts: z.array(Path).max(30),
+  cards: z.array(z.string().trim().min(1).max(40)).max(20),
+  academics: z.array(Path).max(30),
+});
+export class FamilyLayoutDto extends createZodDto(FamilyLayoutSchema) {}
+
+export const FamilyAudienceSchema = z.enum(['student', 'parent']);
+
+export const FamilyLayoutKindSchema = z.object({ kind: FamilyAudienceSchema.default('parent') });
+export class FamilyLayoutKindDto extends createZodDto(FamilyLayoutKindSchema) {}
+
+export const FamilyShortcutsSchema = z.object({ shortcuts: z.array(Path).min(1).max(30) });
+export class FamilyShortcutsDto extends createZodDto(FamilyShortcutsSchema) {}

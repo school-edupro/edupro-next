@@ -20,6 +20,7 @@ import '../family/academics.dart';
 import '../family/appointments.dart';
 import '../family/assistant.dart';
 import '../family/help.dart';
+import '../family/layout.dart';
 import '../family/fees.dart';
 import '../family/profile.dart';
 import '../family/queries.dart';
@@ -39,11 +40,36 @@ import 'widgets.dart';
 
 /// A tab of the app's bottom bar.
 class AppTab {
-  const AppTab(this.icon, this.label, this.build);
+  const AppTab(this.icon, this.label, this.build, {this.href = ''});
   final IconData icon;
   final String label;
   final Widget Function(Profile) build;
+
+  /// The screen it shows (`/messages` carries the unread badge).
+  final String href;
 }
+
+/// A parent's or student's tabs from the school's layout (docs/design/90): Home, the three the school chose (a
+/// screen, or Academics listing the layout's Academics screens), More.
+List<AppTab> familyTabs(Profile p, S s, FamilyLayoutView layout) => [
+  for (final t in layout.tabs)
+    switch (t.href) {
+      '/' => AppTab(Icons.home_outlined, s.home, (p) => TodayScreen(profile: p), href: '/'),
+      'more' => AppTab(Icons.apps, s.more, (p) => MoreList(profile: p), href: 'more'),
+      'academics' => AppTab(
+        screenIcon('academics'),
+        s.academics,
+        (p) => AcademicsScreen(profile: p, items: layout.academics),
+        href: 'academics',
+      ),
+      _ => AppTab(
+        screenIcon(t.href, t.icon),
+        shortLabel(s, t),
+        (p) => nativeScreen(p, t.href, s) ?? MoreList(profile: p),
+        href: t.href,
+      ),
+    },
+];
 
 /// The tabs of a profile (docs/design/89 §5.2): a parent's Home, Academics, Fees, Messages, More; a student's Home,
 /// Homework, Timetable, Results, More; staff (phase C) Home and More.
@@ -53,21 +79,21 @@ List<AppTab> tabsFor(Profile p, S s) => switch (p.kind) {
     AppTab(Icons.menu_book_outlined, s.academics, (p) => AcademicsScreen(profile: p)),
     AppTab(Icons.account_balance_wallet_outlined, s.fees, (p) => FeesScreen(profile: p)),
     AppTab(Icons.chat_bubble_outline, s.messages, (p) => MessagesScreen(profile: p)),
-    AppTab(Icons.apps, s.more, (p) => _More(profile: p)),
+    AppTab(Icons.apps, s.more, (p) => MoreList(profile: p)),
   ],
   'student' => [
     AppTab(Icons.home_outlined, s.home, (p) => TodayScreen(profile: p)),
     AppTab(Icons.menu_book_outlined, s.homework, (p) => HomeworkScreen(profile: p)),
     AppTab(Icons.calendar_month_outlined, s.timetable, (p) => TimetableScreen(profile: p)),
     AppTab(Icons.insert_chart_outlined, s.results, (p) => ResultsScreen(profile: p)),
-    AppTab(Icons.apps, s.more, (p) => _More(profile: p)),
+    AppTab(Icons.apps, s.more, (p) => MoreList(profile: p)),
   ],
   _ => [
     AppTab(Icons.today_outlined, s.myDay, (p) => MyDayScreen(profile: p)),
     AppTab(Icons.fact_check_outlined, s.attendance, (p) => StaffAttendanceTab(profile: p)),
     AppTab(Icons.class_outlined, s.classes, (p) => ClassesTab(profile: p)),
     AppTab(Icons.chat_bubble_outline, s.messages, (p) => MessagesScreen(profile: p)),
-    AppTab(Icons.apps, s.more, (p) => _More(profile: p)),
+    AppTab(Icons.apps, s.more, (p) => MoreList(profile: p)),
   ],
 };
 
@@ -168,7 +194,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             body: Padding(padding: const EdgeInsets.all(Tokens.sp5), child: Text(s.noProfiles)),
           );
         }
-        final tabs = tabsFor(p, s);
+        final tabs = p.isStaff
+            ? tabsFor(p, s)
+            : familyTabs(
+                p,
+                s,
+                ref.watch(familyLayoutProvider(p)).value ?? FamilyLayoutView.fallback(p, null),
+              );
         final i = _tab.clamp(0, tabs.length - 1);
         final unread = ref.watch(unreadProvider(p)).value ?? 0;
         return Scaffold(
@@ -200,7 +232,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               for (final t in tabs)
                 NavigationDestination(
                   icon: Badge(
-                    isLabelVisible: t.label == s.messages && unread > 0,
+                    isLabelVisible: (t.href == '/messages' || t.label == s.messages) && unread > 0,
                     backgroundColor: Tokens.mobWhite,
                     textColor: Tokens.mobNavy800,
                     label: Text(unread > 99 ? '99+' : '$unread'),
@@ -344,8 +376,8 @@ class _ProfileBar extends ConsumerWidget {
 }
 
 /// Every screen of the profile's menu; one without a native screen opens its web page inside the app.
-class _More extends ConsumerWidget {
-  const _More({required this.profile});
+class MoreList extends ConsumerWidget {
+  const MoreList({super.key, required this.profile});
   final Profile profile;
 
   @override

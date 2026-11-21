@@ -32,6 +32,28 @@ export default async function SettingsPage({
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
+      <section
+        className="ep-card"
+        aria-labelledby="set-family-app"
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        <h2 id="set-family-app" className="ep-cdash__h3" style={{ marginTop: 0 }}>
+          Family app layout
+        </h2>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          The student and parent app: bottom tabs, Home shortcuts, Home cards and the Academics tab.
+        </p>
+        <ul className="ep-setup-links">
+          <li>
+            <a href="/system/settings/family-app-layout">
+              <strong>Arrange the family app</strong>
+            </a>
+            <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+              Students and parents apart; a draft with a phone preview, published to families
+            </span>
+          </li>
+        </ul>
+      </section>
       {modules.map((m) => (
         <Card key={m} title={m} style={{ marginBottom: 'var(--sp-4)' }}>
           <div className="ep-table-wrap">

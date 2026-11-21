@@ -4,16 +4,17 @@ import 'package:material_ui/material_ui.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
+import '../ui/home_shell.dart' show MoreList;
 import 'attendance.dart';
 import 'calendar.dart';
-import 'queries.dart';
 import 'common.dart';
 import 'data.dart';
 import 'date_sheet.dart';
 import 'fees.dart';
 import 'homework.dart';
+import 'layout.dart';
+import 'library.dart' show libraryProvider, LibraryScreen, LibraryWords;
 import 'messages.dart';
-import 'results.dart';
 import 'timetable.dart';
 
 /// Home for a parent's child or a student (docs/design/89 §5.2; look B): the navy band goes on with the date and a
@@ -59,11 +60,14 @@ class TodayScreen extends ConsumerWidget {
     };
 
     final first = p.name.split(RegExp(r'\s+')).first;
-    final menu = ref.watch(menuProvider(p.id)).value;
-    final queries = menu?.groups
-        .expand((g) => g.items)
-        .where((i) => i.href == '/queries')
-        .firstOrNull;
+    // the school's layout (docs/design/90): the shortcuts (or the person's own) and the cards in its order
+    final layout = ref.watch(familyLayoutProvider(p)).value ?? FamilyLayoutView.fallback(p, null);
+    final cardKeys = [for (final c in layout.cards) c.key];
+    final calendar = cardKeys.contains('coming_up') ? ref.watch(sessionCalendarProvider(p)) : null;
+    final library = cardKeys.contains('library') ? ref.watch(libraryProvider(p)) : null;
+    final feesCard = cardKeys.contains('fees_due') && fees == null
+        ? ref.watch(feesProvider(p))
+        : fees;
     void open(String title, Widget screen) => pushPage(context, title, screen);
 
     return RefreshIndicator(
@@ -73,7 +77,10 @@ class TodayScreen extends ConsumerWidget {
         ref.invalidate(noticesProvider(p));
         ref.invalidate(unreadProvider(p));
         ref.invalidate(timetableProvider(p));
-        if (p.kind == 'parent') ref.invalidate(feesProvider(p));
+        if (p.kind == 'parent' || cardKeys.contains('fees_due')) ref.invalidate(feesProvider(p));
+        if (calendar != null) ref.invalidate(sessionCalendarProvider(p));
+        if (library != null) ref.invalidate(libraryProvider(p));
+        ref.invalidate(familyLayoutProvider(p));
         return ref.refresh(homeworkProvider(workRange(p)).future);
       },
       child: Material(
@@ -138,75 +145,43 @@ class TodayScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: Tokens.sp3),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Tokens.sp4, 0, Tokens.sp2, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        layout.ownShortcuts ? s.layOwn : s.shortcuts,
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: Tokens.fwSemibold),
+                      ),
+                    ),
+                  ),
+                  if (layout.screens.isNotEmpty)
+                    TextButton.icon(
+                      key: const Key('editShortcuts'),
+                      icon: const Icon(Icons.tune, size: 18),
+                      label: Text(s.layEdit),
+                      onPressed: () =>
+                          open(s.layEditTitle, EditShortcutsScreen(profile: p, layout: layout)),
+                    ),
+                ],
+              ),
+            ),
             ShortcutGrid(
               label: s.shortcuts,
               items: [
-                (
-                  'attendance',
-                  s.attendance,
-                  Icons.how_to_reg_outlined,
-                  () => open(s.attendance, AttendanceScreen(profile: p)),
-                ),
-                (
-                  'homework',
-                  s.homework,
-                  Icons.menu_book_outlined,
-                  () => open(s.homework, HomeworkScreen(profile: p)),
-                ),
-                (
-                  'timetable',
-                  s.timetable,
-                  Icons.schedule,
-                  () => open(s.timetable, TimetableScreen(profile: p)),
-                ),
-                // a student has Results as a tab: Fees (view only) in its place here
-                if (p.kind == 'student')
+                for (final e in layout.shortcuts)
                   (
-                    'fees',
-                    s.fees,
-                    Icons.account_balance_wallet_outlined,
-                    () => open(s.fees, FeesScreen(profile: p)),
-                  )
-                else
-                  (
-                    'results',
-                    s.results,
-                    Icons.bar_chart,
-                    () => open(s.results, ResultsScreen(profile: p)),
+                    screenKey(e.href),
+                    shortLabel(s, e),
+                    screenIcon(e.href, e.icon),
+                    () => openFamilyScreen(context, s, p, e),
                   ),
-                (
-                  'calendar',
-                  s.calendar,
-                  Icons.calendar_today_outlined,
-                  () => open(s.calendar, CalendarScreen(profile: p)),
-                ),
-                (
-                  'dateSheet',
-                  s.dateSheet,
-                  Icons.description_outlined,
-                  () => open(s.dateSheet, DateSheetScreen(profile: p)),
-                ),
-                (
-                  'notices',
-                  s.notices,
-                  Icons.campaign_outlined,
-                  () => open(s.notices, NoticesList(profile: p)),
-                ),
-                // Queries when the school takes them from this parent (the menu has the page), else Messages
-                if (queries != null)
-                  (
-                    'queries',
-                    s.menu(queries.label),
-                    Icons.help_outline,
-                    () => open(s.menu(queries.label), QueriesScreen(profile: p)),
-                  )
-                else
-                  (
-                    'messages',
-                    s.messages,
-                    Icons.chat_bubble_outline,
-                    () => open(s.messages, MessagesScreen(profile: p)),
-                  ),
+                // every screen: the More list
+                ('all', s.layAll, Icons.apps, () => open(s.more, MoreList(profile: p))),
               ],
             ),
             const SizedBox(height: Tokens.sp2),
@@ -219,70 +194,89 @@ class TodayScreen extends ConsumerWidget {
                     const SizedBox(height: Tokens.sp4),
                     StaleLine(at: stale.first.at),
                   ],
-                  SectionTitle(s.attendanceToday),
-                  Row(
-                    children: [
-                      if (att.hasError)
-                        const Text('—')
-                      else if (todayCode == null)
-                        StatusChip(s.notMarked, Tone.neutral)
-                      else
-                        StatusChip(s.attendanceCode(todayCode), attendanceTone(todayCode)),
-                      const SizedBox(width: Tokens.sp3),
-                      if (child != null)
-                        Expanded(
-                          child: Text(
-                            s.presentOf(
-                              (sum['present'] as num? ?? 0).toInt(),
-                              (sum['days'] as num? ?? 0).toInt(),
+                  for (final k in cardKeys)
+                    ...switch (k) {
+                      'attendance_today' => [
+                        SectionTitle(s.attendanceToday),
+                        // a wrap: with large text the month's line goes under the chip
+                        Wrap(
+                          spacing: Tokens.sp3,
+                          runSpacing: Tokens.sp1,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (att.hasError)
+                              const Text('—')
+                            else if (todayCode == null)
+                              StatusChip(s.notMarked, Tone.neutral)
+                            else
+                              StatusChip(s.attendanceCode(todayCode), attendanceTone(todayCode)),
+                            if (child != null)
+                              Text(
+                                s.presentOf(
+                                  (sum['present'] as num? ?? 0).toInt(),
+                                  (sum['days'] as num? ?? 0).toInt(),
+                                ),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                      ],
+                      'classes_today' => [
+                        if (classes != null && classes.isNotEmpty) ...[
+                          SectionTitle(
+                            s.todaysClasses,
+                            action: TextButton(
+                              onPressed: () => open(s.timetable, TimetableScreen(profile: p)),
+                              child: Text(s.timetable),
                             ),
-                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          ClassesCard(rows: classes, now: now),
+                        ],
+                      ],
+                      'homework_due' => [
+                        SectionTitle(
+                          s.homeworkDue,
+                          action: TextButton(
+                            onPressed: () => open(s.homework, HomeworkScreen(profile: p)),
+                            child: Text(s.seeAll),
                           ),
                         ),
-                    ],
-                  ),
-                  if (classes != null && classes.isNotEmpty) ...[
-                    SectionTitle(
-                      s.todaysClasses,
-                      action: TextButton(
-                        onPressed: () => open(s.timetable, TimetableScreen(profile: p)),
-                        child: Text(s.timetable),
-                      ),
-                    ),
-                    ClassesCard(rows: classes, now: now),
-                  ],
-                  SectionTitle(
-                    s.homeworkDue,
-                    action: TextButton(
-                      onPressed: () => open(s.homework, HomeworkScreen(profile: p)),
-                      child: Text(s.seeAll),
-                    ),
-                  ),
-                  if (due == null && !work.hasError) const LinearProgressIndicator(),
-                  if (due != null && due.isEmpty) EmptyLine(s.noHomeworkDue),
-                  if (due != null)
-                    for (final w in due.take(3)) WorkTile(profile: p, work: w),
-                  SectionTitle(s.nextExam),
-                  if (exams.value != null && next == null) EmptyLine(s.noExam),
-                  if (next != null)
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.edit_calendar_outlined),
-                        title: Text('${next['subject']}'),
-                        subtitle: Text('${next['exam']} · ${s.dayShort(next['examOn'])}'),
-                        onTap: () => open(s.dateSheet, DateSheetScreen(profile: p)),
-                      ),
-                    ),
-                  SectionTitle(
-                    s.latestNotices,
-                    action: TextButton(
-                      onPressed: () => open(s.notices, NoticesList(profile: p)),
-                      child: Text(s.seeAll),
-                    ),
-                  ),
-                  if (notices.value != null && notices.value!.data.isEmpty) EmptyLine(s.nothingYet),
-                  for (final n in notices.value?.data.take(3) ?? const <Json>[])
-                    NoticeTile(profile: p, notice: n),
+                        if (due == null && !work.hasError) const LinearProgressIndicator(),
+                        if (due != null && due.isEmpty) EmptyLine(s.noHomeworkDue),
+                        if (due != null)
+                          for (final w in due.take(3)) WorkTile(profile: p, work: w),
+                      ],
+                      'next_exam' => [
+                        SectionTitle(s.nextExam),
+                        if (exams.value != null && next == null) EmptyLine(s.noExam),
+                        if (next != null)
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.edit_calendar_outlined),
+                              title: Text('${next['subject']}'),
+                              subtitle: Text('${next['exam']} · ${s.dayShort(next['examOn'])}'),
+                              onTap: () => open(s.dateSheet, DateSheetScreen(profile: p)),
+                            ),
+                          ),
+                      ],
+                      'notices' => [
+                        SectionTitle(
+                          s.latestNotices,
+                          action: TextButton(
+                            onPressed: () => open(s.notices, NoticesList(profile: p)),
+                            child: Text(s.seeAll),
+                          ),
+                        ),
+                        if (notices.value != null && notices.value!.data.isEmpty)
+                          EmptyLine(s.nothingYet),
+                        for (final n in notices.value?.data.take(3) ?? const <Json>[])
+                          NoticeTile(profile: p, notice: n),
+                      ],
+                      'coming_up' => _comingUp(context, s, p, calendar, now),
+                      'fees_due' => _feesDue(context, s, p, feesCard),
+                      'library' => _libraryCard(context, s, p, library),
+                      _ => const <Widget>[],
+                    },
                 ],
               ),
             ),
@@ -412,4 +406,113 @@ class ClassesCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Home's "Coming up" card: the school's holidays and events of the next 30 days (four at most).
+List<Widget> _comingUp(
+  BuildContext context,
+  S s,
+  Profile p,
+  AsyncValue<Loaded<Json>>? cal,
+  DateTime now,
+) {
+  final today = ymd(now);
+  final until = ymd(now.add(const Duration(days: 30)));
+  final data = cal?.value?.data;
+  final rows =
+      <(String, String)>[
+          for (final h in asList(data?['holidays']))
+            if ('${h['kind']}' != 'working_day') ('${h['startsOn']}', '${h['name']}'),
+          for (final e in asList(data?['events'])) ('${e['startsOn']}', '${e['title']}'),
+        ].where((x) => x.$1.compareTo(today) >= 0 && x.$1.compareTo(until) <= 0).toList()
+        ..sort((a, b) => a.$1.compareTo(b.$1));
+  return [
+    SectionTitle(
+      s.layComingUp,
+      action: TextButton(
+        onPressed: () => pushPage(context, s.calendar, CalendarScreen(profile: p)),
+        child: Text(s.calendar),
+      ),
+    ),
+    if (cal != null && cal.isLoading && !cal.hasValue) const LinearProgressIndicator(),
+    if (data != null && rows.isEmpty) EmptyLine(s.layNothingComing),
+    if (rows.isNotEmpty)
+      Card(
+        key: const Key('comingUpCard'),
+        child: Column(
+          children: [
+            for (final (day, what) in rows.take(4))
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.event_outlined),
+                title: Text(what),
+                subtitle: Text(s.dayShort(day)),
+              ),
+          ],
+        ),
+      ),
+  ];
+}
+
+/// Home's "Fees due" card: what is to pay now, with Fees one tap away.
+List<Widget> _feesDue(BuildContext context, S s, Profile p, AsyncValue<Loaded<Json?>>? fees) {
+  final data = fees?.value?.data;
+  final payable = num.tryParse('${data?['payableNow']}');
+  return [
+    SectionTitle(
+      s.layFeesDue,
+      action: TextButton(
+        onPressed: () => pushPage(context, s.fees, FeesScreen(profile: p)),
+        child: Text(s.seeAll),
+      ),
+    ),
+    if (fees != null && fees.isLoading && !fees.hasValue) const LinearProgressIndicator(),
+    if (fees?.value != null && (payable == null || payable <= 0)) EmptyLine(s.layNothingDue),
+    if (payable != null && payable > 0)
+      Card(
+        key: const Key('feesDueCard'),
+        child: ListTile(
+          leading: const Icon(Icons.account_balance_wallet_outlined),
+          title: Text(s.money(payable), style: const TextStyle(fontWeight: Tokens.fwBold)),
+          subtitle: Text(s.layPayNow),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => pushPage(context, s.fees, FeesScreen(profile: p)),
+        ),
+      ),
+  ];
+}
+
+/// Home's "Library books" card: the books out now and when each is due back (three at most).
+List<Widget> _libraryCard(BuildContext context, S s, Profile p, AsyncValue<Loaded<Json?>>? lib) {
+  final mine = asJson(lib?.value?.data?['mine']);
+  final books = asList(mine['now']);
+  return [
+    SectionTitle(
+      s.layLibrary,
+      action: TextButton(
+        onPressed: () => pushPage(context, s.menu('Library'), LibraryScreen(profile: p)),
+        child: Text(s.seeAll),
+      ),
+    ),
+    if (lib != null && lib.isLoading && !lib.hasValue) const LinearProgressIndicator(),
+    if (lib?.value != null && books.isEmpty) EmptyLine(s.layNoBooks),
+    if (books.isNotEmpty)
+      Card(
+        key: const Key('libraryCard'),
+        child: Column(
+          children: [
+            for (final b in books.take(3))
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.local_library_outlined),
+                title: Text('${b['title'] ?? ''}'),
+                subtitle: Text(s.libDueOn(s.dayShort(b['dueOn']))),
+                trailing: ((b['daysLate'] as num?) ?? 0) > 0
+                    ? StatusChip(s.libOverdueDays((b['daysLate'] as num).toInt()), Tone.danger)
+                    : null,
+              ),
+          ],
+        ),
+      ),
+  ];
 }
