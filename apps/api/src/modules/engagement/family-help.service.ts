@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { familyScreens, type Audience } from '@edupro/menus';
+import { familyHiddenScreens, familyScreens, type Audience } from '@edupro/menus';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { AccessService } from '../access/access.service';
+import { FamilyLayoutService } from '../platform/family-layout.service';
 import {
   FAMILY_HELP_PAGES,
   STANDARD_HEADINGS,
@@ -52,6 +53,7 @@ export class FamilyHelpService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly access: AccessService,
+    private readonly layouts: FamilyLayoutService,
   ) {}
 
   // ---------------------------------------------------------------------------------------- reading
@@ -84,8 +86,13 @@ export class FamilyHelpService {
     return this.db.tenant(tenant, async (c) => {
       await this.seeded(c);
       const audience = as ?? (await this.audienceOf(c));
+      // the screens the person may open and the school does not hide (docs/design/90)
+      const published = await this.layouts.published(ctx, audience);
+      const hidden = published ? familyHiddenScreens(audience, published) : new Set<string>();
       const open = new Set(
-        familyScreens(audience, permissions).flatMap((g) => g.items.map((i) => i.href)),
+        familyScreens(audience, permissions)
+          .flatMap((g) => g.items.map((i) => i.href))
+          .filter((h) => !hidden.has(h)),
       );
       const headings = await this.headings(c);
       const questions = (await this.questions(c)).filter(
@@ -461,6 +468,7 @@ export class FamilyHelpService {
     if (i < 0 || j < 0 || j >= order.length) return;
     [order[i], order[j]] = [order[j]!, order[i]!];
     await c.query(
+      // eslint-disable-next-line no-restricted-syntax -- `table` is one of the two fixed table names of the type above
       `UPDATE ${table} t SET position = o.n, updated_by = app.current_user_id(), updated_at = now()
          FROM unnest($1::bigint[]) WITH ORDINALITY AS o(id, n) WHERE t.id = o.id`,
       [order],

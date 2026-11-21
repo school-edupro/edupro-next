@@ -97,24 +97,26 @@ class TodayScreen extends ConsumerWidget {
               figures: FigureGrid(
                 raised: true,
                 tiles: [
-                  FigureTile(
-                    key: const Key('figAttendance'),
-                    label: s.thisMonth,
-                    value: fig(
-                      att,
-                      (_) => child == null ? '—' : '${sum['present'] ?? 0}/${sum['days'] ?? 0}',
+                  if (!layout.hidden.contains('/attendance'))
+                    FigureTile(
+                      key: const Key('figAttendance'),
+                      label: s.thisMonth,
+                      value: fig(
+                        att,
+                        (_) => child == null ? '—' : '${sum['present'] ?? 0}/${sum['days'] ?? 0}',
+                      ),
+                      icon: Icons.fact_check_outlined,
+                      onTap: () => open(s.attendance, AttendanceScreen(profile: p)),
                     ),
-                    icon: Icons.fact_check_outlined,
-                    onTap: () => open(s.attendance, AttendanceScreen(profile: p)),
-                  ),
-                  FigureTile(
-                    key: const Key('figHomework'),
-                    label: s.homeworkDue,
-                    value: fig(work, (_) => '${due!.length}'),
-                    icon: Icons.menu_book_outlined,
-                    onTap: () => open(s.homework, HomeworkScreen(profile: p)),
-                  ),
-                  if (fees != null)
+                  if (!layout.hidden.contains('/homework'))
+                    FigureTile(
+                      key: const Key('figHomework'),
+                      label: s.homeworkDue,
+                      value: fig(work, (_) => '${due!.length}'),
+                      icon: Icons.menu_book_outlined,
+                      onTap: () => open(s.homework, HomeworkScreen(profile: p)),
+                    ),
+                  if (fees != null && !layout.hidden.contains('/fees'))
                     FigureTile(
                       key: const Key('figFees'),
                       label: s.feesPayable,
@@ -126,7 +128,7 @@ class TodayScreen extends ConsumerWidget {
                       tone: (payable ?? 0) > 0 ? Tokens.statusWarning : null,
                       onTap: () => open(s.fees, FeesScreen(profile: p)),
                     )
-                  else
+                  else if (fees == null && !layout.hidden.contains('/date-sheet'))
                     FigureTile(
                       key: const Key('figExam'),
                       label: s.nextExam,
@@ -134,13 +136,14 @@ class TodayScreen extends ConsumerWidget {
                       icon: Icons.edit_calendar_outlined,
                       onTap: () => open(s.dateSheet, DateSheetScreen(profile: p)),
                     ),
-                  FigureTile(
-                    key: const Key('figUnread'),
-                    label: s.unreadMessages,
-                    value: fig(unread, (n) => '$n'),
-                    icon: Icons.chat_bubble_outline,
-                    onTap: () => open(s.messages, MessagesScreen(profile: p)),
-                  ),
+                  if (!layout.hidden.contains('/messages'))
+                    FigureTile(
+                      key: const Key('figUnread'),
+                      label: s.unreadMessages,
+                      value: fig(unread, (n) => '$n'),
+                      icon: Icons.chat_bubble_outline,
+                      onTap: () => open(s.messages, MessagesScreen(profile: p)),
+                    ),
                 ],
               ),
             ),

@@ -56,9 +56,14 @@ export async function saveLayoutDraft(audience: string, layout: FamilyLayout): P
                 label: g.label?.trim() ? g.label : null,
                 labelHi: g.labelHi?.trim() ? g.labelHi : null,
                 items: g.items,
+                hidden: g.hidden === true,
               })),
             }
           : {}),
+        // screens hidden one by one, in the menu's order (a hidden group hides its screens itself)
+        hidden: layout.menu
+          ? layout.menu.flatMap((g) => g.items).filter((h) => (layout.hidden ?? []).includes(h))
+          : (layout.hidden ?? []),
       }),
     }),
   );

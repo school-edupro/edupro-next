@@ -12,6 +12,11 @@ export interface FamilyLayout {
   academics: string[];
   /** The website's side menu and the app's More: the groups in order, every screen in exactly one. */
   menu?: FamilyMenuGroup[];
+  /**
+   * Screens hidden from families one by one (with those of hidden groups: left out everywhere for families — menu,
+   * More, tabs, shortcuts, cards, Academics, Help). Rights (Access → Roles) still decide data.
+   */
+  hidden?: string[];
 }
 
 /** A group of the side menu: the school's name for it (null: the standard one) and its screens in order. */
@@ -20,6 +25,8 @@ export interface FamilyMenuGroup {
   label: string | null;
   labelHi: string | null;
   items: string[];
+  /** The whole group hidden from families. */
+  hidden?: boolean;
 }
 
 /**
@@ -85,12 +92,51 @@ export const AUDIENCE_NAME: Record<FamilyAudience, string> = {
 };
 
 const menuKey = (m: FamilyMenuGroup[] | undefined) =>
-  (m ?? []).map((g) => [g.key, g.label ?? null, g.labelHi ?? null, g.items]);
+  (m ?? []).map((g) => [g.key, g.label ?? null, g.labelHi ?? null, g.items, g.hidden === true]);
+/** The hidden screens in a fixed order (the order they were saved in does not matter). */
+const hiddenKey = (h: string[] | undefined) => [...(h ?? [])].sort();
 
-/** Two layouts are the same when their four lists and their side menu are. */
+/** Two layouts are the same when their four lists, their side menu and what they hide are. */
 export const sameLayout = (a: FamilyLayout, b: FamilyLayout) =>
-  JSON.stringify([a.tabs, a.shortcuts, a.cards, a.academics, menuKey(a.menu)]) ===
-  JSON.stringify([b.tabs, b.shortcuts, b.cards, b.academics, menuKey(b.menu)]);
+  JSON.stringify([
+    a.tabs,
+    a.shortcuts,
+    a.cards,
+    a.academics,
+    menuKey(a.menu),
+    hiddenKey(a.hidden),
+  ]) ===
+  JSON.stringify([b.tabs, b.shortcuts, b.cards, b.academics, menuKey(b.menu), hiddenKey(b.hidden)]);
+
+/**
+ * The screens a layout hides from families: those hidden one by one and every screen of a hidden group (as
+ * familyHiddenScreens in @edupro/menus).
+ */
+export function hiddenScreens(l: FamilyLayout): Set<string> {
+  const hidden = new Set(l.hidden ?? []);
+  for (const g of l.menu ?? []) if (g.hidden) g.items.forEach((h) => hidden.add(h));
+  return hidden;
+}
+
+/**
+ * The three tabs families get, as the API gives them (myFamilyLayout in @edupro/menus, rights left aside): the
+ * school's tabs that are not hidden (Academics while its list has a screen shown), then the next shortcuts, then the
+ * other screens, until there are three.
+ */
+export function shownTabs(l: FamilyLayout, screens: string[], hidden: Set<string>): string[] {
+  const open = screens.filter((h) => !hidden.has(h));
+  const academicsShown = l.academics.some((h) => !hidden.has(h));
+  const tabs: string[] = [];
+  for (const t of l.tabs) {
+    const ok = t === ACADEMICS_TAB ? academicsShown : open.includes(t);
+    if (ok && !tabs.includes(t)) tabs.push(t);
+  }
+  for (const h of [...l.shortcuts.filter((x) => !hidden.has(x)), ...open]) {
+    if (tabs.length >= 3) break;
+    if (!tabs.includes(h)) tabs.push(h);
+  }
+  return tabs;
+}
 
 /** What is wrong with a layout (the API's own words); empty: it may be saved. */
 export function layoutProblems(
@@ -147,6 +193,10 @@ export function layoutProblems(
       ] as const)
         if (v !== null && (v.trim().length < 1 || v.trim().length > GROUP_NAME_MAX))
           problems.push(`A menu group's ${name} takes 1 to ${String(GROUP_NAME_MAX)} letters.`);
+  }
+  if (l.hidden) {
+    if (!distinct(l.hidden)) problems.push('A screen is hidden twice.');
+    for (const h of l.hidden) if (!screens.has(h)) problems.push(`${h} cannot be hidden here.`);
   }
   return [...new Set(problems)];
 }

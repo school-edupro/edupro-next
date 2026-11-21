@@ -1,5 +1,5 @@
 'use client';
-import { Button, Dialog } from '@edupro/ui';
+import { Badge, Button, Dialog } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import {
@@ -7,8 +7,10 @@ import {
   AUDIENCE_NAME,
   GROUP_NAME_MAX,
   MENU_GROUP_NAME,
+  hiddenScreens,
   layoutProblems,
   sameLayout,
+  shownTabs,
   when,
   type FamilyAudience,
   type FamilyLayout,
@@ -17,7 +19,7 @@ import {
 } from '@/lib/family-layout';
 import { discardLayout, publishLayout, saveLayoutDraft } from './actions';
 
-type Part = Exclude<keyof FamilyLayout, 'menu'>;
+type Part = Exclude<keyof FamilyLayout, 'menu' | 'hidden'>;
 
 /** One ordered list of the draft: its rows (move up / down, remove) and "Add" from what is not in it yet. */
 function OrderedList({
@@ -34,6 +36,7 @@ function OrderedList({
   fixedLast,
   canEdit,
   onChange,
+  isHidden,
 }: {
   id: string;
   title: string;
@@ -48,6 +51,8 @@ function OrderedList({
   fixedLast?: string;
   canEdit: boolean;
   onChange: (next: string[]) => void;
+  /** A row about a screen the school hides: marked, as families do not get it. */
+  isHidden?: (key: string) => boolean;
 }) {
   const free = options.filter((o) => !items.includes(o.key));
   const move = (i: number, j: number) => {
@@ -118,6 +123,7 @@ function OrderedList({
                   </span>
                 ) : null}
               </span>
+              {isHidden?.(key) ? <Badge tone="warning">Hidden — left out</Badge> : null}
               {canEdit ? (
                 <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
                   <Button
@@ -198,16 +204,29 @@ function OrderedList({
 function MenuEditor({
   audience,
   menu,
+  hidden,
   labelOf,
   canEdit,
   onChange,
+  onHidden,
 }: {
   audience: FamilyAudience;
   menu: FamilyMenuGroup[];
+  /** The screens hidden one by one (a hidden group hides its screens itself). */
+  hidden: string[];
   labelOf: (key: string) => { label: string };
   canEdit: boolean;
   onChange: (next: FamilyMenuGroup[]) => void;
+  onHidden: (next: string[]) => void;
 }) {
+  const allHidden = hiddenScreens({
+    tabs: [],
+    shortcuts: [],
+    cards: [],
+    academics: [],
+    menu,
+    hidden,
+  });
   const standard = MENU_GROUP_NAME[audience];
   const nameOf = (g: FamilyMenuGroup) => g.label?.trim() || standard[g.key] || g.key;
   const swap = <T,>(xs: T[], i: number, j: number) => {
@@ -237,10 +256,17 @@ function MenuEditor({
       <h2 id={`fal-menu-${audience}-h`} className="ep-cdash__h3" style={{ margin: 0 }}>
         Website menu and app More
       </h2>
+      <p
+        data-testid={`fal-menu-${audience}-hidden-count`}
+        style={{ margin: 'var(--sp-1) 0 0', fontWeight: 'var(--fw-semibold)' }}
+      >
+        {`Hidden from families: ${String(allHidden.size)} ${allHidden.size === 1 ? 'screen' : 'screens'}`}
+      </p>
       <p className="ep-field__help" style={{ marginTop: 'var(--sp-1)' }}>
         The groups of the website&apos;s side menu and of the app&apos;s More list, in this order,
-        with their screens. Home stays first. Every screen is in one group; to stop someone seeing a
-        screen, use Access → Roles.
+        with their screens. Home stays first. Every screen is in one group. Hidden screens are left
+        out everywhere for families (menu, More, tabs, shortcuts, cards, Academics, Help). To stop
+        someone reading data, use Access → Roles.
       </p>
       <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 'var(--sp-3)' }}>
         {menu.map((g, gi) => {
@@ -268,9 +294,27 @@ function MenuEditor({
                 <span className="ep-field__help" style={{ margin: 0, minWidth: '1.5rem' }}>
                   {String(gi + 1)}.
                 </span>
-                <strong style={{ flex: '1 1 10rem' }}>{groupName}</strong>
+                <strong
+                  style={{
+                    flex: '1 1 10rem',
+                    color: g.hidden ? 'var(--text-muted)' : undefined,
+                  }}
+                >
+                  {groupName}
+                </strong>
+                {g.hidden ? <Badge tone="warning">Hidden from families</Badge> : null}
                 {canEdit ? (
                   <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      aria-pressed={g.hidden === true}
+                      aria-label={`${g.hidden ? 'Show' : 'Hide'} the group ${groupName}`}
+                      onClick={() => setGroup(gi, { ...g, hidden: !g.hidden })}
+                    >
+                      {g.hidden ? 'Show group' : 'Hide group'}
+                    </Button>
                     <Button
                       type="button"
                       size="sm"
@@ -354,6 +398,7 @@ function MenuEditor({
                 >
                   {g.items.map((href, i) => {
                     const { label } = labelOf(href);
+                    const own = hidden.includes(href);
                     return (
                       <li
                         key={href}
@@ -367,7 +412,23 @@ function MenuEditor({
                           borderTop: i === 0 ? undefined : '1px solid var(--border-subtle)',
                         }}
                       >
-                        <span style={{ flex: '1 1 10rem' }}>{label}</span>
+                        <span
+                          style={{
+                            flex: '1 1 10rem',
+                            color: g.hidden || own ? 'var(--text-muted)' : undefined,
+                          }}
+                        >
+                          {label}
+                          {g.hidden ? (
+                            <span
+                              className="ep-field__help"
+                              style={{ display: 'block', margin: 0 }}
+                            >
+                              Hidden with its group
+                            </span>
+                          ) : null}
+                        </span>
+                        {own ? <Badge tone="warning">Hidden</Badge> : null}
                         {canEdit ? (
                           <span
                             style={{
@@ -377,6 +438,19 @@ function MenuEditor({
                               alignItems: 'center',
                             }}
                           >
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={g.hidden === true}
+                              aria-pressed={own}
+                              aria-label={`${own ? 'Show' : 'Hide'} ${label}`}
+                              onClick={() =>
+                                onHidden(own ? hidden.filter((h) => h !== href) : [...hidden, href])
+                              }
+                            >
+                              {own ? 'Show' : 'Hide'}
+                            </Button>
                             <Button
                               type="button"
                               size="sm"
@@ -432,14 +506,27 @@ function MenuEditor({
 function Preview({
   audience,
   draft,
+  screens,
   labelOf,
   cardLabel,
+  cardNeeds,
 }: {
   audience: FamilyAudience;
   draft: FamilyLayout;
+  /** The audience's screens in the menu's standard order (what a hidden tab's place is filled from). */
+  screens: string[];
   labelOf: (key: string) => { label: string };
   cardLabel: (key: string) => string;
+  cardNeeds: (key: string) => string | undefined;
 }) {
+  // what families get: hidden screens left out, a hidden tab's place taken as the API does
+  const hidden = hiddenScreens(draft);
+  const shortcuts = draft.shortcuts.filter((h) => !hidden.has(h));
+  const cards = draft.cards.filter((c) => {
+    const needs = cardNeeds(c);
+    return !needs || !hidden.has(needs);
+  });
+  const tabs = shownTabs(draft, screens, hidden);
   const tile = (text: string) => (
     <div
       style={{
@@ -511,7 +598,7 @@ function Preview({
               gap: 'var(--sp-3) var(--sp-2)',
             }}
           >
-            {draft.shortcuts.map((s) => (
+            {shortcuts.map((s) => (
               <div key={s}>{tile(labelOf(s).label)}</div>
             ))}
             <div>{tile('All')}</div>
@@ -520,7 +607,7 @@ function Preview({
             Cards
           </div>
           <div style={{ display: 'grid', gap: 'var(--sp-2)' }}>
-            {draft.cards.map((c) => (
+            {cards.map((c) => (
               <div
                 key={c}
                 style={{
@@ -550,7 +637,7 @@ function Preview({
             color: 'var(--text-body)',
           }}
         >
-          {['Home', ...draft.tabs.map((t) => labelOf(t).label), 'More'].map((t, i) => (
+          {['Home', ...tabs.map((t) => labelOf(t).label), 'More'].map((t, i) => (
             <span key={`${String(i)}-${t}`} style={{ lineHeight: 1.2, overflowWrap: 'anywhere' }}>
               {t}
             </span>
@@ -576,6 +663,7 @@ function Preview({
           </div>
           <div style={{ fontWeight: 'var(--fw-semibold)' }}>Home</div>
           {draft.menu
+            .map((g) => ({ ...g, items: g.items.filter((h) => !hidden.has(h)) }))
             .filter((g) => g.items.length > 0)
             .map((g) => (
               <div key={g.key} style={{ marginTop: 'var(--sp-2)' }}>
@@ -628,6 +716,11 @@ export function FamilyLayoutEditor({
     sub: key === ACADEMICS_TAB ? 'Lists the screens of the Academics list below' : undefined,
   });
   const cardLabel = (key: string) => cardOf.get(key)?.label ?? key;
+  // what the school hides (one by one and with their groups): marked in every list, left out of the preview
+  const hidden = hiddenScreens(draft);
+  const academicsShown = draft.academics.some((h) => !hidden.has(h));
+  const isHiddenScreen = (key: string) =>
+    key === ACADEMICS_TAB ? !academicsShown : hidden.has(key);
   const dirty = !sameLayout(draft, state.draft);
   useEffect(() => onDirty?.(audience, dirty), [onDirty, audience, dirty]);
   const problems = layoutProblems(audience, draft, catalogue);
@@ -795,6 +888,7 @@ export function FamilyLayoutEditor({
             fixedLast="More — always last"
             canEdit={canEdit}
             onChange={set('tabs')}
+            isHidden={isHiddenScreen}
           />
           <OrderedList
             id={`fal-${audience}-shortcuts`}
@@ -808,6 +902,7 @@ export function FamilyLayoutEditor({
             addLabel="Add a shortcut"
             canEdit={canEdit}
             onChange={set('shortcuts')}
+            isHidden={isHiddenScreen}
           />
           <OrderedList
             id={`fal-${audience}-cards`}
@@ -821,6 +916,10 @@ export function FamilyLayoutEditor({
             addLabel="Add a card"
             canEdit={canEdit}
             onChange={set('cards')}
+            isHidden={(k) => {
+              const needs = cardOf.get(k)?.needs;
+              return !!needs && hidden.has(needs);
+            }}
           />
           <OrderedList
             id={`fal-${audience}-academics`}
@@ -838,22 +937,37 @@ export function FamilyLayoutEditor({
             addLabel="Add a screen to the Academics tab"
             canEdit={canEdit}
             onChange={set('academics')}
+            isHidden={isHiddenScreen}
           />
           {draft.menu ? (
             <MenuEditor
               audience={audience}
               menu={draft.menu}
+              hidden={draft.hidden ?? []}
               labelOf={labelOf}
               canEdit={canEdit}
               onChange={(menu) => {
                 setMsg(null);
                 setDraft({ ...draft, menu });
               }}
+              onHidden={(next) => {
+                setMsg(null);
+                // in the menu's order, as it is saved
+                const order = (draft.menu ?? []).flatMap((g) => g.items);
+                setDraft({ ...draft, hidden: order.filter((h) => next.includes(h)) });
+              }}
             />
           ) : null}
         </div>
         <div style={{ flex: '0 1 22rem', minWidth: 0 }}>
-          <Preview audience={audience} draft={draft} labelOf={labelOf} cardLabel={cardLabel} />
+          <Preview
+            audience={audience}
+            draft={draft}
+            screens={screens.map((x) => x.href)}
+            labelOf={labelOf}
+            cardLabel={cardLabel}
+            cardNeeds={(k) => cardOf.get(k)?.needs}
+          />
         </div>
       </div>
       {ask === 'publish' ? (

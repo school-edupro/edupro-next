@@ -105,6 +105,22 @@ one group (hiding a screen is still Access → Roles); nothing changes until the
   menu as a full-height panel (the website hides its sidebar on phones). Without one, as built. The layout is read once
   per page (`homeLayout`, React `cache`).
 
+## Show / Hide (added 21 Nov 2026)
+
+The user asked for Show / Hide in "Website menu and app More". Decisions: a hidden screen is left out **everywhere**
+for families (side menu, app More, tabs — a hidden tab gives its place to the next shortcut —, Home shortcuts, Home
+cards about it, the Academics list, Edit shortcuts, Home's figures in the app, Help's questions about it), and its web
+address says "Your school does not offer this here"; a **group** can be hidden too (all its screens). Rights (Access →
+Roles) still decide what data a person may read; hiding is about what families see. Like the rest, it reaches families
+once published.
+
+- **Data:** `hidden` (screens) in the layout JSON and `hidden` on a menu group; `familyHiddenScreens` gives both; in
+  `myFamilyLayout` a hidden screen is as one the person cannot open, and `hidden` lists them.
+- **API:** checks (`X cannot be hidden here.`, `A screen is hidden twice.`); own shortcuts cannot pin a hidden screen;
+  the family Help leaves out questions about hidden screens. Test: "hidden screens and groups are left out everywhere
+  for families".
+- **App:** everything comes filtered from the API; Home's figure tiles leave out a hidden screen.
+
 ## Not in this plan
 
 Layouts per class group, a person's own tabs or cards, the staff app, the website's side menu order, branding

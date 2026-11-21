@@ -4,7 +4,7 @@ import { ApiError } from '@edupro/bff';
 import { audienceOf } from '@/components/FamilyShell';
 import { Icon } from '@/components/nav-icons';
 import { bff } from '@/lib/bff';
-import { homeLayout, iconOf } from '@/lib/home-layout';
+import { homeLayout, iconOf, isHidden } from '@/lib/home-layout';
 import { currentLang, t } from '@/lib/i18n';
 import { canOpen } from '@/lib/portal-menu';
 
@@ -33,8 +33,9 @@ export default async function AcademicsPage() {
     throw error;
   }
   const layout = await homeLayout(audienceOf(me));
-  const items = (layout?.academics?.length ? layout.academics : STANDARD).filter((x) =>
-    canOpen(me, x.href),
+  // the school's list (hidden screens already left out), else the standard one without the hidden screens
+  const items = (layout?.academics?.length ? layout.academics : STANDARD).filter(
+    (x) => canOpen(me, x.href) && !isHidden(layout, x.href),
   );
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>

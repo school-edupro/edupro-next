@@ -38,6 +38,7 @@ const tidy = (a: Audience, l: FamilyLayout): FamilyLayout => ({
   academics: [...l.academics],
   // a layout kept before the side menu was arranged has none: the menu as built
   menu: familyMenuOf(a, l),
+  hidden: [...(l.hidden ?? [])],
 });
 const same = (a: Audience, x: FamilyLayout, y: FamilyLayout) =>
   JSON.stringify(tidy(a, x)) === JSON.stringify(tidy(a, y));
@@ -207,10 +208,12 @@ export class FamilyLayoutService {
   async saveMine(ctx: RequestContext, audience: Audience, shortcuts: string[]) {
     const tenant = requireTenant(ctx);
     const permissions = [...(await this.access.effectivePermissions(tenant))];
+    // the screens the person may open and the school does not hide
+    const live =
+      (await this.db.tenant(tenant, (c) => this.row(c, audience)))?.published ??
+      DEFAULT_FAMILY_LAYOUT[audience];
     const open = new Set(
-      myFamilyLayout(audience, permissions, DEFAULT_FAMILY_LAYOUT[audience], null).screens.map(
-        (s) => s.href,
-      ),
+      myFamilyLayout(audience, permissions, live, null).screens.map((s) => s.href),
     );
     const problems: string[] = [];
     if (

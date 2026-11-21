@@ -27,10 +27,14 @@ export const FamilyLayoutSchema = z.object({
         label: GroupName,
         labelHi: GroupName,
         items: z.array(Path).max(40),
+        // the whole group hidden from families
+        hidden: z.boolean().optional(),
       }),
     )
     .max(10)
     .optional(),
+  // screens hidden from families (app and website)
+  hidden: z.array(Path).max(40).optional(),
 });
 export class FamilyLayoutDto extends createZodDto(FamilyLayoutSchema) {}
 

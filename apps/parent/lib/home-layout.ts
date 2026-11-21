@@ -36,6 +36,21 @@ export interface HomeLayout {
     icon: string;
     items: LayoutEntry[];
   }>;
+  /** The screens the school hides from families (with those of hidden groups); the API leaves them out elsewhere. */
+  hidden: string[];
+}
+
+/**
+ * Does the school's published layout hide this page from families? A hidden screen hides the pages under it too
+ * (`/hostel` → `/hostel/…`); Home never is. Nothing is hidden before the school publishes.
+ */
+export function isHidden(
+  layout: Pick<HomeLayout, 'hidden' | 'published'> | null | undefined,
+  path: string,
+): boolean {
+  if (!layout?.published) return false;
+  const p = path.split('?')[0] ?? path;
+  return (layout.hidden ?? []).some((h) => h !== '/' && (p === h || p.startsWith(`${h}/`)));
 }
 
 /** The layout for this parent or student; null when the API has none to give (Home then shows what it always did). */

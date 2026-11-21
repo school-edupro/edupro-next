@@ -294,6 +294,8 @@ const DICT: Record<string, string> = {
   'The screens of the school day, one tap each.': 'स्कूल दिवस की स्क्रीन, एक टैप में।',
   Menu: 'मेनू',
   'Close the menu': 'मेनू बंद करें',
+  'Your school does not offer this here.': 'आपका विद्यालय यह यहाँ उपलब्ध नहीं कराता।',
+  'Go to Home': 'होम पर जाएँ',
   'Date sheet': 'डेट शीट',
   Shortcuts: 'शॉर्टकट',
   'Edit shortcuts': 'शॉर्टकट बदलें',

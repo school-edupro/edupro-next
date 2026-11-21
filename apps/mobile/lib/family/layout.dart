@@ -75,6 +75,7 @@ class FamilyLayoutView {
     required this.cards,
     required this.academics,
     required this.screens,
+    this.hidden = const {},
   });
 
   factory FamilyLayoutView.fromJson(Json j) {
@@ -89,6 +90,7 @@ class FamilyLayoutView {
       ],
       academics: list('academics'),
       screens: list('screens'),
+      hidden: {for (final h in (j['hidden'] as List?) ?? const []) '$h'},
     );
   }
 
@@ -157,6 +159,9 @@ class FamilyLayoutView {
 
   /// Every screen the person may open (what "Edit shortcuts" offers).
   final List<FamilyEntry> screens;
+
+  /// The screens the school hides from families (left out everywhere, Home's figures too).
+  final Set<String> hidden;
 }
 
 /// The family layout of a profile, kept for offline use; the app as it was when none has come (or the call fails

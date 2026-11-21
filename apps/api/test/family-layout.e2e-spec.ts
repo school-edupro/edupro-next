@@ -22,6 +22,7 @@ interface Group {
   label: string | null;
   labelHi: string | null;
   items: string[];
+  hidden?: boolean;
 }
 interface Layout {
   tabs: string[];
@@ -29,6 +30,7 @@ interface Layout {
   cards: string[];
   academics: string[];
   menu?: Group[];
+  hidden?: string[];
 }
 interface Mine {
   audience: string;
@@ -44,6 +46,7 @@ interface Mine {
     labelHi: string | null;
     items: Array<{ href: string }>;
   }>;
+  hidden: string[];
 }
 interface Setup {
   layouts: Record<
@@ -429,6 +432,88 @@ describe('family app layout (e2e)', () => {
       'help',
     ]);
     expect((await setup()).layouts.student.changed).toBe(false);
+  });
+
+  it('hidden screens and groups are left out everywhere for families', async () => {
+    const base = (await setup()).layouts.parent.published;
+    const bad = async (patch: Partial<Layout>, audience = 'parent') => {
+      const r = await save(audience, { ...base, ...patch });
+      return r.statusCode === 400 ? (r.json().errors as string[]) : r.statusCode;
+    };
+    expect(await bad({ hidden: ['/nowhere'] })).toContain('/nowhere cannot be hidden here.');
+    expect(await bad({ hidden: ['/hostel', '/hostel'] })).toContain('A screen is hidden twice.');
+    const studentBase = (await setup()).layouts.student.published;
+    expect(
+      (await save('student', { ...studentBase, hidden: ['/queries'] })).json().errors,
+    ).toContain('/queries cannot be hidden here.');
+
+    // Hostel hidden (it is a tab and a shortcut) and the whole Help desk group hidden
+    const layout: Layout = {
+      ...base,
+      tabs: ['/hostel', '/fees', '/messages'],
+      shortcuts: ['/attendance', '/hostel', '/queries', '/library'],
+      cards: ['notices', 'library'],
+      menu: base.menu!.map((g) => (g.key === 'help' ? { ...g, hidden: true } : g)),
+      hidden: ['/hostel'],
+    };
+    expect((await save('parent', layout)).statusCode).toBe(200);
+    expect((await setup()).layouts.parent.draft).toMatchObject({ hidden: ['/hostel'] });
+    expect((await act('parent', 'publish')).statusCode).toBe(200);
+
+    const pa = await mine(parent, 'parent');
+    expect(pa.hidden).toEqual(
+      expect.arrayContaining([
+        '/hostel',
+        '/queries',
+        '/appointments',
+        '/gate-passes',
+        '/consents',
+        '/assistant',
+        '/help',
+      ]),
+    );
+    expect(hrefs(pa.screens)).not.toContain('/hostel');
+    expect(hrefs(pa.screens)).not.toContain('/appointments');
+    // the hidden tab gives its place to the first shortcut not yet a tab
+    expect(hrefs(pa.tabs)).toEqual(['/', '/fees', '/messages', '/attendance', 'more']);
+    // this parent's own shortcuts (an earlier test) lose the hidden screens
+    expect(pa.ownShortcuts).toBe(true);
+    expect(hrefs(pa.shortcuts)).toEqual(['/fees']);
+    const school = await inject({
+      method: 'DELETE',
+      url: '/me/app-layout/shortcuts?kind=parent',
+      headers: h(parent),
+    });
+    expect(hrefs((school.json() as Mine).shortcuts)).toEqual(['/attendance', '/library']);
+    expect(pa.menu.map((g) => g.key)).not.toContain('help');
+    expect(pa.menu.flatMap((g) => hrefs(g.items))).not.toContain('/hostel');
+    // the app's More
+    const more = await inject({ method: 'GET', url: '/me/menu?kind=parent', headers: h(parent) });
+    const groups = more.json().groups as Array<{ id: string; items: Array<{ href: string }> }>;
+    expect(groups.map((g) => g.id)).not.toContain('help');
+    expect(groups.flatMap((g) => hrefs(g.items))).not.toContain('/hostel');
+    // a person cannot pin a hidden screen
+    const pin = await inject({
+      method: 'PUT',
+      url: '/me/app-layout/shortcuts?kind=parent',
+      headers: h(parent),
+      json: { shortcuts: ['/attendance', '/library', '/fees', '/hostel'] },
+    });
+    expect(pin.statusCode).toBe(400);
+    expect(pin.json().errors).toContain('/hostel is not a screen you can open.');
+    // Help leaves out the questions about hidden screens
+    const help = await inject({
+      method: 'GET',
+      url: '/engagement/help?for=parent',
+      headers: h(parent),
+    });
+    const questions = (
+      help.json().groups as Array<{ questions: Array<{ question: string }> }>
+    ).flatMap((g) => g.questions.map((q) => q.question));
+    expect(questions).not.toContain('How do I ask to meet a teacher?');
+    expect(questions).toContain('Where is the report card?');
+    // the students are apart: nothing hidden for them
+    expect((await mine(student, 'student')).hidden).toEqual([]);
   });
 
   it('only the settings rights arrange it; each school keeps its own', async () => {

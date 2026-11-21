@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { Me } from '@edupro/bff';
 import { FAMILY_MENU, FAMILY_TABS, type Audience, type FamilyGroup } from '@edupro/menus';
 import { t, type Lang } from '@/lib/i18n';
-import { iconOf, type HomeLayout } from '@/lib/home-layout';
+import { iconOf, isHidden, type HomeLayout } from '@/lib/home-layout';
 import { canOpen } from '@/lib/portal-menu';
 import { Icon, type IconName } from './nav-icons';
 import { PhoneMenu } from './PhoneMenu';
@@ -212,35 +212,46 @@ export function FamilyShell({
           >
             {lang === 'hi' ? 'English' : 'हिन्दी'}
           </a>
-          <a
-            className="ep-header__icon-btn fp-msgbtn"
-            href="/messages"
-            aria-label={
-              unread
-                ? `${t(lang, 'Messages')}: ${String(unread)} ${t(lang, 'new')}`
-                : t(lang, 'Messages')
-            }
-            title={t(lang, 'Messages')}
-          >
-            <Icon name="message" size={22} />
-            {unread ? (
-              <span className="fp-msgbtn__badge" aria-hidden="true">
-                {unread > 99 ? '99+' : unread}
-              </span>
-            ) : null}
-          </a>
-          <a
-            className="ep-header__icon-btn"
-            href="/notices"
-            aria-label={t(lang, 'Notices')}
-            title={t(lang, 'Notices')}
-          >
-            <Icon name="bell" size={22} />
-          </a>
-          <a className="ep-header__user" href="/profile" title={me.user.displayName}>
-            <Icon name="user" size={20} />
-            <span className="ep-header__user-name">{me.user.displayName}</span>
-          </a>
+          {isHidden(layout, '/messages') ? null : (
+            <a
+              className="ep-header__icon-btn fp-msgbtn"
+              href="/messages"
+              aria-label={
+                unread
+                  ? `${t(lang, 'Messages')}: ${String(unread)} ${t(lang, 'new')}`
+                  : t(lang, 'Messages')
+              }
+              title={t(lang, 'Messages')}
+            >
+              <Icon name="message" size={22} />
+              {unread ? (
+                <span className="fp-msgbtn__badge" aria-hidden="true">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              ) : null}
+            </a>
+          )}
+          {isHidden(layout, '/notices') ? null : (
+            <a
+              className="ep-header__icon-btn"
+              href="/notices"
+              aria-label={t(lang, 'Notices')}
+              title={t(lang, 'Notices')}
+            >
+              <Icon name="bell" size={22} />
+            </a>
+          )}
+          {isHidden(layout, '/profile') ? (
+            <span className="ep-header__user" title={me.user.displayName}>
+              <Icon name="user" size={20} />
+              <span className="ep-header__user-name">{me.user.displayName}</span>
+            </span>
+          ) : (
+            <a className="ep-header__user" href="/profile" title={me.user.displayName}>
+              <Icon name="user" size={20} />
+              <span className="ep-header__user-name">{me.user.displayName}</span>
+            </a>
+          )}
           <form method="post" action="/api/auth/logout">
             <button
               type="submit"

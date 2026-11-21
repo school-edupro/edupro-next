@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { ApiError } from '@edupro/bff';
 import { FamilyShell, audienceOf } from '@/components/FamilyShell';
-import { homeLayout } from '@/lib/home-layout';
+import { homeLayout, isHidden } from '@/lib/home-layout';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 
@@ -41,6 +41,8 @@ export default async function FamilyLayout({ children }: { children: ReactNode }
   // the school's published layout (docs/design/90): the side menu and the phone bar follow it; else as built
   const got = ended ? null : await homeLayout(audienceOf(me));
   const layout = got?.published ? got : null;
+  // a screen the school hides from families: its address says so (the shell, menu and header stay)
+  const hidden = isHidden(layout, currentPath);
   return (
     <FamilyShell me={me} lang={lang} currentPath={currentPath} unread={unread} layout={layout}>
       {ended ? (
@@ -51,6 +53,15 @@ export default async function FamilyLayout({ children }: { children: ReactNode }
               lang,
               'Your access to this school portal has ended. Please contact the school office for any paper you need.',
             )}
+          </p>
+        </div>
+      ) : hidden ? (
+        <div className="ep-card" role="status" style={{ maxWidth: '40rem' }}>
+          <h1 style={{ marginTop: 0 }}>{t(lang, 'Your school does not offer this here.')}</h1>
+          <p style={{ marginBottom: 0 }}>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/">
+              {t(lang, 'Go to Home')}
+            </a>
           </p>
         </div>
       ) : (

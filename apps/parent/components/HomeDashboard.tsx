@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { Badge, Card } from '@edupro/ui';
 import { bff } from '@/lib/bff';
-import { iconOf, type HomeLayout } from '@/lib/home-layout';
+import { iconOf, isHidden, type HomeLayout } from '@/lib/home-layout';
 import { t, type Lang } from '@/lib/i18n';
 import type { Audience } from './FamilyShell';
 import { Icon, type IconName } from './nav-icons';
@@ -314,7 +314,7 @@ export async function HomeDashboard({
           }
           href="/attendance"
         />
-        {dayOf?.rides ? (
+        {dayOf?.rides && !isHidden(layout, '/transport') ? (
           <Glance
             icon="bus"
             label={t(lang, 'School bus today')}
@@ -534,7 +534,7 @@ export async function HomeDashboard({
 
   return (
     <>
-      {consents.length ? (
+      {consents.length && !isHidden(layout, '/consents') ? (
         <p className="ep-alert ep-alert--warning" role="status">
           <strong>
             {consents.length === 1

@@ -8,7 +8,7 @@ import { currentLang, t } from '@/lib/i18n';
 import { ChildProfileCard, type FamilyChild } from '@/components/ChildProfileCard';
 import { audienceOf } from '@/components/FamilyShell';
 import { HomeDashboard } from '@/components/HomeDashboard';
-import { homeLayout } from '@/lib/home-layout';
+import { homeLayout, isHidden } from '@/lib/home-layout';
 import { canOpen } from '@/lib/portal-menu';
 import { Icon, type IconName } from '@/components/nav-icons';
 
@@ -173,8 +173,10 @@ export default async function HomePage({
     : [];
   // the school's layout for this person (docs/design/90): the Home shortcuts and cards once the school published
   // one (or the person keeps their own shortcuts); until then Home stays as it was
-  const got = kids.length ? await homeLayout(audience) : null;
-  const layout = got && (got.published || got.ownShortcuts) ? got : null;
+  const got = await homeLayout(audience);
+  const layout = kids.length && got && (got.published || got.ownShortcuts) ? got : null;
+  // a screen the school hides from families is not offered anywhere on Home (docs/design/90)
+  const offered = (href: string) => canOpen(me, href) && !isHidden(got, href);
   const chosen = await chosenChild(sp.child);
   const child = kids.find((c) => c.id === chosen?.id) ?? kids[0];
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
@@ -209,7 +211,7 @@ export default async function HomePage({
                   ['/messages', 'Messages', 'What the school has written to you.'],
                 ] as const)
             )
-              .filter(([href]) => canOpen(me, href))
+              .filter(([href]) => offered(href))
               .map(([href, title, text]) => (
                 <a key={href} href={href}>
                   <strong>{t(lang, title)}</strong>
@@ -241,7 +243,7 @@ export default async function HomePage({
       {child ? (
         <>
           <ChildSwitch lang={lang} back="/" current={child.id} />
-          <ChildProfileCard child={child} lang={lang} />
+          <ChildProfileCard child={child} lang={lang} profile={!isHidden(got, '/profile')} />
           <HomeDashboard childId={child.id} audience={audience} lang={lang} layout={layout} />
         </>
       ) : isFamily ? (
@@ -257,19 +259,19 @@ export default async function HomePage({
           {t(lang, 'All services')}
         </h2>
         <div className="fp-services">
-          {SERVICES.filter(
-            (s) => (audience === 'parent' || !s.parentOnly) && canOpen(me, s.href),
-          ).map((s) => (
-            <a key={s.href} className="fp-service" href={s.href}>
-              <span className="fp-service__icon" aria-hidden="true">
-                <Icon name={s.icon} size={22} />
-              </span>
-              <span>
-                <span className="fp-service__title">{t(lang, s.title)}</span>
-                <span className="fp-service__help">{t(lang, s[audience])}</span>
-              </span>
-            </a>
-          ))}
+          {SERVICES.filter((s) => (audience === 'parent' || !s.parentOnly) && offered(s.href)).map(
+            (s) => (
+              <a key={s.href} className="fp-service" href={s.href}>
+                <span className="fp-service__icon" aria-hidden="true">
+                  <Icon name={s.icon} size={22} />
+                </span>
+                <span>
+                  <span className="fp-service__title">{t(lang, s.title)}</span>
+                  <span className="fp-service__help">{t(lang, s[audience])}</span>
+                </span>
+              </a>
+            ),
+          )}
         </div>
       </section>
     </main>

@@ -11,7 +11,16 @@ export interface FamilyChild {
 }
 
 /** Home-page summary of the chosen child: photo, class, roll, admission no and links. */
-export async function ChildProfileCard({ child, lang }: { child: FamilyChild; lang: Lang }) {
+export async function ChildProfileCard({
+  child,
+  lang,
+  profile = true,
+}: {
+  child: FamilyChild;
+  lang: Lang;
+  /** The Profile screen is offered (the school may hide it from families, docs/design/90). */
+  profile?: boolean;
+}) {
   let p: PortalProfile;
   try {
     p = await bff.api.fetch<PortalProfile>(`/engagement/mine/profile/${child.id}`);
@@ -67,18 +76,23 @@ export async function ChildProfileCard({ child, lang }: { child: FamilyChild; la
                 </div>
               ) : null}
             </dl>
-            <div className="pp-hero__actions">
-              <a className="ep-btn ep-btn--primary ep-btn--sm" href={`/profile?child=${child.id}`}>
-                {t(lang, 'View full profile')}
-              </a>
-              {/* the PDF is made at once by the API and saved */}
-              <a
-                className="ep-btn ep-btn--secondary ep-btn--sm"
-                href={`/profile/pdf?child=${child.id}&download=1`}
-              >
-                {t(lang, 'Download profile (PDF)')}
-              </a>
-            </div>
+            {profile ? (
+              <div className="pp-hero__actions">
+                <a
+                  className="ep-btn ep-btn--primary ep-btn--sm"
+                  href={`/profile?child=${child.id}`}
+                >
+                  {t(lang, 'View full profile')}
+                </a>
+                {/* the PDF is made at once by the API and saved */}
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/profile/pdf?child=${child.id}&download=1`}
+                >
+                  {t(lang, 'Download profile (PDF)')}
+                </a>
+              </div>
+            ) : null}
           </div>
         </div>
       </Card>

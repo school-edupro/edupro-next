@@ -23,6 +23,12 @@ export interface FamilyLayout {
    * the standard one) and its screens in order — every screen of the audience in exactly one group. None: as built.
    */
   menu?: FamilyMenuGroupLayout[];
+  /**
+   * Screens the school hides from families (with those of hidden groups): left out of the menu, More, the tabs, the
+   * shortcuts, the cards, the Academics list, Edit shortcuts and Help; their web address says the school does not
+   * offer them. Rights (Access → Roles) still decide what data a person may read.
+   */
+  hidden?: string[];
 }
 
 export interface FamilyMenuGroupLayout {
@@ -31,6 +37,8 @@ export interface FamilyMenuGroupLayout {
   label: string | null;
   labelHi: string | null;
   items: string[];
+  /** The whole group hidden from families (every screen in it). */
+  hidden?: boolean;
 }
 
 export interface FamilyCard {
@@ -86,6 +94,7 @@ export function defaultFamilyMenu(audience: Audience): FamilyMenuGroupLayout[] {
     key: g.section,
     label: null,
     labelHi: null,
+    hidden: false,
     items: g.items.filter((i) => audience === 'parent' || !i.parentOnly).map((i) => i.href),
   }));
 }
@@ -108,10 +117,16 @@ export function familyMenuOf(
     if (!known.has(g.key) || groups.some((x) => x.key === g.key)) continue;
     const items = g.items.filter((h) => screens.has(h) && !seen.has(h));
     items.forEach((h) => seen.add(h));
-    groups.push({ key: g.key, label: g.label ?? null, labelHi: g.labelHi ?? null, items });
+    groups.push({
+      key: g.key,
+      label: g.label ?? null,
+      labelHi: g.labelHi ?? null,
+      items,
+      hidden: g.hidden === true,
+    });
   }
   for (const g of standard)
-    if (!groups.some((x) => x.key === g.key)) groups.push({ ...g, items: [] });
+    if (!groups.some((x) => x.key === g.key)) groups.push({ ...g, items: [], hidden: false });
   for (const g of standard)
     for (const h of g.items)
       if (!seen.has(h)) {
@@ -119,6 +134,14 @@ export function familyMenuOf(
         seen.add(h);
       }
   return groups;
+}
+
+/** The screens a layout hides from families: those hidden one by one and every screen of a hidden group. */
+export function familyHiddenScreens(audience: Audience, l: FamilyLayout): Set<string> {
+  const screens = new Set(familyLayoutScreens(audience).map((x) => x.href));
+  const hidden = new Set((l.hidden ?? []).filter((h) => screens.has(h)));
+  for (const g of familyMenuOf(audience, l)) if (g.hidden) g.items.forEach((h) => hidden.add(h));
+  return hidden;
 }
 
 /** The standard name of a menu group for an audience (e.g. My child / My school day). */
@@ -223,6 +246,10 @@ export function checkFamilyLayout(audience: Audience, l: FamilyLayout): string[]
           problems.push(`A menu group's ${name} takes 1 to ${LAYOUT_LIMITS.groupName} letters.`);
     }
   }
+  if (l.hidden) {
+    if (!distinct(l.hidden)) problems.push('A screen is hidden twice.');
+    for (const h of l.hidden) if (!screens.has(h)) problems.push(`${h} cannot be hidden here.`);
+  }
   return problems;
 }
 
@@ -242,6 +269,8 @@ export interface MyFamilyLayout {
   academics: FamilyEntry[];
   /** Every screen the person may open (the choices of "Edit shortcuts"). */
   screens: FamilyEntry[];
+  /** The screens the school hides from families (their web address says the school does not offer them). */
+  hidden: string[];
   /**
    * The side menu (website) and More (app): the groups in the school's order with their names (`labelHi` only when
    * the school gave one; else put the standard name in Hindi), each with the screens the person may open.
@@ -266,9 +295,11 @@ export function myFamilyLayout(
   layout: FamilyLayout,
   own: string[] | null,
 ): MyFamilyLayout {
+  // a screen the school hides is as one the person cannot open
+  const hidden = familyHiddenScreens(audience, layout);
   const open = familyScreens(audience, permissions).flatMap((g) =>
     g.items
-      .filter((i) => i.href !== '/')
+      .filter((i) => i.href !== '/' && !hidden.has(i.href))
       .map((i) => ({ href: i.href, label: i.label, icon: familyIcon(i.href, g.icon) })),
   );
   const byHref = new Map(open.map((e) => [e.href, e]));
@@ -306,6 +337,7 @@ export function myFamilyLayout(
       .map((c) => ({ key: c.key, label: c.label, labelHi: c.labelHi, href: c.needs })),
     academics,
     screens: open,
+    hidden: [...hidden],
     menu: familyMenuOf(audience, layout)
       .map((g) => ({
         key: g.key,

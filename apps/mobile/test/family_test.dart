@@ -1755,6 +1755,20 @@ void main() {
       );
     }
 
+    testWidgets('a screen the school hides leaves Home\'s figures too', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final school = School()
+        ..layout = {
+          ...studentLayout(),
+          'hidden': ['/homework', '/messages'],
+        };
+      await pumpFamily(tester, kind: 'student', school: school);
+      expect(find.byKey(const Key('figAttendance')), findsOneWidget);
+      expect(find.byKey(const Key('figHomework')), findsNothing);
+      expect(find.byKey(const Key('figUnread')), findsNothing);
+    });
+
     testWidgets('in Hindi: the cards and the words of Edit shortcuts', (tester) async {
       await tester.binding.setSurfaceSize(const Size(420, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
