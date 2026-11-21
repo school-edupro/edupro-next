@@ -24,12 +24,25 @@ export interface AssistantSetupValues {
   topicsOff: Record<SetupAudience, string[]>;
   /** query ids in order; empty: the standard ones */
   starters: Record<SetupAudience, string[]>;
+  /** the chat window's name (docs/design/92) */
+  name: string;
+  /** the school's subtitle per audience; empty: the standard one */
+  subtitles: Record<SetupAudience, string>;
 }
+
+/** The longest name and subtitle the API takes. */
+export const NAME_MAX = 40;
+export const SUBTITLE_MAX = 80;
 
 export interface AssistantSetup extends AssistantSetupValues {
   updatedAt: string | null;
   updatedBy: string | null;
-  defaults: { starters: Record<SetupAudience, string[]>; dailyLimit: number };
+  defaults: {
+    starters: Record<SetupAudience, string[]>;
+    dailyLimit: number;
+    name: string;
+    subtitles: Record<SetupAudience, { en: string; hi: string }>;
+  };
   topics: Array<{ key: string; label: string; labelHi: string }>;
   catalogue: Record<
     SetupAudience,
@@ -54,15 +67,20 @@ export function editableValues(s: AssistantSetup): AssistantSetupValues {
       SETUP_AUDIENCES.map((a) => [a, [...(s.topicsOff[a] ?? [])]]),
     ) as Record<SetupAudience, string[]>,
     starters,
+    name: s.name ?? s.defaults.name,
+    subtitles: Object.fromEntries(
+      SETUP_AUDIENCES.map((a) => [a, s.subtitles?.[a] ?? '']),
+    ) as Record<SetupAudience, string>,
   };
 }
 
 /** Two sets of values the same (topics compared as sets, starters in order). */
 export function sameValues(a: AssistantSetupValues, b: AssistantSetupValues): boolean {
-  if (a.dailyLimit !== b.dailyLimit) return false;
+  if (a.dailyLimit !== b.dailyLimit || a.name.trim() !== b.name.trim()) return false;
   return SETUP_AUDIENCES.every(
     (k) =>
       a.audiences[k] === b.audiences[k] &&
+      a.subtitles[k].trim() === b.subtitles[k].trim() &&
       same([...a.topicsOff[k]].sort(), [...b.topicsOff[k]].sort()) &&
       same(a.starters[k], b.starters[k]),
   );
@@ -77,6 +95,12 @@ export function setupProblems(v: AssistantSetupValues): string[] {
     v.dailyLimit > DAILY_LIMIT.max
   )
     problems.push('Questions a day: a whole number from 1 to 500.');
+  if (!v.name.trim()) problems.push('Name: write a name (the standard is MobiAI).');
+  else if (v.name.trim().length > NAME_MAX)
+    problems.push(`Name: at most ${String(NAME_MAX)} letters.`);
+  for (const a of SETUP_AUDIENCES)
+    if (v.subtitles[a].trim().length > SUBTITLE_MAX)
+      problems.push(`${AUDIENCE_LABEL[a]}' subtitle: at most ${String(SUBTITLE_MAX)} letters.`);
   for (const a of SETUP_AUDIENCES)
     if (v.starters[a].length > MAX_STARTERS)
       problems.push(`${AUDIENCE_LABEL[a]}: at most ${String(MAX_STARTERS)} starter questions.`);

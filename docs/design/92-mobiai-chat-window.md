@@ -72,3 +72,7 @@ the person's language).
   `assistant-settings.ts`: each line the query's one-line answer in English and Hindi, run with the person's rights
   inside a savepoint — a line that fails is left out; none before a parent's consent or with the audience off; it is
   not counted as a question). Tests: `apps/api/test/chatbot-window.e2e-spec.ts`.
+- **B (21 Nov 2026).** Assistant set-up (`/insights/assistant/setup`) opens with **Name and greeting**: the name, a
+  subtitle for students, parents, teachers and office (the standard one as the hint, in English and Hindi), and a
+  preview of the window's top; an empty name is a problem to fix before Save; the save sends them with the rest.
+  Checked in a browser (Save caught, nothing saved on Alpha) with axe.

@@ -6,7 +6,9 @@ import {
   AUDIENCE_LABEL,
   DAILY_LIMIT,
   MAX_STARTERS,
+  NAME_MAX,
   SETUP_AUDIENCES,
+  SUBTITLE_MAX,
   editableValues,
   sameValues,
   setupProblems,
@@ -286,6 +288,107 @@ export function AssistantSetupEditor({
               onChange={(on) => change({ audiences: { ...values.audiences, [a]: on } })}
             />
           ))}
+        </div>
+      </section>
+
+      <section
+        className="ep-card"
+        aria-labelledby="as-name-h"
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        <h2 id="as-name-h" className="ep-cdash__h3" style={{ marginTop: 0 }}>
+          Name and greeting
+        </h2>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          The chat window&apos;s name and the line under it, on the websites and in the app. A
+          subtitle left empty shows the standard one, in the person&apos;s language.
+        </p>
+        <div className="ep-field" style={{ maxWidth: '24rem' }}>
+          <label className="ep-field__label" htmlFor="as-name">
+            Name
+          </label>
+          <input
+            id="as-name"
+            className="ep-input"
+            value={values.name}
+            maxLength={NAME_MAX}
+            disabled={!canEdit}
+            aria-describedby="as-name-help"
+            onChange={(e) => change({ name: e.target.value })}
+          />
+          <span id="as-name-help" className="ep-field__help">
+            Up to {String(NAME_MAX)} letters; the standard is {setup.defaults.name}.
+          </span>
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gap: 'var(--sp-3)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 24rem), 1fr))',
+          }}
+        >
+          {SETUP_AUDIENCES.map((a) => (
+            <div key={a} className="ep-field" style={{ marginBottom: 0 }}>
+              <label className="ep-field__label" htmlFor={`as-subtitle-${a}`}>
+                Subtitle for {AUDIENCE_LABEL[a].toLowerCase()}
+              </label>
+              <input
+                id={`as-subtitle-${a}`}
+                className="ep-input"
+                value={values.subtitles[a]}
+                maxLength={SUBTITLE_MAX}
+                placeholder={setup.defaults.subtitles[a].en}
+                disabled={!canEdit}
+                aria-describedby={`as-subtitle-${a}-help`}
+                onChange={(e) =>
+                  change({ subtitles: { ...values.subtitles, [a]: e.target.value } })
+                }
+              />
+              <span id={`as-subtitle-${a}-help`} className="ep-field__help">
+                Empty: “{setup.defaults.subtitles[a].en}” / “{setup.defaults.subtitles[a].hi}”.
+              </span>
+            </div>
+          ))}
+        </div>
+        <div
+          data-testid="as-name-preview"
+          aria-label="How the chat window's top looks"
+          role="group"
+          style={{
+            marginTop: 'var(--sp-3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--sp-3)',
+            maxWidth: '26rem',
+            padding: 'var(--sp-3) var(--sp-4)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--mob-navy-800)',
+            color: 'var(--mob-white)',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              display: 'grid',
+              placeItems: 'center',
+              width: '2.5rem',
+              height: '2.5rem',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--mob-cyan-600)',
+              color: 'var(--mob-navy-800)',
+              fontWeight: 'var(--fw-bold)',
+            }}
+          >
+            {(values.name.trim() || setup.defaults.name).slice(0, 1).toUpperCase()}
+          </span>
+          <span style={{ display: 'grid' }}>
+            <strong style={{ fontSize: 'var(--fs-body-lg)' }}>
+              {values.name.trim() || setup.defaults.name}
+            </strong>
+            <span style={{ fontSize: 'var(--fs-small)', color: 'var(--mob-navy-100)' }}>
+              {values.subtitles.admin.trim() || setup.defaults.subtitles.admin.en}
+            </span>
+          </span>
         </div>
       </section>
 

@@ -18,6 +18,10 @@ export async function saveAssistantSetup(values: AssistantSetupValues): Promise<
         dailyLimit: values.dailyLimit,
         topicsOff: values.topicsOff,
         starters: values.starters,
+        name: values.name.trim(),
+        subtitles: Object.fromEntries(
+          Object.entries(values.subtitles).map(([a, v]) => [a, v.trim()]),
+        ),
       }),
     });
     revalidatePath('/insights/assistant/setup');
