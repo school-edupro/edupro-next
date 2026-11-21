@@ -161,6 +161,7 @@ describe('the assistant with Claude’s help (e2e, docs/design/93 phase B)', () 
     for (const k of [
       'AI_PROVIDER',
       'ANTHROPIC_API_KEY',
+      'AI_BASE_URL',
       'ANTHROPIC_BASE_URL',
       'AI_CLAUDE_MONTHLY_QUESTIONS',
       'AI_MODEL',
@@ -168,7 +169,9 @@ describe('the assistant with Claude’s help (e2e, docs/design/93 phase B)', () 
       saved[k] = process.env[k];
     process.env.AI_PROVIDER = 'hybrid';
     process.env.ANTHROPIC_API_KEY = 'test-key-not-real';
-    process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${String(port)}`;
+    process.env.AI_BASE_URL = `http://127.0.0.1:${String(port)}`;
+    // a tool's own address on the machine (Claude Code sets one) is never followed
+    process.env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:9';
     process.env.AI_CLAUDE_MONTHLY_QUESTIONS = '4';
     delete process.env.AI_MODEL;
 

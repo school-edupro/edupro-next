@@ -27,7 +27,7 @@ ANTHROPIC_API_KEY=<the key>
 ```
 
 Restart the API. The server uses only this key and Anthropic's address: an `ANTHROPIC_AUTH_TOKEN` or
-`ANTHROPIC_BASE_URL` set on the machine for other tools is ignored (`ANTHROPIC_BASE_URL` in EduPro's own settings is
+`ANTHROPIC_BASE_URL` set on the machine for other tools (Claude Code sets one) is ignored (`AI_BASE_URL` in EduPro's own settings is
 used, e.g. for a proxy). Check: Insights → Assistant → Assistant set-up shows "Help from Claude" without the "not
 connected" note. To try one real call: `set -a; source .env; set +a; pnpm --filter @edupro/ai smoke:claude`.
 

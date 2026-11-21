@@ -306,13 +306,13 @@ export class AssistantService {
       AI_PROVIDER: env.AI_PROVIDER,
       AI_MODEL: env.AI_MODEL,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-      ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+      ANTHROPIC_BASE_URL: env.AI_BASE_URL,
     });
     this.provider = providerFromEnv({
       AI_PROVIDER: env.AI_PROVIDER,
       AI_MODEL: env.AI_MODEL,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-      ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+      ANTHROPIC_BASE_URL: env.AI_BASE_URL,
       NODE_ENV: env.NODE_ENV,
     });
     this.redis = new IORedis(env.REDIS_URL, {

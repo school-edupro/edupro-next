@@ -66,7 +66,11 @@ const EnvSchema = z.object({
   AI_PROVIDER: z.enum(['local', 'hybrid', 'mock', 'claude']).default('local'),
   AI_MODEL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_BASE_URL: z.string().url().optional(),
+  /**
+   * An address in front of the Claude API (a proxy), if any. Not ANTHROPIC_BASE_URL: tools such as Claude Code set that
+   * on developers' machines, and the school's key must never follow it (docs/design/93).
+   */
+  AI_BASE_URL: z.string().url().optional(),
   AI_USER_DAILY_TOKENS: z.coerce.number().int().min(1000).default(200_000),
   AI_SCHOOL_MONTHLY_TOKENS: z.coerce.number().int().min(10_000).default(20_000_000),
   /** docs/design/93: Claude answers a school may have a month unless Mobilise set its own limit (0: none). */

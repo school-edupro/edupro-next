@@ -1,5 +1,5 @@
 // Sends one real request through ClaudeProvider (Anthropic SDK; Claude Haiku 5.5 unless AI_MODEL) against the Claude API.
-// Reads ANTHROPIC_API_KEY (and optionally AI_MODEL, ANTHROPIC_BASE_URL) from the environment; never
+// Reads ANTHROPIC_API_KEY (and optionally AI_MODEL, AI_BASE_URL) from the environment; never
 // stores the key. Run from the repo root after `pnpm --filter @edupro/ai build`:
 //   set -a; source .env; set +a; pnpm --filter @edupro/ai smoke:claude
 import { ClaudeProvider } from '../dist/index.js';
@@ -12,7 +12,8 @@ if (!apiKey) {
 const provider = new ClaudeProvider({
   apiKey,
   model: process.env.AI_MODEL,
-  baseUrl: process.env.ANTHROPIC_BASE_URL,
+  // EduPro's own AI_BASE_URL only: never an ANTHROPIC_BASE_URL a tool such as Claude Code set on the machine
+  baseUrl: process.env.AI_BASE_URL,
   timeoutMs: 45_000,
 });
 
