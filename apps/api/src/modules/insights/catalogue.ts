@@ -37,8 +37,13 @@ export interface CatalogueEntry {
   params: CatalogueParam[];
   /** words that hint this entry (the offline mock router and the "nearest entries" refusal use them) */
   keywords: string[];
-  /** Sprint 15: entries for scoped callers; the ids come from the context, never from the model. */
-  scope?: 'section' | 'student';
+  /**
+   * Entries for scoped callers; the ids come from the sign-in, never from the question. `self`: a staff member's
+   * own records (docs/design/91).
+   */
+  scope?: 'section' | 'student' | 'self';
+  /** A parent's entry a student does not get (e.g. their own fee receipts stay with the parent). */
+  parentOnly?: boolean;
   sql: (p: Record<string, unknown>) => { text: string; values: unknown[] };
   maxRows?: number;
 }
@@ -50,6 +55,8 @@ export interface CatalogueContext {
   sectionIds?: string[] | null;
   /** Sprint 15: a family's children (null for staff). */
   studentIds?: string[] | null;
+  /** docs/design/91: the caller's own employee record (null for families and staff without one). */
+  employeeId?: string | null;
 }
 
 const s = (v: unknown, fallback: string | null = null): string | null =>
@@ -1097,6 +1104,453 @@ export function buildCatalogue(ctx: CatalogueContext): CatalogueEntry[] {
                                    WHERE t.notice_id = n.id AND ((t.target_type::text = 'class_section' AND t.target_id = cs.id) OR (t.target_type::text = 'class' AND t.target_id = cs.class_id))))
                 ORDER BY n.is_pinned DESC, n.publish_from DESC LIMIT 30`,
         values: [Y, ST ?? [], T, n(p.days, 30)],
+      }),
+    },
+    // ---- docs/design/91: a student's (or a parent's child's) own records ------------------------------
+    {
+      id: 'child_timetable_today',
+      department: 'academics',
+      title: "Today's classes",
+      titleHi: 'आज की कक्षाएँ',
+      description: "The periods of today in the child's section: time, subject, teacher, room.",
+      anyOf: ['academics.timetable.view'],
+      params: [DATE],
+      keywords: [
+        'timetable',
+        'classes today',
+        'periods today',
+        'today classes',
+        'aaj ki class',
+        'aaj kya padhna',
+        'kaunsa period',
+        'समय सारणी',
+        'आज की कक्षा',
+      ],
+      scope: 'student',
+      sql: (p) => ({
+        text: `SELECT st.display_name AS child, p.number, to_char(p.starts_at, 'HH24:MI') AS starts_at, to_char(p.ends_at, 'HH24:MI') AS ends_at,
+                      sub.name AS subject, e.display_name AS teacher, ts.room
+                 FROM enrolments en JOIN students st ON st.id = en.student_id
+                 JOIN timetable_slots ts ON ts.class_section_id = en.class_section_id AND ts.academic_year_id = en.academic_year_id
+                 JOIN timetable_periods p ON p.id = ts.period_id
+                 LEFT JOIN subjects sub ON sub.id = ts.subject_id LEFT JOIN employees e ON e.id = ts.employee_id
+                WHERE en.academic_year_id = $1 AND en.student_id = ANY($2::bigint[]) AND en.status = 'active'
+                  AND ts.weekday = EXTRACT(ISODOW FROM $3::date)::int AND p.kind::text <> 'break'
+                ORDER BY st.display_name, p.number`,
+        values: [Y, ST ?? [], date(p.date, T)],
+      }),
+    },
+    {
+      id: 'child_date_sheet',
+      department: 'exams',
+      title: 'Coming exam papers',
+      titleHi: 'आने वाले परीक्षा पेपर',
+      description: 'The papers still to come: exam, subject, date and time.',
+      anyOf: ['exams.family.view'],
+      params: [],
+      keywords: [
+        'date sheet',
+        'datesheet',
+        'exam',
+        'exams',
+        'paper',
+        'next exam',
+        'exam kab',
+        'pariksha',
+        'परीक्षा',
+        'डेट शीट',
+      ],
+      scope: 'student',
+      sql: () => ({
+        text: `SELECT st.display_name AS child, x.name AS exam, sub.name AS subject, es.exam_on::text AS date,
+                      to_char(es.starts_at, 'HH24:MI') AS starts_at
+                 FROM enrolments en JOIN students st ON st.id = en.student_id JOIN class_sections cs ON cs.id = en.class_section_id
+                 JOIN exams x ON x.academic_year_id = en.academic_year_id AND x.deleted_at IS NULL AND x.status = 'active' AND x.show_on_portal
+                 JOIN exam_subjects es ON es.exam_id = x.id AND es.class_id = cs.class_id AND es.exam_on IS NOT NULL
+                 JOIN subjects sub ON sub.id = es.subject_id
+                WHERE en.academic_year_id = $1 AND en.student_id = ANY($2::bigint[]) AND en.status = 'active' AND es.exam_on >= $3::date
+                  AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL
+                ORDER BY es.exam_on, es.starts_at NULLS LAST, st.display_name LIMIT 40`,
+        values: [Y, ST ?? [], T],
+      }),
+    },
+    {
+      id: 'child_results',
+      department: 'exams',
+      title: 'Report cards released',
+      titleHi: 'जारी रिपोर्ट कार्ड',
+      description: 'Report cards the school released, and whether one is held (e.g. fees due).',
+      anyOf: ['exams.family.view'],
+      params: [],
+      keywords: [
+        'result',
+        'results',
+        'report card',
+        'marks',
+        'grade',
+        'parinaam',
+        'rizalt',
+        'परिणाम',
+        'रिपोर्ट कार्ड',
+        'अंक',
+      ],
+      scope: 'student',
+      sql: () => ({
+        text: `SELECT stu.display_name AS child, r.name, r.kind::text AS kind, r.released_at::date::text AS released,
+                      (COALESCE(rc.withheld, false) OR h.student_id IS NOT NULL
+                       OR (r.hide_defaulters AND (SELECT COALESCE(sum(d.balance), 0) FROM mart.fee_dues d
+                            WHERE d.student_id = stu.id AND d.academic_year_id = r.academic_year_id AND d.due_on <= $3::date) > r.defaulter_min)) AS held
+                 FROM students stu
+                 JOIN report_card_releases r ON r.academic_year_id = $1 AND r.status::text = 'released'
+                 LEFT JOIN report_cards rc ON rc.release_id = r.id AND rc.student_id = stu.id
+                 LEFT JOIN report_card_holds h ON h.release_id = r.id AND h.student_id = stu.id
+                WHERE stu.id = ANY($2::bigint[])
+                  AND EXISTS (SELECT 1 FROM report_card_release_classes rcl
+                               JOIN class_sections ocs ON ocs.class_id = rcl.class_id
+                               JOIN enrolments oen ON oen.class_section_id = ocs.id AND oen.student_id = stu.id AND oen.status = 'active' AND oen.academic_year_id = r.academic_year_id
+                              WHERE rcl.release_id = r.id AND rcl.status::text = 'released')
+                ORDER BY r.released_at DESC NULLS LAST, stu.display_name LIMIT 20`,
+        values: [Y, ST ?? [], T],
+      }),
+    },
+    {
+      id: 'child_library',
+      department: 'school',
+      title: 'Library books on loan',
+      titleHi: 'पुस्तकालय की ली गई पुस्तकें',
+      description: 'Library books out now, when each is due back, and days late.',
+      anyOf: ['library.family.view'],
+      params: [],
+      keywords: [
+        'library',
+        'book',
+        'books',
+        'kitab',
+        'kitaab',
+        'pustak',
+        'पुस्तक',
+        'किताब',
+        'लाइब्रेरी',
+        'पुस्तकालय',
+      ],
+      scope: 'student',
+      sql: () => ({
+        text: `SELECT st.display_name AS child, t.title, l.issued_on::text AS issued_on, l.due_on::text AS due_on,
+                      GREATEST(0, $2::date - l.due_on)::int AS days_late
+                 FROM library_loans l JOIN students st ON st.id = l.borrower_id
+                 JOIN library_copies x ON x.id = l.copy_id JOIN library_titles t ON t.id = x.title_id
+                WHERE l.borrower_kind::text = 'student' AND l.borrower_id = ANY($1::bigint[]) AND l.returned_on IS NULL
+                ORDER BY l.due_on, l.id`,
+        values: [ST ?? [], T],
+      }),
+    },
+    {
+      id: 'child_bus',
+      department: 'transport',
+      title: 'School bus',
+      titleHi: 'स्कूल बस',
+      description: 'The bus route, stop and times of the child this month.',
+      anyOf: ['transport.request.view'],
+      params: [],
+      keywords: [
+        'bus',
+        'school bus',
+        'transport',
+        'van',
+        'route',
+        'bus stop',
+        'pickup',
+        'pick up time',
+        'gaadi',
+        'बस',
+        'वाहन',
+      ],
+      scope: 'student',
+      sql: () => ({
+        text: `SELECT st.display_name AS child, t.service::text AS service, pr.name AS pick_route, ps.name AS pick_stop,
+                      to_char(ps.pickup_time, 'HH24:MI') AS pick_time, dr.name AS drop_route, ds.name AS drop_stop,
+                      to_char(ds.drop_time, 'HH24:MI') AS drop_time,
+                      (SELECT v.reg_no FROM transport_vehicles v WHERE v.id = COALESCE(pr.vehicle_id, dr.vehicle_id)) AS vehicle
+                 FROM student_transport t JOIN students st ON st.id = t.student_id
+                 LEFT JOIN transport_routes pr ON pr.id = t.pick_route_id LEFT JOIN transport_stops ps ON ps.id = t.pick_stop_id
+                 LEFT JOIN transport_routes dr ON dr.id = t.drop_route_id LEFT JOIN transport_stops ds ON ds.id = t.drop_stop_id
+                WHERE t.academic_year_id = $1 AND t.student_id = ANY($2::bigint[]) AND t.status::text <> 'cancelled'
+                  AND date_trunc('month', $3::date)::date BETWEEN t.from_month AND t.to_month
+                ORDER BY st.display_name, t.from_month DESC, t.id DESC`,
+        values: [Y, ST ?? [], T],
+      }),
+    },
+    {
+      id: 'child_certificates',
+      department: 'school',
+      title: 'Certificates',
+      titleHi: 'प्रमाण पत्र',
+      description: 'Certificates issued, and certificate requests and where they stand.',
+      anyOf: ['engagement.family.view'],
+      params: [],
+      keywords: [
+        'certificate',
+        'certificates',
+        'bonafide',
+        'transfer certificate',
+        'character certificate',
+        'praman patra',
+        'प्रमाण पत्र',
+      ],
+      scope: 'student',
+      sql: () => ({
+        text: `SELECT * FROM (
+                 SELECT st.display_name AS child, ty.name AS certificate, 'issued' AS state, x.issued_on::text AS date, x.number
+                   FROM certificates x JOIN certificate_types ty ON ty.id = x.type_id JOIN students st ON st.id = x.student_id
+                  WHERE x.status::text = 'issued' AND x.student_id = ANY($1::bigint[])
+                 UNION ALL
+                 SELECT st.display_name, ty.name, r.status::text, r.created_at::date::text, NULL
+                   FROM certificate_requests r JOIN certificate_types ty ON ty.id = r.type_id JOIN students st ON st.id = r.student_id
+                  WHERE r.student_id = ANY($1::bigint[]) AND r.status::text IN ('submitted', 'approved')
+               ) c ORDER BY date DESC LIMIT 30`,
+        values: [ST ?? []],
+      }),
+    },
+    {
+      id: 'child_receipts',
+      department: 'fees',
+      title: 'Fee receipts of the session',
+      titleHi: 'सत्र की शुल्क रसीदें',
+      description: 'Fees paid this session: receipt, date, amount and how.',
+      anyOf: ['fees.family.view'],
+      params: [],
+      keywords: [
+        'receipt',
+        'receipts',
+        'paid',
+        'payment done',
+        'fees paid',
+        'rasid',
+        'raseed',
+        'jama',
+        'रसीद',
+        'भुगतान किया',
+      ],
+      scope: 'student',
+      sql: () => ({
+        text: `SELECT st.display_name AS child, p.receipt_no, p.received_on::text AS date, p.amount::text AS amount,
+                      COALESCE(p.mode_label, p.mode::text) AS mode, p.ledger::text AS ledger
+                 FROM fee_payments p JOIN students st ON st.id = p.student_id
+                WHERE p.academic_year_id = $1 AND p.student_id = ANY($2::bigint[]) AND p.status::text NOT IN ('bounced', 'reversed')
+                ORDER BY p.received_on DESC, p.id DESC LIMIT 30`,
+        values: [Y, ST ?? []],
+      }),
+    },
+    // ---- docs/design/91: a staff member's own records (the self scope) ----------------------------------
+    {
+      id: 'my_own_attendance',
+      department: 'hr',
+      title: 'My attendance this month',
+      titleHi: 'इस महीने मेरी उपस्थिति',
+      description: 'Your own days this month: present, absent, leave, late, with in and out times.',
+      anyOf: ['insights.assistant.use'],
+      params: [DATE],
+      keywords: [
+        'my own attendance',
+        'my punch',
+        'punch in',
+        'punched in',
+        'my in time',
+        'came late',
+        'did i come late',
+        'late minutes',
+        'meri attendance',
+        'meri hazri',
+        'मेरी हाज़िरी',
+      ],
+      scope: 'self',
+      sql: (p) => ({
+        text: `SELECT a.day::text AS date,
+                      CASE WHEN a.day_type::text = 'LV' THEN CASE WHEN t.loss_of_pay THEN 'LOP' ELSE COALESCE(t.code, 'LV') END ELSE a.day_type::text END AS code,
+                      to_char(a.in_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS first_in, to_char(a.out_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS last_out,
+                      a.late_minutes
+                 FROM staff_attendance_days a LEFT JOIN staff_leave_types t ON t.id = a.leave_type_id
+                WHERE a.employee_id = $1 AND a.day BETWEEN date_trunc('month', $2::date)::date AND (date_trunc('month', $2::date) + interval '1 month -1 day')::date
+                ORDER BY a.day`,
+        values: [ctx.employeeId ?? null, date(p.date, T)],
+      }),
+    },
+    {
+      id: 'my_leave_balance',
+      department: 'hr',
+      title: 'My leave balance',
+      titleHi: 'मेरा अवकाश शेष',
+      description: 'Your leave left of each type, and taken this year.',
+      anyOf: ['insights.assistant.use'],
+      params: [],
+      keywords: [
+        'leave balance',
+        'leaves left',
+        'how many leaves',
+        'leave left',
+        'chhutti kitni',
+        'kitni leave',
+        'kitni chhutti',
+        'अवकाश शेष',
+        'कितनी छुट्टी',
+      ],
+      scope: 'self',
+      sql: () => ({
+        text: `SELECT t.code, t.name AS leave_type, (b.opening + b.credited + b.correction - b.held)::text AS available,
+                      (SELECT COALESCE(sum(r.days), 0) FROM staff_leave_requests r WHERE r.employee_id = $1 AND r.leave_type_id = t.id AND r.status::text = 'approved'
+                         AND r.from_date >= make_date(EXTRACT(year FROM $2::date)::int - (EXTRACT(month FROM $2::date) < 4)::int, 4, 1)
+                         AND r.from_date < make_date(EXTRACT(year FROM $2::date)::int - (EXTRACT(month FROM $2::date) < 4)::int + 1, 4, 1))::text AS taken
+                 FROM staff_leave_types t
+                 CROSS JOIN LATERAL app.staff_leave_balance_peek($1, t.id, date_trunc('month', $2::date)::date) b
+                WHERE $1::bigint IS NOT NULL AND t.status::text = 'active' AND t.keeps_balance AND NOT t.loss_of_pay
+                  AND ((SELECT gender::text FROM employees WHERE id = $1) IS DISTINCT FROM 'male' OR t.for_male)
+                  AND ((SELECT gender::text FROM employees WHERE id = $1) IS DISTINCT FROM 'female' OR t.for_female)
+                ORDER BY t.sort_order, t.code`,
+        values: [ctx.employeeId ?? null, T],
+      }),
+    },
+    {
+      id: 'my_leave_requests',
+      department: 'hr',
+      title: 'My leave requests',
+      titleHi: 'मेरे अवकाश आवेदन',
+      description: 'Your latest leave requests and where each stands.',
+      anyOf: ['insights.assistant.use'],
+      params: [],
+      keywords: [
+        'my leave',
+        'leave status',
+        'leave request',
+        'leave approved',
+        'meri leave',
+        'meri chhutti',
+        'मेरी छुट्टी',
+        'अवकाश आवेदन',
+      ],
+      scope: 'self',
+      sql: () => ({
+        text: `SELECT r.number, t.name AS leave_type, r.from_date::text AS from_date, r.to_date::text AS to_date, r.days::text AS days, r.status::text AS status
+                 FROM staff_leave_requests r JOIN staff_leave_types t ON t.id = r.leave_type_id
+                WHERE r.employee_id = $1 ORDER BY r.from_date DESC, r.id DESC LIMIT 10`,
+        values: [ctx.employeeId ?? null],
+      }),
+    },
+    {
+      id: 'my_payslip',
+      department: 'hr',
+      title: 'My latest payslip',
+      titleHi: 'मेरी नवीनतम वेतन पर्ची',
+      description: 'Your latest payslip: month, gross, deductions and net pay.',
+      anyOf: ['payroll.own.view'],
+      params: [],
+      keywords: [
+        'payslip',
+        'pay slip',
+        'salary',
+        'net pay',
+        'my pay',
+        'tankhwah',
+        'tankha',
+        'vetan',
+        'वेतन',
+        'सैलरी',
+        'तनख्वाह',
+      ],
+      scope: 'self',
+      sql: () => ({
+        text: `SELECT to_char(r.month, 'YYYY-MM') AS month, r.gross_earned::text AS gross, r.total_deductions::text AS deductions, r.net_pay::text AS net_pay, r.status::text AS status
+                 FROM payroll_records r JOIN payroll_runs u ON u.id = r.run_id
+                WHERE r.employee_id = $1 AND u.stage::text IN ('LOCKED', 'PAID') AND u.deleted_at IS NULL AND r.status::text <> 'FAILED' AND r.payslip IS NOT NULL
+                ORDER BY r.month DESC, r.id DESC LIMIT 1`,
+        values: [ctx.employeeId ?? null],
+      }),
+    },
+    {
+      id: 'my_timetable_today',
+      department: 'academics',
+      title: 'My classes today',
+      titleHi: 'आज मेरी कक्षाएँ',
+      description: 'The periods you teach today: time, section, subject, room.',
+      anyOf: ['academics.timetable.view'],
+      params: [DATE],
+      keywords: [
+        'my timetable',
+        'my periods',
+        'my classes today',
+        'which class do i have',
+        'my class today',
+        'meri class',
+        'mera period',
+        'मेरी कक्षाएँ',
+      ],
+      scope: 'self',
+      sql: (p) => ({
+        text: `SELECT p.number, to_char(p.starts_at, 'HH24:MI') AS starts_at, to_char(p.ends_at, 'HH24:MI') AS ends_at,
+                      c.code || '-' || cs.name AS section, s.name AS subject, ts.room
+                 FROM timetable_slots ts JOIN class_sections cs ON cs.id = ts.class_section_id JOIN classes c ON c.id = cs.class_id
+                 JOIN timetable_periods p ON p.id = ts.period_id LEFT JOIN subjects s ON s.id = ts.subject_id
+                WHERE ts.academic_year_id = $1 AND ts.employee_id = $2 AND ts.weekday = EXTRACT(ISODOW FROM $3::date)::int
+                ORDER BY p.number`,
+        values: [Y, ctx.employeeId ?? null, date(p.date, T)],
+      }),
+    },
+    {
+      id: 'my_substitutions',
+      department: 'academics',
+      title: 'My substitutions',
+      titleHi: 'मेरे प्रतिस्थापन',
+      description:
+        'Substitutions from yesterday to next week: ones you take, and ones covered for you.',
+      anyOf: ['academics.substitution.view'],
+      params: [],
+      keywords: [
+        'my substitution',
+        'my substitutions',
+        'substitution for me',
+        'my proxy',
+        'arrangement for me',
+        'proxy period',
+        'मेरा प्रतिस्थापन',
+      ],
+      scope: 'self',
+      sql: () => ({
+        text: `SELECT ts.on_date::text AS date, p.name AS period, k.code || '-' || cs.name AS section, s.name AS subject,
+                      CASE WHEN ts.substitute_employee_id = $1 THEN 'you take it' ELSE 'covered for you' END AS role
+                 FROM timetable_substitutions ts JOIN class_sections cs ON cs.id = ts.class_section_id JOIN classes k ON k.id = cs.class_id
+                 JOIN timetable_periods p ON p.id = ts.period_id LEFT JOIN subjects s ON s.id = ts.subject_id
+                WHERE ts.on_date BETWEEN $2::date - 1 AND $2::date + 7 AND (ts.substitute_employee_id = $1 OR ts.absent_employee_id = $1)
+                ORDER BY ts.on_date, p.number`,
+        values: [ctx.employeeId ?? null, T],
+      }),
+    },
+    // ---- docs/design/91: the school today, for the principal and admin ---------------------------------
+    {
+      id: 'today_summary',
+      department: 'school',
+      title: 'The school today',
+      titleHi: 'आज विद्यालय',
+      description: "Today's student attendance, fees collected and staff present.",
+      anyOf: ['insights.dashboard.view'],
+      params: [],
+      keywords: [
+        'today summary',
+        'summary of today',
+        'school today',
+        'how is the school today',
+        'aaj ka summary',
+        'aaj ki report',
+        'आज का सारांश',
+        'आज विद्यालय',
+      ],
+      sql: () => ({
+        text: `SELECT
+                 (SELECT count(*) FROM attendance_marks m JOIN attendance_sessions a ON a.id = m.session_id
+                   WHERE a.academic_year_id = $1 AND a.kind = 'day' AND a.on_date = $2::date)::int AS marked,
+                 (SELECT count(*) FROM attendance_marks m JOIN attendance_sessions a ON a.id = m.session_id
+                   WHERE a.academic_year_id = $1 AND a.kind = 'day' AND a.on_date = $2::date AND m.code = 'A')::int AS absent,
+                 (SELECT COALESCE(sum(p.amount), 0) FROM fee_payments p WHERE p.received_on = $2::date AND p.status::text NOT IN ('bounced', 'reversed'))::text AS collected,
+                 (SELECT count(*) FROM staff_attendance_days d WHERE d.day = $2::date AND d.day_type::text IN ('P', 'HD'))::int AS staff_present`,
+        values: [Y, T],
       }),
     },
   ];

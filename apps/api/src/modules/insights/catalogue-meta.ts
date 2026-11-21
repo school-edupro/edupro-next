@@ -35,7 +35,8 @@ export interface EntryMeta {
   screen?: Screen;
   followUps?: string[];
   card?: (rows: Row[]) => Card;
-  answer?: (rows: Row[], params: Record<string, unknown>, lang: Lang) => string;
+  /** `self`: a student asking about themselves (say "you"). */
+  answer?: (rows: Row[], params: Record<string, unknown>, lang: Lang, self: boolean) => string;
 }
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
@@ -461,13 +462,20 @@ export const META: Record<string, EntryMeta> = {
     askHi: 'मेरे बच्चे और बकाया',
     screen: { label: 'Profile', labelHi: 'प्रोफ़ाइल', app: '/profile', parent: '/profile' },
     followUps: ['child_attendance', 'child_dues', 'child_homework'],
-    answer: (rows, _p, lang) =>
-      t(
-        lang,
-        `You have ${rows.length} ${rows.length === 1 ? 'child' : 'children'} in the school: ${rows.map((r) => r.child).join(', ')}.`,
-        `विद्यालय में आपके ${rows.length} बच्चे हैं: ${rows.map((r) => r.child).join(', ')}।`,
-        `School mein aapke ${rows.length} bachche hain: ${rows.map((r) => r.child).join(', ')}.`,
-      ),
+    answer: (rows, _p, lang, self) =>
+      self && rows[0]
+        ? t(
+            lang,
+            `You are ${rows[0].child} of ${rows[0].section ?? 'your class'} (adm. no. ${rows[0].admission_no}).`,
+            `आप ${rows[0].child}, ${rows[0].section ?? 'आपकी कक्षा'} (प्रवेश सं. ${rows[0].admission_no})।`,
+            `Aap ${rows[0].child}, ${rows[0].section ?? 'aapki class'} (adm. no. ${rows[0].admission_no}).`,
+          )
+        : t(
+            lang,
+            `You have ${rows.length} ${rows.length === 1 ? 'child' : 'children'} in the school: ${rows.map((r) => r.child).join(', ')}.`,
+            `विद्यालय में आपके ${rows.length} बच्चे हैं: ${rows.map((r) => r.child).join(', ')}।`,
+            `School mein aapke ${rows.length} bachche hain: ${rows.map((r) => r.child).join(', ')}.`,
+          ),
   },
   child_dues: {
     ask: 'How much fees is due?',
@@ -475,7 +483,7 @@ export const META: Record<string, EntryMeta> = {
     phrases: ['fees due', 'kitni fees baki hai', 'what do I have to pay'],
     screen: FEES,
     followUps: ['child_attendance', 'child_notices', 'my_children'],
-    answer: (rows, _p, lang) => {
+    answer: (rows, _p, lang, self) => {
       const total = rows.reduce((n, r) => n + num(r.balance), 0);
       const overdue = rows
         .filter((r) => r.state === 'overdue')
@@ -488,6 +496,13 @@ export const META: Record<string, EntryMeta> = {
           'Abhi ya agle 30 din mein kuch baki nahi hai.',
         );
       const names = [...new Set(rows.map((r) => String(r.child)))].join(', ');
+      if (self)
+        return t(
+          lang,
+          `${rupees(total)} of your fees is due${overdue > 0 ? ` (${rupees(overdue)} overdue)` : ''}. Your parent pays it.`,
+          `आपका ${rupees(total)} शुल्क बकाया है${overdue > 0 ? ` (${rupees(overdue)} समय से अधिक)` : ''}। भुगतान अभिभावक करते हैं।`,
+          `Aapki ${rupees(total)} fees baki hai${overdue > 0 ? ` (${rupees(overdue)} overdue)` : ''}. Payment parent karte hain.`,
+        );
       return t(
         lang,
         `${rupees(total)} is due for ${names}${overdue > 0 ? ` (${rupees(overdue)} overdue)` : ''}.`,
@@ -503,7 +518,7 @@ export const META: Record<string, EntryMeta> = {
     phrases: ['my attendance record', 'kitne din absent', 'was my child absent this week'],
     screen: ATTENDANCE,
     followUps: ['child_homework', 'child_dues', 'child_notices'],
-    answer: (rows, p, lang) => {
+    answer: (rows, p, lang, self) => {
       if (rows.length === 0)
         return t(
           lang,
@@ -516,6 +531,13 @@ export const META: Record<string, EntryMeta> = {
           const days = num(r.marked_days);
           const absent = num(r.absent_days);
           const pct = days ? Math.round(((days - absent) * 1000) / days) / 10 : 0;
+          if (self)
+            return t(
+              lang,
+              `You were present ${days - absent} of ${days} days (${pct}%), absent ${absent}.`,
+              `आप ${days} में से ${days - absent} दिन उपस्थित रहे (${pct}%), ${absent} अनुपस्थित।`,
+              `Aap ${days} mein se ${days - absent} din present rahe (${pct}%), ${absent} absent.`,
+            );
           return t(
             lang,
             `${r.child}: present ${days - absent} of ${days} days (${pct}%), absent ${absent}.`,
@@ -579,5 +601,428 @@ export const META: Record<string, EntryMeta> = {
     screen: NOTICES,
     followUps: ['child_homework', 'child_dues'],
     card: (rows) => tableCard(rows, ['published', 'kind', 'title']),
+  },
+  // ---- docs/design/91: a student's (or a parent's child's) own records -------------------------------
+  child_timetable_today: {
+    ask: "Today's classes",
+    askHi: 'आज की कक्षाएँ',
+    phrases: ['what classes do i have today', 'aaj kaunse period hain'],
+    screen: { label: 'Timetable', labelHi: 'समय सारणी', app: '/timetable', parent: '/timetable' },
+    followUps: ['child_homework', 'child_date_sheet', 'child_attendance'],
+    answer: (rows, _p, lang, self) => {
+      if (rows.length === 0)
+        return t(lang, 'No classes today.', 'आज कोई कक्षा नहीं है।', 'Aaj koi class nahi hai.');
+      const first = rows[0]!;
+      const who = self
+        ? t(lang, 'You have', 'आपकी', 'Aapke')
+        : `${first.child} ${t(lang, 'has', 'की', 'ke')}`;
+      return t(
+        lang,
+        `${who} ${rows.length} periods today; the first is ${first.subject ?? 'a period'} at ${first.starts_at}.`,
+        `${who} आज ${rows.length} कक्षाएँ हैं; पहली ${first.subject ?? 'कक्षा'} ${first.starts_at} बजे।`,
+        `${who} aaj ${rows.length} period hain; pehla ${first.subject ?? 'period'} ${first.starts_at} baje.`,
+      );
+    },
+    card: (rows) => tableCard(rows, ['starts_at', 'subject', 'teacher', 'room']),
+  },
+  child_date_sheet: {
+    ask: 'When is the next exam?',
+    askHi: 'अगली परीक्षा कब है?',
+    phrases: ['exam date sheet', 'next paper', 'exam kab hai'],
+    screen: {
+      label: 'Exam date sheet',
+      labelHi: 'परीक्षा डेट शीट',
+      app: '/date-sheet',
+      parent: '/date-sheet',
+    },
+    followUps: ['child_results', 'child_timetable_today', 'child_homework'],
+    answer: (rows, _p, lang) => {
+      if (rows.length === 0)
+        return t(
+          lang,
+          'No exam paper is coming up.',
+          'कोई परीक्षा पेपर आगे नहीं है।',
+          'Koi exam paper aage nahi hai.',
+        );
+      const r = rows[0]!;
+      return t(
+        lang,
+        `Next paper: ${r.subject} (${r.exam}) on ${r.date}${r.starts_at ? ` at ${r.starts_at}` : ''}. ${rows.length} papers to come.`,
+        `अगला पेपर: ${r.subject} (${r.exam}) ${r.date}${r.starts_at ? `, ${r.starts_at} बजे` : ''}। कुल ${rows.length} पेपर बाकी।`,
+        `Agla paper: ${r.subject} (${r.exam}) ${r.date}${r.starts_at ? ` ${r.starts_at} baje` : ''}. ${rows.length} paper baki.`,
+      );
+    },
+    card: (rows) => tableCard(rows, ['date', 'starts_at', 'subject', 'exam']),
+  },
+  child_results: {
+    ask: 'Show the report cards',
+    askHi: 'रिपोर्ट कार्ड दिखाओ',
+    phrases: ['my result', 'results of the term', 'result kab aayega'],
+    screen: { label: 'Results', labelHi: 'परिणाम', app: '/results', parent: '/results' },
+    followUps: ['child_date_sheet', 'child_dues', 'child_attendance'],
+    answer: (rows, _p, lang) => {
+      if (rows.length === 0)
+        return t(
+          lang,
+          'No report card has been released yet.',
+          'अभी कोई रिपोर्ट कार्ड जारी नहीं हुआ।',
+          'Abhi koi report card jaari nahi hua.',
+        );
+      const r = rows[0]!;
+      const held = r.held === true;
+      return t(
+        lang,
+        `${rows.length} released; the latest is ${r.name} (${r.released})${held ? ' — it is held, for example while fees are due' : ''}.`,
+        `${rows.length} जारी; नवीनतम ${r.name} (${r.released})${held ? ' — यह रोका गया है, जैसे शुल्क बकाया होने पर' : ''}।`,
+        `${rows.length} jaari; latest ${r.name} (${r.released})${held ? ' — roka gaya hai, jaise fees baki hone par' : ''}.`,
+      );
+    },
+    card: (rows) =>
+      tableCard(
+        rows.map((r) => ({ ...r, state: r.held ? 'Held' : 'Open' })),
+        ['name', 'released', 'state'],
+      ),
+  },
+  child_library: {
+    ask: 'Which library books are out?',
+    askHi: 'कौन सी पुस्तकें ली हुई हैं?',
+    phrases: ['when is my book due', 'kitab kab lautani hai'],
+    screen: { label: 'Library', labelHi: 'पुस्तकालय', app: '/library', parent: '/library' },
+    followUps: ['child_timetable_today', 'child_notices'],
+    answer: (rows, _p, lang) => {
+      if (rows.length === 0)
+        return t(
+          lang,
+          'No library books are out now.',
+          'अभी कोई पुस्तक ली हुई नहीं है।',
+          'Abhi koi kitab li hui nahi hai.',
+        );
+      const late = rows.filter((r) => num(r.days_late) > 0).length;
+      return t(
+        lang,
+        `${rows.length} ${rows.length === 1 ? 'book' : 'books'} out; the next is due on ${rows[0]!.due_on}${late ? `; ${late} overdue` : ''}.`,
+        `${rows.length} पुस्तकें ली हुई हैं; अगली ${rows[0]!.due_on} को लौटानी है${late ? `; ${late} देर से` : ''}।`,
+        `${rows.length} kitab li hui; agli ${rows[0]!.due_on} ko lautani hai${late ? `; ${late} late` : ''}.`,
+      );
+    },
+    card: (rows) => tableCard(rows, ['title', 'due_on', 'days_late']),
+  },
+  child_bus: {
+    ask: 'Which bus and when?',
+    askHi: 'कौन सी बस और कब?',
+    phrases: ['bus timing', 'bus kab aayegi', 'my bus stop'],
+    screen: { label: 'School bus', labelHi: 'स्कूल बस', app: '/transport', parent: '/transport' },
+    followUps: ['child_timetable_today', 'child_dues'],
+    answer: (rows, _p, lang) => {
+      if (rows.length === 0)
+        return t(
+          lang,
+          'No school bus this month.',
+          'इस महीने स्कूल बस नहीं है।',
+          'Is mahine school bus nahi hai.',
+        );
+      const r = rows[0]!;
+      return t(
+        lang,
+        `Pick-up: ${r.pick_route ?? '—'} at ${r.pick_stop ?? '—'}${r.pick_time ? `, ${r.pick_time}` : ''}; drop: ${r.drop_route ?? '—'} at ${r.drop_stop ?? '—'}${r.drop_time ? `, ${r.drop_time}` : ''}.`,
+        `पिक-अप: ${r.pick_route ?? '—'}, ${r.pick_stop ?? '—'}${r.pick_time ? ` ${r.pick_time}` : ''}; ड्रॉप: ${r.drop_route ?? '—'}, ${r.drop_stop ?? '—'}${r.drop_time ? ` ${r.drop_time}` : ''}।`,
+        `Pick-up: ${r.pick_route ?? '—'}, ${r.pick_stop ?? '—'}${r.pick_time ? ` ${r.pick_time}` : ''}; drop: ${r.drop_route ?? '—'}, ${r.drop_stop ?? '—'}${r.drop_time ? ` ${r.drop_time}` : ''}.`,
+      );
+    },
+    card: (rows) =>
+      rows.length === 1
+        ? {
+            kind: 'figures',
+            figures: [
+              {
+                label: 'Pick-up stop',
+                labelHi: 'पिक-अप स्टॉप',
+                value: String(rows[0]!.pick_stop ?? '—'),
+              },
+              {
+                label: 'Pick-up time',
+                labelHi: 'पिक-अप समय',
+                value: String(rows[0]!.pick_time ?? '—'),
+              },
+              {
+                label: 'Drop stop',
+                labelHi: 'ड्रॉप स्टॉप',
+                value: String(rows[0]!.drop_stop ?? '—'),
+              },
+              { label: 'Bus', labelHi: 'बस', value: String(rows[0]!.vehicle ?? '—') },
+            ],
+          }
+        : tableCard(rows, ['child', 'pick_stop', 'pick_time', 'drop_stop', 'vehicle']),
+  },
+  child_certificates: {
+    ask: 'My certificates',
+    askHi: 'मेरे प्रमाण पत्र',
+    phrases: ['bonafide certificate status', 'certificate request'],
+    screen: {
+      label: 'Certificates',
+      labelHi: 'प्रमाण पत्र',
+      app: '/certificates',
+      parent: '/certificates',
+    },
+    followUps: ['child_results', 'child_receipts'],
+    answer: (rows, _p, lang) => {
+      const issued = rows.filter((r) => r.state === 'issued').length;
+      const open = rows.length - issued;
+      if (rows.length === 0)
+        return t(
+          lang,
+          'No certificates yet.',
+          'अभी कोई प्रमाण पत्र नहीं।',
+          'Abhi koi certificate nahi.',
+        );
+      return t(
+        lang,
+        `${issued} issued${open ? `, ${open} ${open === 1 ? 'request' : 'requests'} in progress` : ''}.`,
+        `${issued} जारी${open ? `, ${open} आवेदन प्रक्रिया में` : ''}।`,
+        `${issued} jaari${open ? `, ${open} request process mein` : ''}.`,
+      );
+    },
+    card: (rows) => tableCard(rows, ['certificate', 'state', 'date', 'number']),
+  },
+  child_receipts: {
+    ask: 'Fees paid this session',
+    askHi: 'इस सत्र में भरा शुल्क',
+    phrases: ['fee receipts', 'how much fees paid', 'kitni fees jama hui'],
+    screen: { label: 'Fees', labelHi: 'शुल्क', app: '/fees', parent: '/fees' },
+    followUps: ['child_dues', 'child_certificates'],
+    answer: (rows, _p, lang) => {
+      if (rows.length === 0)
+        return t(
+          lang,
+          'No fees paid yet this session.',
+          'इस सत्र में अभी कोई शुल्क नहीं भरा।',
+          'Is session mein abhi koi fees jama nahi hui.',
+        );
+      const total = rows.reduce((n, r) => n + num(r.amount), 0);
+      return t(
+        lang,
+        `${rows.length} ${rows.length === 1 ? 'receipt' : 'receipts'} this session, ${rupees(total)} in all; the latest ${rupees(rows[0]!.amount)} on ${rows[0]!.date}.`,
+        `इस सत्र में ${rows.length} रसीदें, कुल ${rupees(total)}; नवीनतम ${rupees(rows[0]!.amount)} ${rows[0]!.date} को।`,
+        `Is session ${rows.length} receipt, kul ${rupees(total)}; latest ${rupees(rows[0]!.amount)} ${rows[0]!.date} ko.`,
+      );
+    },
+    card: (rows) => tableCard(rows, ['receipt_no', 'date', 'amount', 'mode']),
+  },
+  // ---- docs/design/91: a staff member's own records --------------------------------------------------
+  my_own_attendance: {
+    ask: 'My own attendance this month',
+    askHi: 'इस महीने मेरी उपस्थिति',
+    phrases: ['how many days was i late', 'meri hazri is mahine'],
+    screen: {
+      label: 'My attendance',
+      labelHi: 'मेरी उपस्थिति',
+      app: '/my-attendance',
+      teacher: '/my-attendance',
+    },
+    followUps: ['my_leave_balance', 'my_leave_requests', 'my_timetable_today'],
+    answer: (rows, _p, lang) => {
+      if (rows.length === 0)
+        return t(
+          lang,
+          'No attendance this month yet.',
+          'इस महीने अभी कोई उपस्थिति नहीं।',
+          'Is mahine abhi koi attendance nahi.',
+        );
+      const count = (codes: string[]) => rows.filter((r) => codes.includes(String(r.code))).length;
+      const late = rows.filter((r) => num(r.late_minutes) > 0).length;
+      return t(
+        lang,
+        `This month: present ${count(['P', 'HD'])}, absent ${count(['A', 'LOP'])}, on leave ${rows.length - count(['P', 'HD', 'A', 'LOP', 'WO', 'H'])}, late on ${late} ${late === 1 ? 'day' : 'days'}.`,
+        `इस महीने: उपस्थित ${count(['P', 'HD'])}, अनुपस्थित ${count(['A', 'LOP'])}, अवकाश ${rows.length - count(['P', 'HD', 'A', 'LOP', 'WO', 'H'])}, देर ${late} दिन।`,
+        `Is mahine: present ${count(['P', 'HD'])}, absent ${count(['A', 'LOP'])}, leave ${rows.length - count(['P', 'HD', 'A', 'LOP', 'WO', 'H'])}, late ${late} din.`,
+      );
+    },
+    card: (rows) => tableCard(rows, ['date', 'code', 'first_in', 'last_out', 'late_minutes']),
+  },
+  my_leave_balance: {
+    ask: 'How many leaves do I have left?',
+    askHi: 'मेरी कितनी छुट्टियाँ बाकी हैं?',
+    phrases: ['leave balance', 'kitni chhutti bachi hai'],
+    screen: {
+      label: 'My leave',
+      labelHi: 'मेरा अवकाश',
+      app: '/my-leave',
+      teacher: '/my-leave',
+      admin: '/leave',
+    },
+    followUps: ['my_leave_requests', 'my_own_attendance'],
+    answer: (rows, _p, lang) =>
+      rows.length === 0
+        ? t(
+            lang,
+            'No leave balance is kept for you.',
+            'आपका कोई अवकाश शेष नहीं रखा जाता।',
+            'Aapka koi leave balance nahi rakha jata.',
+          )
+        : t(
+            lang,
+            `Leave left: ${rows.map((r) => `${r.code} ${num(r.available)}`).join(', ')}.`,
+            `शेष अवकाश: ${rows.map((r) => `${r.code} ${num(r.available)}`).join(', ')}।`,
+            `Bachi leave: ${rows.map((r) => `${r.code} ${num(r.available)}`).join(', ')}.`,
+          ),
+    card: (rows) => tableCard(rows, ['leave_type', 'available', 'taken']),
+  },
+  my_leave_requests: {
+    ask: 'Where are my leave requests?',
+    askHi: 'मेरे अवकाश आवेदन कहाँ हैं?',
+    screen: {
+      label: 'My leave',
+      labelHi: 'मेरा अवकाश',
+      app: '/my-leave',
+      teacher: '/my-leave',
+      admin: '/leave',
+    },
+    followUps: ['my_leave_balance', 'my_own_attendance'],
+    answer: (rows, _p, lang) =>
+      rows.length === 0
+        ? t(
+            lang,
+            'You have no leave requests.',
+            'आपका कोई अवकाश आवेदन नहीं है।',
+            'Aapki koi leave request nahi hai.',
+          )
+        : t(
+            lang,
+            `Your latest: ${rows[0]!.leave_type}, ${rows[0]!.from_date} to ${rows[0]!.to_date} — ${rows[0]!.status}.`,
+            `नवीनतम: ${rows[0]!.leave_type}, ${rows[0]!.from_date} से ${rows[0]!.to_date} — ${rows[0]!.status}।`,
+            `Latest: ${rows[0]!.leave_type}, ${rows[0]!.from_date} se ${rows[0]!.to_date} — ${rows[0]!.status}.`,
+          ),
+    card: (rows) => tableCard(rows, ['leave_type', 'from_date', 'to_date', 'days', 'status']),
+  },
+  my_payslip: {
+    ask: 'My latest payslip',
+    askHi: 'मेरी नवीनतम वेतन पर्ची',
+    phrases: ['what is my salary this month', 'salary kitni aayi'],
+    screen: {
+      label: 'My payslips',
+      labelHi: 'मेरी वेतन पर्चियाँ',
+      app: '/my-payslips',
+      teacher: '/my-payslips',
+      admin: '/payroll/me',
+    },
+    followUps: ['my_leave_balance', 'my_own_attendance'],
+    answer: (rows, _p, lang) =>
+      rows.length === 0
+        ? t(
+            lang,
+            'No payslip is out yet.',
+            'अभी कोई वेतन पर्ची जारी नहीं हुई।',
+            'Abhi koi payslip nahi aayi.',
+          )
+        : t(
+            lang,
+            `Your payslip for ${rows[0]!.month}: net pay ${rupees(rows[0]!.net_pay)}.`,
+            `${rows[0]!.month} की वेतन पर्ची: शुद्ध वेतन ${rupees(rows[0]!.net_pay)}।`,
+            `${rows[0]!.month} ki payslip: net pay ${rupees(rows[0]!.net_pay)}.`,
+          ),
+    card: (rows) => ({
+      kind: 'figures',
+      figures: [
+        { label: 'Month', labelHi: 'महीना', value: String(rows[0]!.month) },
+        { label: 'Gross', labelHi: 'सकल', value: rupees(rows[0]!.gross) },
+        { label: 'Deductions', labelHi: 'कटौती', value: rupees(rows[0]!.deductions) },
+        { label: 'Net pay', labelHi: 'शुद्ध वेतन', value: rupees(rows[0]!.net_pay) },
+      ],
+    }),
+  },
+  my_timetable_today: {
+    ask: 'My classes today',
+    askHi: 'आज मेरी कक्षाएँ',
+    phrases: ['which period do i have next', 'aaj mere kitne period hain'],
+    screen: {
+      label: 'My timetable',
+      labelHi: 'मेरी समय सारणी',
+      app: '/timetable',
+      teacher: '/timetable',
+    },
+    followUps: ['my_substitutions', 'my_attendance_today', 'my_homework'],
+    answer: (rows, _p, lang) =>
+      rows.length === 0
+        ? t(
+            lang,
+            'You have no periods today.',
+            'आज आपकी कोई कक्षा नहीं है।',
+            'Aaj aapka koi period nahi hai.',
+          )
+        : t(
+            lang,
+            `You teach ${rows.length} periods today; the first is ${rows[0]!.section} ${rows[0]!.subject ?? ''} at ${rows[0]!.starts_at}.`,
+            `आज आपकी ${rows.length} कक्षाएँ हैं; पहली ${rows[0]!.section} ${rows[0]!.subject ?? ''} ${rows[0]!.starts_at} बजे।`,
+            `Aaj aapke ${rows.length} period hain; pehla ${rows[0]!.section} ${rows[0]!.subject ?? ''} ${rows[0]!.starts_at} baje.`,
+          ),
+    card: (rows) => tableCard(rows, ['starts_at', 'section', 'subject', 'room']),
+  },
+  my_substitutions: {
+    ask: 'My substitutions this week',
+    askHi: 'इस सप्ताह मेरे प्रतिस्थापन',
+    screen: {
+      label: 'My timetable',
+      labelHi: 'मेरी समय सारणी',
+      app: '/timetable',
+      teacher: '/timetable',
+    },
+    followUps: ['my_timetable_today', 'my_leave_requests'],
+    answer: (rows, _p, lang) => {
+      const take = rows.filter((r) => r.role === 'you take it').length;
+      return rows.length === 0
+        ? t(
+            lang,
+            'No substitutions for you this week.',
+            'इस सप्ताह आपका कोई प्रतिस्थापन नहीं।',
+            'Is hafte aapka koi substitution nahi.',
+          )
+        : t(
+            lang,
+            `${rows.length} substitutions from yesterday to next week; ${take} for you to take.`,
+            `कल से अगले सप्ताह तक ${rows.length} प्रतिस्थापन; ${take} आपको लेने हैं।`,
+            `Kal se agle hafte tak ${rows.length} substitution; ${take} aapko lene hain.`,
+          );
+    },
+    card: (rows) => tableCard(rows, ['date', 'period', 'section', 'subject', 'role']),
+  },
+  // ---- docs/design/91: the school today ---------------------------------------------------------------
+  today_summary: {
+    ask: 'How is the school today?',
+    askHi: 'आज विद्यालय में क्या स्थिति है?',
+    phrases: ['summary for today', 'aaj ka haal'],
+    screen: {
+      label: 'Principal dashboard',
+      labelHi: 'प्रधानाचार्य डैशबोर्ड',
+      admin: '/insights/principal',
+    },
+    followUps: ['absentees_of_day', 'receipts_of_day', 'staff_punches_today'],
+    answer: (rows, _p, lang) => {
+      const r = rows[0] ?? {};
+      const marked = num(r.marked);
+      const absent = num(r.absent);
+      const pct = marked ? Math.round(((marked - absent) * 1000) / marked) / 10 : 0;
+      return t(
+        lang,
+        `Today: ${marked ? `${pct}% of students present (${absent} absent)` : 'attendance not marked yet'}, ${rupees(r.collected)} fees collected, ${num(r.staff_present)} staff present.`,
+        `आज: ${marked ? `${pct}% विद्यार्थी उपस्थित (${absent} अनुपस्थित)` : 'उपस्थिति अभी नहीं लगी'}, ${rupees(r.collected)} शुल्क प्राप्त, ${num(r.staff_present)} कर्मचारी उपस्थित।`,
+        `Aaj: ${marked ? `${pct}% students present (${absent} absent)` : 'attendance abhi nahi lagi'}, ${rupees(r.collected)} fees aayi, ${num(r.staff_present)} staff present.`,
+      );
+    },
+    card: (rows) => {
+      const r = rows[0] ?? {};
+      return {
+        kind: 'figures',
+        figures: [
+          { label: 'Students marked', labelHi: 'उपस्थिति दर्ज', value: String(num(r.marked)) },
+          { label: 'Absent', labelHi: 'अनुपस्थित', value: String(num(r.absent)) },
+          { label: 'Fees collected', labelHi: 'शुल्क प्राप्त', value: rupees(r.collected) },
+          {
+            label: 'Staff present',
+            labelHi: 'कर्मचारी उपस्थित',
+            value: String(num(r.staff_present)),
+          },
+        ],
+      };
+    },
   },
 };

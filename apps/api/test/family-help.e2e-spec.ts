@@ -219,10 +219,10 @@ describe('family help (e2e)', () => {
       headers: h(admin),
       json: {
         headingId: null,
-        question: 'Can I ask the assistant in Hindi?',
+        question: 'Can I write a query in Hindi?',
         answer: 'Yes, or in Hinglish.',
         audience: 'both',
-        page: '/assistant',
+        page: '/queries',
       },
     });
     expect(q.statusCode).toBe(201);
@@ -230,9 +230,9 @@ describe('family help (e2e)', () => {
     const p = await family(parent);
     // no heading: "Other questions", last
     expect(p.groups.at(-1)).toMatchObject({ id: null, title: 'Other questions' });
-    expect(questionsOf(p)).toContain('Can I ask the assistant in Hindi?');
-    // a student has no assistant
-    expect(questionsOf(await family(student))).not.toContain('Can I ask the assistant in Hindi?');
+    expect(questionsOf(p)).toContain('Can I write a query in Hindi?');
+    // a student has no Queries (a parents' screen)
+    expect(questionsOf(await family(student))).not.toContain('Can I write a query in Hindi?');
   });
 
   it('the office orders headings and questions', async () => {
@@ -337,7 +337,7 @@ describe('family help (e2e)', () => {
     const other = (await family(parent)).groups.at(-1)!;
     expect(other.title).toBe('Other questions');
     expect(other.questions.map((q) => q.question)).toEqual([
-      'Can I ask the assistant in Hindi?',
+      'Can I write a query in Hindi?',
       'I paid online but the receipt is not showing.',
     ]);
     // a question cannot go under a deleted heading

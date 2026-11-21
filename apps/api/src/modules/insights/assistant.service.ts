@@ -63,6 +63,8 @@ export interface AskResponse {
 }
 
 type Chip = { id: string; question: string };
+/** Who is asking: unrestricted staff, a teacher (own sections), a parent (own children), a student (themself). */
+type Kind = 'staff' | 'teacher' | 'family' | 'student';
 
 /** Token budgets in Redis (shared across API instances); memory when Redis is unreachable. */
 class RedisBudgetStore implements BudgetStore {
@@ -303,32 +305,67 @@ export class AssistantService {
   }
 
   /**
-   * Sprint 15: who is asking. Families get their children (student scope); teachers with section scopes get
-   * those sections; everyone else is unrestricted staff and keeps the Sprint 14 catalogue.
+   * Who is asking. Families get their children (student scope) — a student login is a family of one (docs/design/91:
+   * "student"); teachers with section scopes get those sections; everyone else is unrestricted staff. Staff with an
+   * employee record also get their own records (the self scope).
    */
   private async scope(ctx: RequestContext): Promise<{
-    kind: 'staff' | 'teacher' | 'family';
+    kind: Kind;
     sectionIds: string[] | null;
     studentIds: string[] | null;
+    employeeId: string | null;
   }> {
     const v = await this.viewer.resolve(ctx, 'insights.assistant.use');
-    if (v.kind === 'family')
-      return { kind: 'family', sectionIds: null, studentIds: v.students.map((s) => s.id) };
+    if (v.kind === 'family') {
+      const student = await this.db.tenant(requireTenant(ctx), (c) =>
+        c.query<{ student: boolean }>(
+          `SELECT COALESCE(bool_and(person_type::text = 'student'), false) AS student FROM user_school_memberships
+            WHERE user_id = app.current_user_id() AND school_id = app.current_school_id() AND status = 'active' AND deleted_at IS NULL`,
+        ),
+      );
+      return {
+        kind: student.rows[0]?.student ? 'student' : 'family',
+        sectionIds: null,
+        studentIds: v.students.map((s) => s.id),
+        employeeId: null,
+      };
+    }
     if (v.sectionIds !== null)
-      return { kind: 'teacher', sectionIds: v.sectionIds, studentIds: null };
-    return { kind: 'staff', sectionIds: null, studentIds: null };
+      return {
+        kind: 'teacher',
+        sectionIds: v.sectionIds,
+        studentIds: null,
+        employeeId: v.employeeId,
+      };
+    return { kind: 'staff', sectionIds: null, studentIds: null, employeeId: v.employeeId };
   }
 
-  /** The catalogue entries the caller may run (permission `anyOf` and the caller's scope kind). */
+  /**
+   * The catalogue entries the caller may run: the permission (`anyOf`) and the caller's scope — staff the unscoped
+   * entries, teachers their sections', families and students the student-scoped ones; staff and teachers with an
+   * employee record also their own (self) entries.
+   */
   allowed(
     ctx: RequestContext,
     entries: CatalogueEntry[],
-    kind: 'staff' | 'teacher' | 'family' = 'staff',
+    kind: Kind = 'staff',
+    employeeId: string | null = null,
   ): CatalogueEntry[] {
     const p = ctx.permissions;
     if (!p) return [];
-    const scopeOf = kind === 'family' ? 'student' : kind === 'teacher' ? 'section' : undefined;
-    return entries.filter((e) => e.scope === scopeOf && e.anyOf.some((code) => p.has(code)));
+    const scopeOf =
+      kind === 'family' || kind === 'student'
+        ? 'student'
+        : kind === 'teacher'
+          ? 'section'
+          : undefined;
+    return entries.filter(
+      (e) =>
+        (e.scope === scopeOf ||
+          (e.scope === 'self' && employeeId !== null && kind !== 'family' && kind !== 'student')) &&
+        (kind !== 'student' || !e.parentOnly) &&
+        e.anyOf.some((code) => p.has(code)),
+    );
   }
 
   async catalogue(ctx: RequestContext) {
@@ -336,12 +373,18 @@ export class AssistantService {
     const yearId = this.year(tenant);
     const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
     const scope = await this.scope(ctx);
+    const scopeOf =
+      scope.kind === 'family' || scope.kind === 'student'
+        ? 'student'
+        : scope.kind === 'teacher'
+          ? 'section'
+          : undefined;
     const entries = buildCatalogue({ academicYearId: yearId, today, ...scope }).filter(
-      (e) =>
-        e.scope ===
-        (scope.kind === 'family' ? 'student' : scope.kind === 'teacher' ? 'section' : undefined),
+      (e) => e.scope === scopeOf || (e.scope === 'self' && scope.employeeId !== null),
     );
-    const allowed = new Set(this.allowed(ctx, entries, scope.kind).map((e) => e.id));
+    const allowed = new Set(
+      this.allowed(ctx, entries, scope.kind, scope.employeeId).map((e) => e.id),
+    );
     return entries.map((e) => ({
       id: e.id,
       department: e.department,
@@ -362,17 +405,17 @@ export class AssistantService {
     const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
     const scope = await this.scope(ctx);
     const entries = buildCatalogue({ academicYearId: yearId, today, ...scope });
-    const mine = this.allowed(ctx, entries, scope.kind);
+    const mine = this.allowed(ctx, entries, scope.kind, scope.employeeId);
     const language = dto.language ?? detectLanguage(dto.question);
     // the surface follows the caller: families are parents, scoped teachers are teachers; unscoped staff
     // may say which staff app asked (admin or teacher) but can never pose as a parent
     const surface: 'admin' | 'teacher' | 'parent' =
-      scope.kind === 'family'
+      scope.kind === 'family' || scope.kind === 'student'
         ? 'parent'
         : scope.kind === 'teacher' || dto.surface === 'teacher'
           ? 'teacher'
           : 'admin';
-    if (scope.kind === 'family' && scope.studentIds!.length === 0)
+    if ((scope.kind === 'family' || scope.kind === 'student') && scope.studentIds!.length === 0)
       throw new DomainError('family.not_linked', 'No child is linked to this account', {
         status: 403,
       });
@@ -389,8 +432,29 @@ export class AssistantService {
             { status: 403, extra: { purpose: 'ai.assistant' } },
           );
       }
+      if (scope.kind === 'student') {
+        // DPDP (docs/design/91): a student is a minor; a parent's AI assistant consent covers them
+        const consent = await c.query<{ ok: boolean }>(
+          `SELECT COALESCE(bool_or(app.consent_status(g.user_id, 'ai.assistant')::text = 'granted'), false) AS ok
+             FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+            WHERE sg.student_id = ANY($1::bigint[]) AND g.user_id IS NOT NULL AND g.deleted_at IS NULL`,
+          [scope.studentIds],
+        );
+        if (!consent.rows[0]?.ok)
+          throw new DomainError(
+            'consent-required',
+            'Ask a parent to turn on the AI assistant consent in their profile',
+            { status: 403, extra: { purpose: 'ai.assistant', whose: 'parent' } },
+          );
+      }
       if (this.local)
-        return this.askLocal(c, ctx, dto, { entries: mine, language, surface, today });
+        return this.askLocal(c, ctx, dto, {
+          entries: mine,
+          language,
+          surface,
+          today,
+          self: scope.kind === 'student',
+        });
       const conversationId = await this.openConversation(c, dto.conversationId, language, surface);
       const history = await this.history(c, conversationId);
       const citations: Citation[] = [];
@@ -515,6 +579,8 @@ export class AssistantService {
       language: 'en' | 'hi' | 'hinglish';
       surface: 'admin' | 'teacher' | 'parent';
       today: string;
+      /** a student asking about themselves (the answer says "you") */
+      self?: boolean;
     },
   ): Promise<AskResponse> {
     const tenant = requireTenant(ctx);
@@ -624,7 +690,7 @@ export class AssistantService {
         const out = await runEntry(c, entry, params);
         const meta = META[entry.id];
         answer = meta?.answer
-          ? meta.answer(out.rows, params, language)
+          ? meta.answer(out.rows, params, language, o.self === true)
           : genericAnswer(entry.title, entry.titleHi, out.rows, params, language);
         card = out.rows.length ? (meta?.card ? meta.card(out.rows) : tableCard(out.rows)) : null;
         if (meta?.screen) {

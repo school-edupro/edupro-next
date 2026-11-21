@@ -98,3 +98,16 @@ actions taken by the bot (it opens the screen; the person acts there).
 suggestions, citations}`, the question audited masked, the conversation keeping what was shown (migration
   **0408** `ai_messages.display`). The evaluation set scores 96.5 % correct-or-declined, 0 leaks; the Sprint 14–16
   and red-team tests now check the sentence, card and source; `apps/api/test/chatbot.e2e-spec.ts` covers the shape.
+- **B (21 Nov 2026).** The caller kinds are staff, teacher, family and **student** (a student login is a family of one,
+  answered with "you"); staff and teachers with an employee record also get the **self** scope. 14 queries added (61
+  in all): the student / child's **today's classes, coming exam papers, report cards released (held or not), library
+  books, school bus, certificates, fee receipts**; a staff member's **own attendance this month, leave balance, leave
+  requests, latest payslip, classes today, substitutions**; the admin's **school today** (attendance, fees collected,
+  staff present). "Approvals waiting for me" is left out: the approvals inbox gathers some 33 sources, each with its
+  own rights, and a single query would give a wrong count. Migration **0409** gives the standard Student role the
+  assistant right; a student may ask only when a parent gave the AI assistant consent (`consent-required`, `whose:
+parent`). The matcher joins apostrophes, counts two-letter Hindi words, and takes a question holding every word of a
+  query's own phrasing (its chip) as a strong match. Tests: `apps/api/test/chatbot-scopes.e2e-spec.ts` (consent,
+  "you", no reach to another student or staff queries, the own records, the school today, every chip question of
+  every role in English and Hindi); the evaluation set 97 %, 0 leaks; family-layout and family-help tests now use a
+  parents' screen (Queries) as the one a student cannot open.

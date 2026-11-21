@@ -171,7 +171,8 @@ describe('family app layout (e2e)', () => {
     expect(st.cards.map((c) => c.key)).toEqual(STUDENT_START.cards);
     expect(st.cards[0]).toMatchObject({ label: 'Attendance today', labelHi: 'आज की उपस्थिति' });
     expect(hrefs(st.screens)).not.toContain('/queries');
-    expect(hrefs(st.screens)).not.toContain('/assistant');
+    // since 0409 (docs/design/91) a student may ask the assistant too
+    expect(hrefs(st.screens)).toContain('/assistant');
 
     const pa = await mine(parent, 'parent');
     expect(hrefs(pa.tabs)).toEqual(['/', 'academics', '/fees', '/messages', 'more']);
@@ -246,11 +247,12 @@ describe('family app layout (e2e)', () => {
 
     const st = await mine(student, 'student');
     expect((st as Mine & { published: boolean }).published).toBe(true);
-    // the Assistant is not a student's: its tab goes to the first shortcut not yet a tab
-    expect(hrefs(st.tabs)).toEqual(['/', 'academics', '/results', '/attendance', 'more']);
+    // since 0409 the Assistant is a student's too (a hidden tab giving its place: the hidden-screens test)
+    expect(hrefs(st.tabs)).toEqual(['/', 'academics', '/assistant', '/results', 'more']);
     expect(hrefs(st.shortcuts)).toEqual([
       '/attendance',
       '/library',
+      '/assistant',
       '/health',
       '/certificates',
       '/transport',
@@ -313,7 +315,7 @@ describe('family app layout (e2e)', () => {
     expect(hrefs((await mine(student, 'student')).shortcuts)[0]).toBe('/library');
     // only screens the person can open, 4 to 12, once each
     expect((await put(['/library', '/health', '/help', '/queries'])).statusCode).toBe(400);
-    expect((await put(['/library', '/health', '/help', '/assistant'])).statusCode).toBe(400);
+    expect((await put(['/library', '/health', '/help', '/nowhere'])).statusCode).toBe(400);
     expect((await put(['/library', '/health', '/help'])).statusCode).toBe(400);
     expect((await put(['/library', '/health', '/help', '/help'])).statusCode).toBe(400);
     // a parent's own are apart
@@ -329,9 +331,7 @@ describe('family app layout (e2e)', () => {
     });
     expect(reset.statusCode).toBe(200);
     expect(reset.json()).toMatchObject({ ownShortcuts: false });
-    expect(hrefs((reset.json() as Mine).shortcuts)).toEqual(
-      [...live.shortcuts].reverse().filter((x) => x !== '/assistant'),
-    );
+    expect(hrefs((reset.json() as Mine).shortcuts)).toEqual([...live.shortcuts].reverse());
     expect((await mine(parent, 'parent')).ownShortcuts).toBe(true);
   });
 

@@ -36,6 +36,13 @@ const SCOPED = {
     'my_homework',
     'my_open_queries',
     'my_marks_status',
+    // docs/design/91: a teacher's own records (the self scope)
+    'my_own_attendance',
+    'my_leave_balance',
+    'my_leave_requests',
+    'my_payslip',
+    'my_timetable_today',
+    'my_substitutions',
   ]),
   parent: new Set([
     'my_children',
@@ -43,6 +50,14 @@ const SCOPED = {
     'child_attendance',
     'child_homework',
     'child_notices',
+    // docs/design/91: the child's own records
+    'child_timetable_today',
+    'child_date_sheet',
+    'child_results',
+    'child_library',
+    'child_bus',
+    'child_certificates',
+    'child_receipts',
   ]),
 };
 

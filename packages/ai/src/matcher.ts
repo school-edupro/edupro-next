@@ -40,6 +40,8 @@ export function normalise(text: string): string {
     .toLowerCase()
     // 10,000 is one number
     .replace(/(\d),(?=\d)/g, '$1')
+    // today's → todays: an apostrophe joins, it does not split
+    .replace(/['`’]/g, '')
     .replace(/[“”"'`’?!.,;:()[\]{}]/g, ' ')
     .replace(/\bhaziri\b/g, 'hazri')
     .replace(/\bfee\b/g, 'fees')
@@ -54,7 +56,8 @@ const tokens = (s: string) =>
   normalise(s)
     .trim()
     .split(' ')
-    .filter((w) => w.length >= 3);
+    // short Hindi words carry meaning (बस, कब): two letters count there
+    .filter((w) => w.length >= 3 || (w.length === 2 && /[ऀ-ॿ]/.test(w)));
 
 const MONTHS = [
   'jan',
@@ -131,12 +134,20 @@ export function matchQuestion(
       const keyword = c.keywords
         .filter((k) => q.includes(normalise(k).trim()))
         .reduce((n, k) => n + k.length, 0);
-      // a whole example question: shared words add a little, so close wordings win ties
+      // a whole example question: shared words add a little, so close wordings win ties; a question holding every
+      // word of one (two words or more — e.g. its chip, tapped) is a strong match on its own
       const phrase = Math.max(
         0,
-        ...(c.phrases ?? []).map((p) => tokens(p).filter((w) => words.has(w)).length * 2),
+        ...(c.phrases ?? []).map((p) => {
+          const pw = tokens(p);
+          const shared = pw.filter((w) => words.has(w)).length;
+          return shared * 2 + (pw.length >= 2 && shared === pw.length ? 8 : 0);
+        }),
       );
-      return { c, score: keyword + (keyword > 0 ? phrase : Math.min(phrase, 4)) };
+      return {
+        c,
+        score: keyword + (keyword > 0 || phrase >= 8 ? phrase : Math.min(phrase, 4)),
+      };
     })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);
