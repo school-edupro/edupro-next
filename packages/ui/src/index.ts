@@ -99,6 +99,15 @@ export {
   type ReviewRemark,
 } from './components/AdmissionReview';
 export {
+  AssistantWindow,
+  type AssistantWindowAnswer,
+  type AssistantWindowMessage,
+  type AssistantWindowProps,
+  type AssistantWindowResult,
+  type AssistantWindowStart,
+} from './components/AssistantWindow';
+export {
+  AssistantCard,
   AssistantChat,
   assistantMoney,
   assistantWords,

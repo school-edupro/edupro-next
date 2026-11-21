@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { ApiError } from '@edupro/bff';
+import { AssistantDock } from '@/components/AssistantDock';
 import { FamilyShell, audienceOf } from '@/components/FamilyShell';
 import { homeLayout, isHidden } from '@/lib/home-layout';
 import { bff } from '@/lib/bff';
@@ -43,30 +44,36 @@ export default async function FamilyLayout({ children }: { children: ReactNode }
   const layout = got?.published ? got : null;
   // a screen the school hides from families: its address says so (the shell, menu and header stay)
   const hidden = isHidden(layout, currentPath);
+  // the MobiAI chat window (docs/design/92): for those with the assistant, unless the school hides it
+  const ask =
+    !ended && me.permissions.includes('insights.assistant.use') && !isHidden(layout, '/assistant');
   return (
-    <FamilyShell me={me} lang={lang} currentPath={currentPath} unread={unread} layout={layout}>
-      {ended ? (
-        <div className="ep-card" role="status">
-          <h1>{t(lang, 'Portal access has ended')}</h1>
-          <p>
-            {t(
-              lang,
-              'Your access to this school portal has ended. Please contact the school office for any paper you need.',
-            )}
-          </p>
-        </div>
-      ) : hidden ? (
-        <div className="ep-card" role="status" style={{ maxWidth: '40rem' }}>
-          <h1 style={{ marginTop: 0 }}>{t(lang, 'Your school does not offer this here.')}</h1>
-          <p style={{ marginBottom: 0 }}>
-            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/">
-              {t(lang, 'Go to Home')}
-            </a>
-          </p>
-        </div>
-      ) : (
-        children
-      )}
-    </FamilyShell>
+    <>
+      <FamilyShell me={me} lang={lang} currentPath={currentPath} unread={unread} layout={layout}>
+        {ended ? (
+          <div className="ep-card" role="status">
+            <h1>{t(lang, 'Portal access has ended')}</h1>
+            <p>
+              {t(
+                lang,
+                'Your access to this school portal has ended. Please contact the school office for any paper you need.',
+              )}
+            </p>
+          </div>
+        ) : hidden ? (
+          <div className="ep-card" role="status" style={{ maxWidth: '40rem' }}>
+            <h1 style={{ marginTop: 0 }}>{t(lang, 'Your school does not offer this here.')}</h1>
+            <p style={{ marginBottom: 0 }}>
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/">
+                {t(lang, 'Go to Home')}
+              </a>
+            </p>
+          </div>
+        ) : (
+          children
+        )}
+      </FamilyShell>
+      {ask ? <AssistantDock lang={lang} /> : null}
+    </>
   );
 }

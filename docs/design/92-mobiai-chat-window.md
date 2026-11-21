@@ -76,3 +76,16 @@ the person's language).
   subtitle for students, parents, teachers and office (the standard one as the hint, in English and Hindi), and a
   preview of the window's top; an empty name is a problem to fix before Save; the save sends them with the rest.
   Checked in a browser (Save caught, nothing saved on Alpha) with axe.
+- **C (21 Nov 2026).** `AssistantWindow` (a client component in `@edupro/ui`, styles `.mobiai*` in `app.css`): the
+  round button at the bottom right (above the phone tab bar), the panel (25 × 36 rem; the whole screen on a phone)
+  with the navy header (name, subtitle with a green dot, Open full page, the bin for a new conversation, Close), the
+  topic bar, Today, the greeting by the time of day with the person's first name and "Try asking", Your Quick Update,
+  the bubbles with their times (each answer's figures or table — a wide table scrolls and is reachable by keyboard —
+  Open <screen>, the source and Ask next / Did you mean / You can ask), three dots while it looks, the notes for
+  switched off, consent, "ask a parent" and today's limit, the question box and send, and the footer. It stays open
+  with its conversation while the person moves between pages (the tab's session); Esc closes and the focus goes
+  back to the button. Each website mounts it in its frame (`components/AssistantDock.tsx`, not on the full Assistant
+  page) for people with the assistant right — on the parents' website unless the school hides the Assistant — with
+  its own server actions (`lib/assistant-window.ts`: start, ask with the website's surface, the conversation).
+  Checked on a made-up test school at 1280 and 375 px (open, topic, typed question, another page, Esc, the bin, not
+  on the full page; axe) and with the parent, student, teacher and admin accessibility lists.

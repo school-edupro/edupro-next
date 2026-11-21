@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { ApiError } from '@edupro/bff';
+import { AssistantDock } from '@/components/AssistantDock';
 import { StaffShell } from '@/components/StaffShell';
 import { bff } from '@/lib/bff';
 import { currentLang } from '@/lib/i18n';
@@ -110,30 +111,34 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       .catch(() => ({ leave: 0, corrections: 0, team: 0, reports: 0 })),
   ]);
   return (
-    <StaffShell
-      me={me}
-      lang={lang}
-      currentPath={currentPath}
-      unread={unread}
-      waiting={{
-        approvals,
-        profileChanges,
-        exits,
-        noDues,
-        admissions,
-        purchase,
-        requisitions,
-        orders,
-        receipts,
-        issues,
-        assets,
-        staffLeave: leaveMenu.leave,
-        staffRegularisations: leaveMenu.corrections,
-        leaveReports: leaveMenu.reports,
-        team: leaveMenu.team,
-      }}
-    >
-      {children}
-    </StaffShell>
+    <>
+      <StaffShell
+        me={me}
+        lang={lang}
+        currentPath={currentPath}
+        unread={unread}
+        waiting={{
+          approvals,
+          profileChanges,
+          exits,
+          noDues,
+          admissions,
+          purchase,
+          requisitions,
+          orders,
+          receipts,
+          issues,
+          assets,
+          staffLeave: leaveMenu.leave,
+          staffRegularisations: leaveMenu.corrections,
+          leaveReports: leaveMenu.reports,
+          team: leaveMenu.team,
+        }}
+      >
+        {children}
+      </StaffShell>
+      {/* the MobiAI chat window (docs/design/92) for those with the assistant */}
+      {me.permissions.includes('insights.assistant.use') ? <AssistantDock lang={lang} /> : null}
+    </>
   );
 }

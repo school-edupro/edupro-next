@@ -266,7 +266,8 @@ function Chips({
   );
 }
 
-function CardView({ card, lang }: { card: AssistantCardView; lang: Lang }) {
+/** An answer's records: figures, or a short table with "and n more" (shared with the chat window). */
+export function AssistantCard({ card, lang }: { card: AssistantCardView; lang: Lang }) {
   const label = (x: { label: string; labelHi?: string }) =>
     lang === 'hi' ? (x.labelHi ?? x.label) : x.label;
   if (card.kind === 'figures' && card.figures?.length) {
@@ -311,7 +312,13 @@ function CardView({ card, lang }: { card: AssistantCardView; lang: Lang }) {
   if (card.kind === 'table' && card.columns?.length && card.rows?.length) {
     const cols = card.columns;
     return (
-      <div style={{ overflowX: 'auto', marginTop: 'var(--sp-2)' }}>
+      // a wide table scrolls sideways: reachable with the keyboard, named for screen readers
+      <div
+        style={{ overflowX: 'auto', marginTop: 'var(--sp-2)' }}
+        tabIndex={0}
+        role="region"
+        aria-label={pick(W.records, lang)}
+      >
         <table className="ep-table">
           <caption className="ep-sr-only">{pick(W.records, lang)}</caption>
           <thead>
@@ -444,7 +451,7 @@ export function AssistantChat({
                   </div>
                   <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
                   {m.role === 'assistant' && d?.card ? (
-                    <CardView card={d.card} lang={lang} />
+                    <AssistantCard card={d.card} lang={lang} />
                   ) : null}
                   {m.role === 'assistant' && d?.link && href ? (
                     <p style={{ margin: 'var(--sp-2) 0 0' }}>

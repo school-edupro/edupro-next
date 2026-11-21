@@ -1,6 +1,8 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { getLocale } from 'next-intl/server';
+import { AssistantDock } from '@/components/AssistantDock';
 import { FamilyNotice } from '@/components/FamilyNotice';
 import { Shell } from '@/components/Shell';
 import { ApiError, getMe } from '@/lib/api';
@@ -35,9 +37,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     // No working school yet: let the context route pick the first membership and come back.
     redirect(`/api/context?returnTo=${encodeURIComponent(currentPath)}`);
   }
+  // the MobiAI chat window (docs/design/92) for those with the assistant
+  const lang = (await getLocale()) === 'hi' ? 'hi' : 'en';
   return (
-    <Shell me={me} currentPath={currentPath}>
-      {children}
-    </Shell>
+    <>
+      <Shell me={me} currentPath={currentPath}>
+        {children}
+      </Shell>
+      {me.permissions.includes('insights.assistant.use') ? <AssistantDock lang={lang} /> : null}
+    </>
   );
 }
