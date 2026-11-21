@@ -142,6 +142,17 @@ class School {
         'suggestions': [],
       };
     }
+    if (w.contains('blorp')) {
+      // a question EduPro's rules could not place, answered with Claude's help (docs/design/93)
+      return {
+        'card': null,
+        'link': null,
+        'followUps': [],
+        'didYouMean': [],
+        'suggestions': [],
+        'by': 'claude',
+      };
+    }
     if (w.contains('xyzzy')) {
       return {
         'card': null,
@@ -636,6 +647,33 @@ void main() {
       expect(find.text('You can ask'), findsOneWidget);
       await tapIn(tester, find.byKey(const Key('asstInstead-0')));
       expect(asks(t).last.body!['question'], 'How much fees is due?');
+    });
+
+    testWidgets('an answer written with Claude’s help says so; EduPro’s own do not', (
+      tester,
+    ) async {
+      await tall(tester);
+      await pump(
+        tester,
+        const AssistantScreen(profile: staff),
+        school: School(kind: 'staff'),
+      );
+      await tester.enterText(find.byKey(const Key('asstQuestion')), 'blorp frumble');
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(find.text('Answered with Claude'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('asstQuestion')), 'my leave balance');
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(find.text('Answered with Claude'), findsOneWidget);
+      // in Hindi
+      await pump(
+        tester,
+        const AssistantScreen(profile: staff),
+        school: School(kind: 'staff'),
+        hindi: true,
+      );
+      await tester.enterText(find.byKey(const Key('asstQuestion')), 'blorp');
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(find.text('Claude की सहायता से उत्तर'), findsOneWidget);
     });
 
     testWidgets('earlier conversations open from the header; the bin starts afresh', (

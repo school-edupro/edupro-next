@@ -76,3 +76,10 @@ place a question**, so most answers stay free, local and in the school.
   names Anthropic. Settings show `claudeInfo` (key set, model, audiences, the month's limit and use).
   `scripts/ai/claude-limit.mjs <SCHOOL_CODE> [number|default]` for Mobilise. Tests:
   `apps/api/test/chatbot-claude.e2e-spec.ts` against a fake Claude server (no real calls).
+- **C (21 Nov 2026).** Assistant set-up gains **Help from Claude**: what is sent and what is masked, a note when
+  Mobilise's key is not set ("not connected on this server yet"), switches for teachers and office and admin
+  (students and parents locked: "after the AI assistant consent names Anthropic"), and this month's use of the limit
+  (the standard one or the school's, both set by Mobilise). An answer Claude wrote shows **Answered with Claude** (EN /
+  HI) on the full Assistant page (a badge), in the floating window and in the app; EduPro's own answers show nothing.
+  Checked in a browser: the set-up on Alpha (Save caught, nothing saved) and a made-up test school's Claude answer,
+  with axe; the app's tests (210) include the label in English and Hindi.

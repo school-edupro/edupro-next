@@ -22,6 +22,7 @@ export async function saveAssistantSetup(values: AssistantSetupValues): Promise<
         subtitles: Object.fromEntries(
           Object.entries(values.subtitles).map(([a, v]) => [a, v.trim()]),
         ),
+        claude: values.claude,
       }),
     });
     revalidatePath('/insights/assistant/setup');

@@ -394,6 +394,64 @@ export function AssistantSetupEditor({
 
       <section
         className="ep-card"
+        aria-labelledby="as-claude-h"
+        style={{ marginBottom: 'var(--sp-4)' }}
+        data-testid="as-claude"
+      >
+        <h2 id="as-claude-h" className="ep-cdash__h3" style={{ marginTop: 0 }}>
+          Help from Claude
+        </h2>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          The assistant answers with EduPro&apos;s own rules first. Switched on, a question it
+          cannot place goes to Claude (Anthropic): the question and the records of the approved
+          query it chooses, with phone numbers, e-mails, Aadhaar and addresses masked. Claude only
+          reads through the same approved queries and the person&apos;s own rights; its answers say
+          &ldquo;Answered with Claude&rdquo;.
+        </p>
+        {setup.claudeInfo.available ? null : (
+          <div
+            className="ep-alert ep-alert--info"
+            role="status"
+            data-testid="as-claude-off"
+            style={{ marginBottom: 'var(--sp-3)' }}
+          >
+            Claude is not connected on this server yet (Mobilise adds the key). Until then the
+            assistant answers with EduPro&apos;s own rules only; you may still choose who gets it.
+          </div>
+        )}
+        <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+          {SETUP_AUDIENCES.map((a) => {
+            const open = setup.claudeInfo.audiences.includes(a);
+            return (
+              <Switch
+                key={a}
+                id={`as-claude-${a}`}
+                label={AUDIENCE_LABEL[a]}
+                help={
+                  open
+                    ? 'Questions EduPro cannot place get Claude’s help.'
+                    : 'Not yet: after the AI assistant consent names Anthropic and families agree again.'
+                }
+                checked={open && values.claude[a]}
+                disabled={!canEdit || !open}
+                onChange={(on) => change({ claude: { ...values.claude, [a]: on } })}
+              />
+            );
+          })}
+        </div>
+        <p className="ep-field__help" data-testid="as-claude-month" style={{ marginBottom: 0 }}>
+          This month: {String(setup.claudeInfo.usedThisMonth)} of{' '}
+          {String(setup.claudeInfo.monthlyLimit)} Claude answers (
+          {setup.claudeInfo.limitBy === 'school'
+            ? 'your school’s limit, set by Mobilise'
+            : 'the standard limit, set by Mobilise'}
+          ). When it is used up, the assistant answers with EduPro&apos;s own rules until next
+          month.
+        </p>
+      </section>
+
+      <section
+        className="ep-card"
         aria-labelledby="as-limit-h"
         style={{ marginBottom: 'var(--sp-4)' }}
       >

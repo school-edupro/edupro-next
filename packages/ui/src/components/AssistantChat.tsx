@@ -42,6 +42,8 @@ export interface AssistantMessageView {
     followUps?: AssistantChipView[];
     didYouMean?: AssistantChipView[];
     suggestions?: AssistantChipView[];
+    /** docs/design/93: Claude wrote it (a question EduPro's own rules could not place) */
+    by?: 'local' | 'claude';
   } | null;
 }
 export interface AssistantStartView {
@@ -117,6 +119,7 @@ const W = {
   youCanAsk: ['You can ask', 'आप पूछ सकते हैं'],
   sources: ['Sources', 'स्रोत'],
   records: ['The records', 'अभिलेख'],
+  byClaude: ['Answered with Claude', 'Claude की सहायता से उत्तर'],
 } as const;
 
 const pick = (pair: readonly [string, string], lang: Lang) => (lang === 'hi' ? pair[1] : pair[0]);
@@ -460,6 +463,13 @@ export function AssistantChat({
                           ? `${d.link.labelHi ?? d.link.label} खोलें`
                           : `Open ${d.link.label}`}
                       </a>
+                    </p>
+                  ) : null}
+                  {m.role === 'assistant' && d?.by === 'claude' ? (
+                    <p style={{ margin: 'var(--sp-2) 0 0' }}>
+                      <Badge tone="info" data-by="claude">
+                        {pick(W.byClaude, lang)}
+                      </Badge>
                     </p>
                   ) : null}
                   {m.citations?.length ? (

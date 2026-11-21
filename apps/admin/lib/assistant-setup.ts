@@ -28,6 +28,18 @@ export interface AssistantSetupValues {
   name: string;
   /** the school's subtitle per audience; empty: the standard one */
   subtitles: Record<SetupAudience, string>;
+  /** docs/design/93: Claude's help per audience (families wait for a consent that names Anthropic) */
+  claude: Record<SetupAudience, boolean>;
+}
+
+/** Claude's state on this server (docs/design/93): Mobilise's key, the audiences it may help, the month. */
+export interface ClaudeInfo {
+  available: boolean;
+  model: string | null;
+  audiences: SetupAudience[];
+  monthlyLimit: number;
+  limitBy: 'default' | 'school';
+  usedThisMonth: number;
 }
 
 /** The longest name and subtitle the API takes. */
@@ -44,6 +56,7 @@ export interface AssistantSetup extends AssistantSetupValues {
     subtitles: Record<SetupAudience, { en: string; hi: string }>;
   };
   topics: Array<{ key: string; label: string; labelHi: string }>;
+  claudeInfo: ClaudeInfo;
   catalogue: Record<
     SetupAudience,
     Array<{ id: string; department: string; ask: string; askHi: string }>
@@ -71,6 +84,10 @@ export function editableValues(s: AssistantSetup): AssistantSetupValues {
     subtitles: Object.fromEntries(
       SETUP_AUDIENCES.map((a) => [a, s.subtitles?.[a] ?? '']),
     ) as Record<SetupAudience, string>,
+    claude: Object.fromEntries(SETUP_AUDIENCES.map((a) => [a, s.claude?.[a] === true])) as Record<
+      SetupAudience,
+      boolean
+    >,
   };
 }
 
@@ -81,6 +98,7 @@ export function sameValues(a: AssistantSetupValues, b: AssistantSetupValues): bo
     (k) =>
       a.audiences[k] === b.audiences[k] &&
       a.subtitles[k].trim() === b.subtitles[k].trim() &&
+      a.claude[k] === b.claude[k] &&
       same([...a.topicsOff[k]].sort(), [...b.topicsOff[k]].sort()) &&
       same(a.starters[k], b.starters[k]),
   );

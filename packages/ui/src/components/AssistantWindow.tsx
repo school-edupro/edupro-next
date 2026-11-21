@@ -68,6 +68,8 @@ export interface AssistantWindowAnswer {
   followUps?: AssistantChipView[];
   didYouMean?: AssistantChipView[];
   suggestions?: AssistantChipView[];
+  /** docs/design/93: Claude wrote it */
+  by?: 'local' | 'claude';
 }
 
 export interface AssistantWindowMessage {
@@ -82,6 +84,7 @@ export interface AssistantWindowMessage {
     followUps?: AssistantChipView[];
     didYouMean?: AssistantChipView[];
     suggestions?: AssistantChipView[];
+    by?: 'local' | 'claude';
   } | null;
 }
 
@@ -131,6 +134,7 @@ const WORDS = {
   instead: ['You can ask', 'आप पूछ सकते हैं'],
   tryAsking: ['Try asking', 'ऐसे पूछें'],
   source: ['Source', 'स्रोत'],
+  byClaude: ['Answered with Claude', 'Claude की सहायता से उत्तर'],
   loading: ['Opening…', 'खुल रहा है…'],
   blocked: [
     'The assistant is not open to you at this school.',
@@ -363,6 +367,7 @@ export function AssistantWindow({
               followUps: a.followUps ?? [],
               didYouMean: a.didYouMean ?? [],
               suggestions: a.suggestions ?? [],
+              by: a.by ?? 'local',
             },
           },
         ]);
@@ -614,6 +619,11 @@ export function AssistantWindow({
                               ? `${d.link.labelHi ?? d.link.label} खोलें`
                               : `Open ${d.link.label}`}
                           </a>
+                        ) : null}
+                        {d?.by === 'claude' ? (
+                          <span className="mobiai__src" data-by="claude">
+                            {w('byClaude', lang)}
+                          </span>
                         ) : null}
                         {m.citations?.length ? (
                           <span className="mobiai__src">

@@ -65,6 +65,7 @@ extension AssistantWords on S {
   String asstOpen(String screen) => _as('Open $screen', '$screen खोलें');
   String asstMore(int n) => _as('and $n more', 'और $n');
   String asstSource(String t) => _as('Source: $t', 'स्रोत: $t');
+  String get asstByClaude => _as('Answered with Claude', 'Claude की सहायता से उत्तर');
   String get asstNeedQuestion =>
       _as('Write a question (at least 2 letters).', 'प्रश्न लिखें (कम से कम 2 अक्षर)।');
   String get asstThinking => _as('Finding the answer…', 'उत्तर खोजा जा रहा है…');
@@ -645,6 +646,32 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                     ),
                   ),
                   onPressed: open,
+                ),
+              ),
+            // docs/design/93: a question EduPro's own rules could not place, answered with Claude's help
+            if (d['by'] == 'claude')
+              Padding(
+                key: Key('asstByClaude-$i'),
+                padding: const EdgeInsets.only(top: Tokens.sp1),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.auto_awesome_outlined,
+                      size: 14,
+                      color: dark ? Tokens.mobCyan500 : Tokens.mobCyan700,
+                    ),
+                    const SizedBox(width: Tokens.sp1),
+                    Flexible(
+                      child: Text(
+                        s.asstByClaude,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: Tokens.fwSemibold,
+                          color: dark ? Tokens.mobGray100 : Tokens.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             if (citations.isNotEmpty)
