@@ -1,4 +1,4 @@
-// Sends one real request through ClaudeProvider so the provider is exercised against the Claude API.
+// Sends one real request through ClaudeProvider (Anthropic SDK; Claude Haiku 5.5 unless AI_MODEL) against the Claude API.
 // Reads ANTHROPIC_API_KEY (and optionally AI_MODEL, ANTHROPIC_BASE_URL) from the environment; never
 // stores the key. Run from the repo root after `pnpm --filter @edupro/ai build`:
 //   set -a; source .env; set +a; pnpm --filter @edupro/ai smoke:claude

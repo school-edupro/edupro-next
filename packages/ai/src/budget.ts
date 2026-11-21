@@ -72,6 +72,8 @@ export class BudgetExceededError extends Error {
 
 /** Approximate price per million tokens in paise, by model prefix; used for the cost dashboard only. */
 export const PRICE_PAISE_PER_MTOK: Record<string, { input: number; output: number }> = {
+  // Claude Haiku 5.5: $0.10 / $0.50 per million tokens (prompts up to 100K), at about ₹84 to the dollar
+  'claude-haiku-5-5': { input: 840, output: 4_200 },
   'claude-opus': { input: 125_000, output: 625_000 },
   'claude-sonnet': { input: 25_000, output: 125_000 },
   'claude-haiku': { input: 8_000, output: 40_000 },
@@ -81,7 +83,9 @@ export const PRICE_PAISE_PER_MTOK: Record<string, { input: number; output: numbe
 export function estimateCostPaise(model: string, usage: Usage): number {
   const key = Object.keys(PRICE_PAISE_PER_MTOK).find((k) => model.startsWith(k)) ?? 'claude-sonnet';
   const p = PRICE_PAISE_PER_MTOK[key]!;
-  return Math.round((usage.inputTokens * p.input + usage.outputTokens * p.output) / 1_000_000);
+  const input =
+    usage.inputTokens + (usage.cacheReadTokens ?? 0) * 0.1 + (usage.cacheWriteTokens ?? 0) * 1.25;
+  return Math.round((input * p.input + usage.outputTokens * p.output) / 1_000_000);
 }
 
 export class BudgetMeter {

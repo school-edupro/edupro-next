@@ -7,10 +7,13 @@ import {
   MemoryAuditSink,
   MemoryBudgetStore,
   MockProvider,
+  claudeFromEnv,
   estimateCostPaise,
+  maskContacts,
   providerFromEnv,
   redact,
   redactDeep,
+  runToolLoop,
 } from '../src';
 
 describe('redaction', () => {
@@ -166,19 +169,24 @@ describe('claude provider', () => {
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }) as typeof fetch;
-    const p = new ClaudeProvider({ apiKey: 'test-key', fetchImpl });
+    const p = new ClaudeProvider({ apiKey: 'test-key', fetchImpl, maxRetries: 0 });
     const res = await p.complete({
+      temperature: 0.2,
       system: 'sys',
       messages: [{ role: 'user', content: 'dues of class VI' }],
       tools: [{ name: 'fee_dues', description: 'd', inputSchema: { type: 'object' } }],
       metadata: { userId: '7' },
     });
     expect(calls[0]!.url).toBe('https://api.anthropic.com/v1/messages');
-    const headers = calls[0]!.init.headers as Record<string, string>;
-    expect(headers['x-api-key']).toBe('test-key');
-    expect(headers['anthropic-version']).toBeDefined();
+    // through Anthropic's official SDK (docs/design/93)
+    const headers = new Headers(calls[0]!.init.headers);
+    // the API key only (the SDK sends it as a bearer), never an ambient ANTHROPIC_AUTH_TOKEN
+    expect(headers.get('authorization')).toBe('Bearer test-key');
+    expect(headers.get('anthropic-version')).toBeTruthy();
     const body = JSON.parse(String(calls[0]!.init.body)) as Record<string, unknown>;
-    expect(body.model).toBe('claude-sonnet-5');
+    // the default is Claude Haiku 5.5; no sampling parameters are sent
+    expect(body.model).toBe('claude-haiku-5-5');
+    expect(body).not.toHaveProperty('temperature');
     expect(body.system).toBe('sys');
     expect((body.tools as unknown[]).length).toBe(1);
     expect(res.toolCalls).toEqual([{ id: 'tu_1', name: 'fee_dues', input: { classCode: 'VI' } }]);
@@ -189,7 +197,7 @@ describe('claude provider', () => {
 
   it('maps HTTP errors to AiProviderError', async () => {
     const fetchImpl = (async () => new Response('rate limited', { status: 429 })) as typeof fetch;
-    const p = new ClaudeProvider({ apiKey: 'k', fetchImpl });
+    const p = new ClaudeProvider({ apiKey: 'k', fetchImpl, maxRetries: 0 });
     await expect(p.complete({ messages: [{ role: 'user', content: 'x' }] })).rejects.toMatchObject({
       name: 'AiProviderError',
       status: 429,
@@ -213,5 +221,161 @@ describe('provider from env', () => {
         AI_MODEL: 'claude-opus-5-5',
       }).model,
     ).toBe('claude-opus-5-5');
+  });
+
+  it('hybrid (docs/design/93): the chat stays local; Claude Haiku 5.5 with no thinking for the rest', () => {
+    expect(() => providerFromEnv({ AI_PROVIDER: 'hybrid' })).toThrow(/ANTHROPIC_API_KEY/);
+    expect(providerFromEnv({ AI_PROVIDER: 'hybrid', ANTHROPIC_API_KEY: 'k' }).name).toBe('mock');
+    expect(claudeFromEnv({})).toBeNull();
+    expect(claudeFromEnv({ AI_PROVIDER: 'claude', ANTHROPIC_API_KEY: 'k' })).toBeNull();
+    const c = claudeFromEnv({ AI_PROVIDER: 'hybrid', ANTHROPIC_API_KEY: 'k' })!;
+    expect(c.model).toBe('claude-haiku-5-5');
+    expect(c.turnParams()).toEqual({
+      thinking: { type: 'disabled' },
+      output_config: { effort: 'low' },
+    });
+  });
+});
+
+describe('the tool loop (docs/design/93)', () => {
+  const reply = (body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  const message = (
+    content: unknown[],
+    stop: string,
+    usage = { input_tokens: 100, output_tokens: 20 },
+  ) => ({
+    id: 'msg_1',
+    type: 'message',
+    role: 'assistant',
+    model: 'claude-haiku-5-5',
+    stop_reason: stop,
+    content,
+    usage,
+  });
+
+  it('a tool_use turn, the rows back as a tool_result, then the answer', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const answers = [
+      message(
+        [{ type: 'tool_use', id: 'tu_1', name: 'fee_defaulters', input: { classId: '6' } }],
+        'tool_use',
+      ),
+      message([{ type: 'text', text: '2 students of VI owe fees.' }], 'end_turn', {
+        input_tokens: 150,
+        output_tokens: 12,
+      }),
+    ];
+    const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return reply(answers.shift());
+    }) as typeof fetch;
+    const p = new ClaudeProvider({
+      apiKey: 'k',
+      fetchImpl,
+      maxRetries: 0,
+      thinkingOff: true,
+      effort: 'low',
+    });
+    const ran: Array<Record<string, unknown>> = [];
+    const r = await runToolLoop(p, {
+      system: 'rules',
+      history: [
+        { role: 'assistant', text: 'dropped: a conversation starts with the person' },
+        { role: 'user', text: 'earlier question' },
+        { role: 'assistant', text: 'earlier answer' },
+      ],
+      question: 'who has not paid in VI?',
+      userId: '42',
+      tools: [
+        {
+          name: 'fee_defaulters',
+          description: 'Students whose fee balance is above an amount',
+          inputSchema: { type: 'object', properties: { classId: { type: 'string' } } },
+          run: async (input) => {
+            ran.push(input);
+            return maskContacts([{ student: 'A One', mobile: '9876500011', balance: 1200 }]);
+          },
+        },
+      ],
+    });
+    expect(ran).toEqual([{ classId: '6' }]);
+    expect(r).toMatchObject({ text: '2 students of VI owe fees.', refused: false, rounds: 2 });
+    expect(r.calls).toEqual([expect.objectContaining({ name: 'fee_defaulters', ok: true })]);
+    expect(r.usage).toMatchObject({ inputTokens: 250, outputTokens: 32 });
+    // the first request: rules cached, the tools, no thinking, low effort, alternating turns
+    const first = bodies[0]!;
+    expect(first.system).toEqual([
+      { type: 'text', text: 'rules', cache_control: { type: 'ephemeral' } },
+    ]);
+    expect(first.thinking).toEqual({ type: 'disabled' });
+    expect(first.output_config).toEqual({ effort: 'low' });
+    expect((first.messages as Array<{ role: string }>).map((m) => m.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+    ]);
+    expect(first.metadata).toEqual({ user_id: '42' });
+    // the second: Claude's tool_use turn, then the result for that id, contacts masked
+    const second = bodies[1]!.messages as Array<{ role: string; content: unknown }>;
+    const result = (second[second.length - 1]!.content as Array<Record<string, unknown>>)[0]!;
+    expect(result).toMatchObject({ type: 'tool_result', tool_use_id: 'tu_1' });
+    expect(String(result.content)).toContain('[masked]');
+    expect(String(result.content)).not.toContain('9876500011');
+  });
+
+  it('a refusal, an unknown tool and the round limit', async () => {
+    const fetchRefuse = (async () => reply(message([], 'refusal'))) as typeof fetch;
+    const p1 = new ClaudeProvider({ apiKey: 'k', fetchImpl: fetchRefuse, maxRetries: 0 });
+    expect(await runToolLoop(p1, { system: 's', question: 'q', tools: [] })).toMatchObject({
+      refused: true,
+      stopReason: 'refusal',
+    });
+    // always asks for a tool: stops after the limit, with nothing invented
+    const always = (async () =>
+      reply(
+        message([{ type: 'tool_use', id: 'tu', name: 'nope', input: {} }], 'tool_use'),
+      )) as typeof fetch;
+    const p2 = new ClaudeProvider({ apiKey: 'k', fetchImpl: always, maxRetries: 0 });
+    const r = await runToolLoop(p2, { system: 's', question: 'q', tools: [], maxRounds: 2 });
+    expect(r.refused).toBe(true);
+    expect(r.rounds).toBe(3);
+    expect(r.calls.every((c) => !c.ok)).toBe(true);
+  });
+
+  it('masks contact columns and values; the cost counts cache reads cheaply', () => {
+    expect(
+      maskContacts([
+        {
+          name: 'A One',
+          guardian_mobile: '9876500011',
+          email: 'a@x.test',
+          note: 'call 9876500022',
+          fee: 5,
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'A One',
+        guardian_mobile: '[masked]',
+        email: '[masked]',
+        note: 'call [mobile]',
+        fee: 5,
+      },
+    ]);
+    const plain = estimateCostPaise('claude-haiku-5-5', {
+      inputTokens: 1_000_000,
+      outputTokens: 0,
+    });
+    const cached = estimateCostPaise('claude-haiku-5-5', {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 1_000_000,
+    });
+    expect(plain).toBe(840);
+    expect(cached).toBe(84);
   });
 });

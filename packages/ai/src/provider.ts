@@ -37,6 +37,9 @@ export interface CompletionRequest {
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+  /** prompt-cache reads and writes (priced at about 0.1× and 1.25× the input) */
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }
 
 export interface CompletionResult {

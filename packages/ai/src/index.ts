@@ -9,3 +9,4 @@ export * from './config';
 export * from './narrative';
 export * from './structured';
 export * from './matcher';
+export * from './tool-loop';
