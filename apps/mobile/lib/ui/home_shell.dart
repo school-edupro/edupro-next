@@ -110,6 +110,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/marks' => MarksHome(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       '/messages' => MessagesScreen(profile: p),
+      // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
+      '/assistant' => AssistantScreen(profile: p),
       _ => null,
     };
   }
@@ -222,8 +224,28 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               );
         final i = _tab.clamp(0, tabs.length - 1);
         final unread = ref.watch(unreadProvider(p)).value ?? 0;
+        // Ask on Home when the person's menu has the assistant (the school may hide it or switch it off)
+        final asst = ref
+            .watch(menuProvider(p.id))
+            .value
+            ?.groups
+            .expand((g) => g.items)
+            .where((x) => x.href.split('?').first == '/assistant')
+            .firstOrNull;
         return Scaffold(
           backgroundColor: Tokens.mobNavy800,
+          floatingActionButton: i == 0 && asst != null
+              ? FloatingActionButton.extended(
+                  key: const Key('homeAsk'),
+                  tooltip: s.asstTitleOf(
+                    p.isStaff ? 'teacher' : (p.kind == 'student' ? 'student' : 'parent'),
+                  ),
+                  icon: const Icon(Icons.forum_outlined),
+                  label: Text(s.asstAsk),
+                  onPressed: () =>
+                      pushPage(context, s.menu(asst.label), AssistantScreen(profile: p)),
+                )
+              : null,
           body: SafeArea(
             bottom: false,
             child: Column(

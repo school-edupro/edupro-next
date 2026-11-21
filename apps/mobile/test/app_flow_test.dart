@@ -2,6 +2,7 @@ import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app.dart';
 import 'package:edupro/app_services.dart';
 import 'package:edupro/auth/session_store.dart';
+import 'package:edupro/family/assistant.dart' show AssistantScreen;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -98,6 +99,7 @@ dynamic api(Call c) {
                   'icon': 'users',
                   'items': [
                     {'href': '/homework', 'label': 'Homework', 'help': null, 'icon': 'users'},
+                    {'href': '/assistant', 'label': 'Assistant', 'help': null, 'icon': 'message'},
                   ],
                 },
               ],
@@ -198,6 +200,8 @@ void main() {
       expect(find.text('That PIN is not right.'), findsOneWidget);
       await enterPin(tester, '2468');
       expect(find.text('Asha Teacher'), findsOneWidget);
+      // Ask on Home only when the menu has the assistant (this teacher's has not)
+      expect(find.byKey(const Key('homeAsk')), findsNothing);
 
       // switch to the parent of the child
       await tester.tap(find.byKey(const Key('profileSwitch')));
@@ -206,11 +210,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Kid Sample'), findsOneWidget);
       expect(find.text('VI-A · A1234'), findsOneWidget);
+      expect(find.byKey(const Key('homeAsk')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('homeAsk')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AssistantScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
 
       // More: the parent's menu, then in Hindi
       await tester.tap(find.text('More'));
       await tester.pumpAndSettle();
       expect(find.text('Homework'), findsOneWidget);
+      // Ask is Home's
+      expect(find.byKey(const Key('homeAsk')), findsNothing);
       expect(t.calls.where((c) => c.path == '/me/menu').last.query, {'kind': 'parent'});
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();

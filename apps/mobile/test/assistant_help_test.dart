@@ -3,8 +3,10 @@ import 'package:edupro/app_services.dart';
 import 'package:edupro/family/assistant.dart';
 import 'package:edupro/family/common.dart';
 import 'package:edupro/family/help.dart';
+import 'package:edupro/family/attendance.dart' show AttendanceScreen;
 import 'package:edupro/family/results.dart' show ResultsScreen;
 import 'package:edupro/family/profile.dart' show ProfileScreen;
+import 'package:edupro/staff/my_leave.dart' show MyLeaveScreen;
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +34,14 @@ const student = Profile(
   app: 'parent',
   studentId: '41',
 );
+const staff = Profile(
+  id: 'staff:7',
+  kind: 'staff',
+  schoolId: '7',
+  schoolName: 'Sample School',
+  name: 'Asha Teacher',
+  app: 'teacher',
+);
 
 Map<String, Object?> profileJson(Profile p) => {
   'id': p.id,
@@ -42,7 +52,7 @@ Map<String, Object?> profileJson(Profile p) => {
   'name': p.name,
   'detail': 'VI-A · A1234',
   'studentId': p.studentId,
-  'app': 'parent',
+  'app': p.app,
   'actingAs': null,
   'hasPhoto': false,
 };
@@ -59,8 +69,109 @@ class School {
   School({this.kind = 'parent', this.mode = 'ok'});
   final String kind;
 
-  /// ok · blocked (403 on the catalogue) · consent (asking needs the consent first)
+  /// ok · blocked (403: not open to the person) · consent (the start says the consent is missing) · withdrawn (the
+  /// start says granted, asking says it is missing) · off (switched off for the audience) · limit (today's questions
+  /// used up at the start) · overLimit (asking says so)
   final String mode;
+
+  /// questions asked today
+  int asked = 0;
+
+  /// what was shown with an answer (docs/design/91): by a word of the question
+  Map<String, Object?>? display(String q) {
+    final w = q.toLowerCase();
+    if (w.contains('attendance record') || w.contains('उपस्थिति')) {
+      return {
+        'card': {
+          'kind': 'figures',
+          'figures': [
+            {'label': 'School days', 'labelHi': 'विद्यालय दिवस', 'value': '5'},
+            {'label': 'Present', 'labelHi': 'उपस्थित', 'value': '4'},
+            {'label': 'Absent', 'labelHi': 'अनुपस्थित', 'value': '1'},
+            {'label': 'Absent on', 'labelHi': 'अनुपस्थित तिथि', 'value': '18 Nov'},
+          ],
+        },
+        'link': {
+          'label': 'Attendance',
+          'labelHi': 'उपस्थिति',
+          'app': '/attendance',
+          'web': '/attendance',
+        },
+        'followUps': [
+          {'id': 'child_homework', 'question': 'Homework this week'},
+          {'id': 'child_dues', 'question': 'How much fees is due?'},
+        ],
+        'didYouMean': [],
+        'suggestions': [],
+      };
+    }
+    if (w.contains('receipts')) {
+      return {
+        'card': {
+          'kind': 'table',
+          'columns': [
+            {'key': 'receipt_no', 'label': 'Receipt', 'labelHi': 'रसीद', 'type': 'text'},
+            {'key': 'paid_on', 'label': 'Paid on', 'labelHi': 'भुगतान तिथि', 'type': 'date'},
+            {'key': 'amount', 'label': 'Amount', 'labelHi': 'राशि', 'type': 'money'},
+          ],
+          'rows': [
+            {'receipt_no': 'R-101', 'paid_on': '2026-11-02', 'amount': '1200.00'},
+            {'receipt_no': 'R-087', 'paid_on': '2026-10-03', 'amount': '25000'},
+          ],
+          'more': 3,
+        },
+        // a screen the person's menu does not have, and no web page: no button
+        'link': {'label': 'Library', 'labelHi': 'पुस्तकालय', 'app': '/library', 'web': null},
+        'followUps': [],
+        'didYouMean': [],
+        'suggestions': [],
+      };
+    }
+    if (w.contains('ravi')) {
+      return {
+        'card': null,
+        'link': null,
+        'followUps': [],
+        'didYouMean': [
+          {'id': 'child_attendance', 'question': 'Show the attendance record'},
+          {'id': 'child_results', 'question': 'Show the results'},
+        ],
+        'suggestions': [],
+      };
+    }
+    if (w.contains('xyzzy')) {
+      return {
+        'card': null,
+        'link': null,
+        'followUps': [],
+        'didYouMean': [],
+        'suggestions': [
+          {'id': 'child_dues', 'title': 'Fees due', 'question': 'How much fees is due?'},
+        ],
+      };
+    }
+    if (w.contains('leave')) {
+      return {
+        'card': {
+          'kind': 'figures',
+          'figures': [
+            {'label': 'Casual leave left', 'labelHi': 'शेष आकस्मिक अवकाश', 'value': '6'},
+            {'label': 'Earned leave left', 'labelHi': 'शेष अर्जित अवकाश', 'value': '12'},
+          ],
+        },
+        'link': {
+          'label': 'My leave',
+          'labelHi': 'मेरा अवकाश',
+          'app': '/my-leave',
+          'web': '/my-leave',
+        },
+        'followUps': [],
+        'didYouMean': [],
+        'suggestions': [],
+      };
+    }
+    return null;
+  }
 
   /// The school's Help (empty: the school has none); votes given here.
   List<Map<String, Object?>> help = [
@@ -147,9 +258,21 @@ class School {
     switch (key) {
       case 'GET /me/profiles':
         return {
-          'data': [profileJson(kind == 'parent' ? parent : student)],
+          'data': [profileJson(kind == 'parent' ? parent : (kind == 'staff' ? staff : student))],
         };
       case 'GET /me/menu':
+        if (kind == 'staff') {
+          return {
+            'app': 'teacher',
+            'groups': [
+              {
+                'label': 'Me',
+                'icon': 'users',
+                'items': [item('/my-leave', 'My leave'), item('/assistant', 'Assistant')],
+              },
+            ],
+          };
+        }
         return {
           'app': 'parent',
           'groups': [
@@ -162,10 +285,46 @@ class School {
                 item('/results', 'Results'),
                 item('/fees', 'Dues and receipts'),
                 if (kind == 'parent') item('/appointments', 'Appointments'),
-                if (kind == 'parent') item('/assistant', 'Assistant'),
+                item('/assistant', 'Assistant'),
                 item('/help', 'Help'),
               ],
             },
+          ],
+        };
+      case 'GET /insights/assistant/start':
+        if (mode == 'blocked') throw const ApiException(403, 'forbidden', 'Not allowed');
+        return {
+          'audience': kind == 'staff' ? 'teacher' : kind,
+          'on': mode != 'off',
+          'consent': kind == 'staff'
+              ? null
+              : mode == 'consent'
+              ? (kind == 'student' ? 'ask_parent' : 'needed')
+              : 'granted',
+          'dailyLimit': 30,
+          'askedToday': mode == 'limit' ? 30 : asked,
+          'starters': kind == 'staff'
+              ? [
+                  {
+                    'id': 'my_leave_balance',
+                    'question': 'My leave balance',
+                    'questionHi': 'मेरा अवकाश शेष',
+                  },
+                ]
+              : [
+                  {
+                    'id': 'child_attendance',
+                    'question': 'Show the attendance record',
+                    'questionHi': 'उपस्थिति रिकॉर्ड दिखाओ',
+                  },
+                  {
+                    'id': 'child_receipts',
+                    'question': 'Show the receipts',
+                    'questionHi': 'रसीदें दिखाओ',
+                  },
+                ],
+          'recent': [
+            {'question': 'Fees due?'},
           ],
         };
       case 'GET /insights/assistant/catalogue':
@@ -202,14 +361,22 @@ class School {
           ],
         };
       case 'POST /insights/assistant':
-        if (mode == 'consent') {
+        if (mode == 'withdrawn' || mode == 'consent') {
           throw const ApiException(
             403,
             'consent-required',
             'Turn on the AI assistant consent in your profile to ask questions',
           );
         }
+        if (mode == 'overLimit') {
+          throw const ApiException(
+            429,
+            'ai.daily_limit',
+            'You have asked 30 questions today, the most this school allows; try again tomorrow',
+          );
+        }
         final b = c.body!;
+        asked++;
         final id = (b['conversationId'] as String?) ?? 'c-${messages.length + 1}';
         final answer = 'Answer ${(messages[id]?.length ?? 0) ~/ 2 + 1}: nothing is due.';
         messages.putIfAbsent(id, () => []).addAll([
@@ -221,6 +388,7 @@ class School {
             'citations': [
               {'query': 'fees_due', 'title': 'Fees due', 'rows': 0},
             ],
+            'display': display('${b['question']}'),
           },
         ]);
         return {
@@ -379,32 +547,200 @@ void main() {
       expect(find.text('Answer 1: nothing is due.'), findsOneWidget);
     });
 
-    testWidgets('without the consent: says so and opens the profile in the app', (tester) async {
+    testWidgets('the start: starters, ask again and today’s count; a tap asks it', (tester) async {
       await tall(tester);
-      await pump(
+      final t = await pump(tester, const AssistantScreen(profile: parent));
+      expect(find.text('Try asking'), findsOneWidget);
+      expect(find.text('Ask again'), findsOneWidget);
+      expect(find.byKey(const Key('asstAgain-0')), findsOneWidget);
+      expect(find.text('0 of 30 questions asked today'), findsOneWidget);
+      expect(find.textContaining('mic on your keyboard'), findsOneWidget);
+
+      await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+      expect(asks(t).single.body, {'question': 'Show the attendance record', 'surface': 'parent'});
+      // the answer's records as figures, the screen to open, what to ask next
+      expect(find.byKey(const Key('asstFigures-c-2')), findsOneWidget);
+      expect(find.text('School days'), findsOneWidget);
+      expect(find.text('Absent on'), findsOneWidget);
+      expect(find.text('Open Attendance'), findsOneWidget);
+      expect(find.text('Ask next'), findsOneWidget);
+      expect(find.text('1 of 30 questions asked today'), findsOneWidget);
+      // the starters are for the start
+      expect(find.text('Try asking'), findsNothing);
+
+      await tapIn(tester, find.byKey(const Key('asstNext-0')));
+      expect(asks(t).last.body, {
+        'question': 'Homework this week',
+        'conversationId': 'c-2',
+        'surface': 'parent',
+      });
+      expect(find.text('Answer 2: nothing is due.'), findsOneWidget);
+      // what to ask next goes with the latest answer only
+      expect(find.byKey(const Key('asstNext')), findsNothing);
+
+      // the screen an answer is about opens in the app
+      await tapIn(tester, find.text('Open Attendance'));
+      expect(find.byType(AttendanceScreen), findsOneWidget);
+    });
+
+    testWidgets('ask again, a table of records; no button for a screen not in the menu', (
+      tester,
+    ) async {
+      await tall(tester);
+      final t = await pump(tester, const AssistantScreen(profile: parent));
+      await tapIn(tester, find.byKey(const Key('asstAgain-0')));
+      expect(asks(t).single.body!['question'], 'Fees due?');
+
+      await tapIn(tester, find.byKey(const Key('asstNew')));
+      await tapIn(tester, find.byKey(const Key('asstStarters-1')));
+      expect(find.byKey(const Key('asstTable')), findsOneWidget);
+      expect(find.text('R-101'), findsOneWidget);
+      expect(find.text('₹1,200'), findsOneWidget);
+      expect(find.text('₹25,000'), findsOneWidget);
+      expect(find.text('2 Nov 2026'), findsOneWidget);
+      expect(find.text('and 3 more'), findsOneWidget);
+      expect(find.text('Open Library'), findsNothing);
+    });
+
+    testWidgets('“did you mean” and, for what it cannot answer, what may be asked instead', (
+      tester,
+    ) async {
+      await tall(tester);
+      final t = await pump(tester, const AssistantScreen(profile: parent));
+      await tester.enterText(find.byKey(const Key('asstQuestion')), 'what about ravi');
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(find.text('Did you mean'), findsOneWidget);
+      expect(find.text('Show the results'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('asstQuestion')), 'xyzzy plugh');
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(find.text('Did you mean'), findsNothing);
+      expect(find.text('You can ask'), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('asstInstead-0')));
+      expect(asks(t).last.body!['question'], 'How much fees is due?');
+    });
+
+    testWidgets('a parent without the consent: says so first and opens the profile in the app', (
+      tester,
+    ) async {
+      await tall(tester);
+      final t = await pump(
         tester,
         const AssistantScreen(profile: parent),
         school: School(mode: 'consent'),
       );
+      expect(find.byKey(const Key('asstConsent')), findsOneWidget);
+      expect(find.textContaining('needs your consent (AI assistant) first'), findsOneWidget);
+      expect(find.byKey(const Key('asstQuestion')), findsNothing);
+      expect(find.text('Try asking'), findsNothing);
+      await tapIn(tester, find.byKey(const Key('asstOpenProfile')));
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      // back from the profile, the start is read again
+      final before = t.calls.where((c) => c.path == '/insights/assistant/start').length;
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(t.calls.where((c) => c.path == '/insights/assistant/start').length, before + 1);
+    });
+
+    testWidgets('a consent withdrawn meanwhile: asking says so', (tester) async {
+      await tall(tester);
+      await pump(
+        tester,
+        const AssistantScreen(profile: parent),
+        school: School(mode: 'withdrawn'),
+      );
       await tester.enterText(find.byKey(const Key('asstQuestion')), 'Fees due?');
       await tapIn(tester, find.byKey(const Key('asstAsk')));
       expect(find.byKey(const Key('asstConsent')), findsOneWidget);
-      expect(find.textContaining('needs your consent (AI assistant) first'), findsOneWidget);
-      await tapIn(tester, find.byKey(const Key('asstOpenProfile')));
-      expect(find.byType(ProfileScreen), findsOneWidget);
+      expect(find.byKey(const Key('asstQuestion')), findsNothing);
     });
 
-    testWidgets('a school that has not opened it to families', (tester) async {
+    testWidgets('a student whose parent has not consented: ask a parent', (tester) async {
+      await tall(tester);
+      await pump(
+        tester,
+        const AssistantScreen(profile: student),
+        school: School(kind: 'student', mode: 'consent'),
+      );
+      expect(find.text('Ask about your school day'), findsOneWidget);
+      expect(find.byKey(const Key('asstAskParent')), findsOneWidget);
+      expect(find.textContaining('Ask a parent to turn on'), findsOneWidget);
+      expect(find.byKey(const Key('asstOpenProfile')), findsNothing);
+      expect(find.byKey(const Key('asstQuestion')), findsNothing);
+    });
+
+    testWidgets('a student with the consent asks about themself', (tester) async {
+      await tall(tester);
+      final t = await pump(
+        tester,
+        const AssistantScreen(profile: student),
+        school: School(kind: 'student'),
+      );
+      expect(find.textContaining('Your attendance, timetable, homework'), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+      expect(asks(t).single.body!['surface'], 'parent');
+      expect(find.text('School days'), findsOneWidget);
+    });
+
+    testWidgets('switched off for the audience', (tester) async {
+      await tall(tester);
+      await pump(
+        tester,
+        const AssistantScreen(profile: parent),
+        school: School(mode: 'off'),
+      );
+      expect(find.byKey(const Key('asstOff')), findsOneWidget);
+      expect(find.byKey(const Key('asstQuestion')), findsNothing);
+      expect(find.byKey(const Key('asstCount')), findsNothing);
+    });
+
+    testWidgets('today’s questions used up, at the start or when asking', (tester) async {
+      await tall(tester);
+      await pump(
+        tester,
+        const AssistantScreen(profile: parent),
+        school: School(mode: 'limit'),
+      );
+      expect(find.byKey(const Key('asstLimit')), findsOneWidget);
+      expect(find.textContaining('asked 30 questions today'), findsOneWidget);
+      expect(find.byKey(const Key('asstQuestion')), findsNothing);
+
+      await pump(
+        tester,
+        const AssistantScreen(profile: parent),
+        school: School(mode: 'overLimit'),
+      );
+      expect(find.byKey(const Key('asstLimit')), findsNothing);
+      await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+      expect(find.byKey(const Key('asstLimit')), findsOneWidget);
+      expect(find.textContaining('asked 30 questions today'), findsOneWidget);
+      expect(find.byKey(const Key('asstAsk')), findsNothing);
+    });
+
+    testWidgets('staff ask as the teachers’ app and open their own screens', (tester) async {
+      await tall(tester);
+      final t = await pump(
+        tester,
+        const AssistantScreen(profile: staff),
+        school: School(kind: 'staff'),
+      );
+      expect(find.text('Ask about your classes'), findsOneWidget);
+      expect(find.byKey(const Key('asstConsent')), findsNothing);
+      await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+      expect(asks(t).single.body, {'question': 'My leave balance', 'surface': 'teacher'});
+      expect(find.text('Casual leave left'), findsOneWidget);
+      await tapIn(tester, find.text('Open My leave'));
+      expect(find.byType(MyLeaveScreen), findsOneWidget);
+    });
+
+    testWidgets('a person the assistant is not open to', (tester) async {
       await tall(tester);
       await pump(
         tester,
         const AssistantScreen(profile: parent),
         school: School(mode: 'blocked'),
       );
-      expect(
-        find.text('The assistant is not enabled for families in this school yet.'),
-        findsOneWidget,
-      );
+      expect(find.text('The assistant is not open to you at this school.'), findsOneWidget);
       expect(find.byKey(const Key('asstQuestion')), findsNothing);
     });
 
@@ -413,6 +749,12 @@ void main() {
       await pump(tester, const AssistantScreen(profile: parent), hindi: true);
       expect(find.text('अपने बच्चों के बारे में पूछें'), findsOneWidget);
       expect(find.text('पूछें'), findsOneWidget);
+      expect(find.text('ऐसे पूछें'), findsOneWidget);
+      expect(find.text('उपस्थिति रिकॉर्ड दिखाओ'), findsOneWidget);
+      expect(find.text('आज 30 में से 0 प्रश्न पूछे'), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+      expect(find.text('विद्यालय दिवस'), findsOneWidget);
+      expect(find.text('उपस्थिति खोलें'), findsOneWidget);
       await tapIn(tester, find.text('आप क्या पूछ सकते हैं'));
       expect(find.text('बकाया शुल्क'), findsOneWidget);
       expect(find.text('What is due for your child'), findsNothing);
@@ -528,8 +870,7 @@ void main() {
       for (final w in [const AssistantScreen(profile: parent), const HelpScreen(profile: parent)]) {
         await pump(tester, w, hindi: hindi, dark: dark);
         if (w is AssistantScreen) {
-          await tapIn(tester, find.byKey(const Key('asstRecent')));
-          await tapIn(tester, find.byKey(const Key('asstConv-c-1')));
+          await tapIn(tester, find.byKey(const Key('asstStarters-0')));
           await tapIn(tester, find.byKey(const Key('asstCanAsk')));
         } else {
           await tapIn(tester, find.text(hindi ? 'उपस्थिति और अवकाश' : 'Attendance and leave'));
@@ -555,9 +896,20 @@ void main() {
   testWidgets('large text (2×): nothing overflows', (tester) async {
     await tall(tester, const Size(390, 5200));
     await pump(tester, const AssistantScreen(profile: parent), text: 2);
+    await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+    await tapIn(tester, find.byKey(const Key('asstNext-1')));
+    await tapIn(tester, find.byKey(const Key('asstNew')));
+    await tapIn(tester, find.byKey(const Key('asstStarters-1')));
     await tapIn(tester, find.byKey(const Key('asstRecent')));
-    await tapIn(tester, find.byKey(const Key('asstConv-c-1')));
     await tapIn(tester, find.byKey(const Key('asstCanAsk')));
+    expect(tester.takeException(), isNull);
+    await pump(
+      tester,
+      const AssistantScreen(profile: staff),
+      school: School(kind: 'staff'),
+      text: 2,
+    );
+    await tapIn(tester, find.byKey(const Key('asstStarters-0')));
     expect(tester.takeException(), isNull);
     await pump(tester, const HelpScreen(profile: parent), text: 2);
     await tapIn(tester, find.text('Attendance and leave'));

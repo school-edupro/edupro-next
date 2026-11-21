@@ -735,6 +735,10 @@ class EduProApi {
   /// DELETE /me/app-layout/shortcuts — Back to the school’s Home shortcuts
   Future<dynamic> familyLayoutResetMine({String? kind}) =>
       _t.send('DELETE', '/me/app-layout/shortcuts', query: {if (kind != null) 'kind': kind});
+
+  /// GET /insights/assistant/start — The chat's start screen: on for me, my consent, starter and recent questions
+  Future<dynamic> insightsStart() =>
+      _t.send('GET', '/insights/assistant/start');
 }
 
 /** The OtpStartDto the API takes. */
