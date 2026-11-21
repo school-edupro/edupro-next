@@ -826,3 +826,16 @@ five stars and a comment — once answered). Calls: `engagement/mine/queries` (l
 `/:id/reopen`, `/:id/rate`, `/:id/timeline`, `/:id/files/:fileId`), `engagement/mine/categories`,
 `engagement/feedback`. The API's appointment cancel body is now `AppointmentCancelDto` (it shared `CancelDto` with
 other modules, which the app's generator refuses); the request is unchanged.
+
+## As built — Appointments as on the website (21 Nov 2026)
+
+**Appointments in the app, with no web page** (`family/appointments.dart`, menu `/appointments`): **the list**
+("Meet the school", how many, latest first; List or a Calendar month; All / Still to come / Over or closed, a search
+by number, purpose or whom; ten a page), each with its date and time, whom to meet, the status, the purpose, the
+number, the child, the desk and the place; Details (and the gate pass) and Cancel, asked first. **Book**
+(`AppointmentForm`, the website's steps): whom to meet with the visiting hours and place, a day with how many times
+are free, a free time, the purpose and the school's instructions (`appointments/mine/hosts`, `/days`, `/slots`, POST
+`{studentId, hostId, startsAt, purpose}`; a time just taken reloads the free times). **One appointment**
+(`AppointmentDetail`): the status, once confirmed the gate pass card PDF (View / Download; the QR and barcode are SVG
+drawings the app does not draw), the details, Cancel, and the history folded. Times are shown in India time whatever
+the phone's zone, as on the website.

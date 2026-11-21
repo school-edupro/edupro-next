@@ -16,6 +16,7 @@ import '../family/transport.dart';
 import '../family/health.dart';
 import '../family/certificates.dart';
 import '../family/academics.dart';
+import '../family/appointments.dart';
 import '../family/fees.dart';
 import '../family/profile.dart';
 import '../family/queries.dart';
@@ -114,6 +115,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/gate-passes' => GatePassesScreen(profile: p),
     // queries and complaints to the school, with quick feedback: no web page
     '/queries' => QueriesScreen(profile: p),
+    // meeting the school: book with whom, the day and the time, follow, the gate pass card: no web page
+    '/appointments' => AppointmentsScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };
