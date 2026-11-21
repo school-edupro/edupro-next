@@ -46,6 +46,8 @@ const PAGES = [
   '/library?view=history',
   '/library?view=find',
   '/library?view=find&q=a',
+  '/help',
+  '/help?q=fee',
 ];
 
 for (const sub of ['dev-parent', 'dev-student']) {

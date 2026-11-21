@@ -715,6 +715,14 @@ class EduProApi {
   /// POST /insights/assistant — Ask the assistant a question about school data (English or Hindi)
   Future<dynamic> insightsAsk({required AskAssistantDto body}) =>
       _t.send('POST', '/insights/assistant', body: body.toJson());
+
+  /// GET /engagement/help — The school's Help for me: questions for parents or students, under headings
+  Future<dynamic> familyHelpMine({String? for_}) =>
+      _t.send('GET', '/engagement/help', query: {if (for_ != null) 'for': for_});
+
+  /// POST /engagement/help/{id}/vote — Was this answer helpful? (once per question; a second answer replaces it)
+  Future<dynamic> familyHelpVote({required FamilyHelpVoteDto body, required String id}) =>
+      _t.send('POST', '/engagement/help/${Uri.encodeComponent(id)}/vote', body: body.toJson());
 }
 
 /** The OtpStartDto the API takes. */
@@ -1492,5 +1500,14 @@ class AskAssistantDto {
         if (conversationId != null) 'conversationId': conversationId,
         if (language != null) 'language': language,
         if (surface != null) 'surface': surface,
+      };
+}
+
+/** The FamilyHelpVoteDto the API takes. */
+class FamilyHelpVoteDto {
+  const FamilyHelpVoteDto({required this.helpful});
+  final bool helpful;
+  Map<String, Object?> toJson() => {
+        'helpful': helpful,
       };
 }

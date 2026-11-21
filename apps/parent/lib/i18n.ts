@@ -289,6 +289,17 @@ const DICT: Record<string, string> = {
   'How do I change the language?': 'भाषा कैसे बदलूँ?',
   'The \u0939\u093f\u0928\u094d\u0926\u0940 / English link on the home page switches every screen.':
     'होम पेज पर हिन्दी / English लिंक हर स्क्रीन बदल देता है।',
+  'Search the questions': 'प्रश्न खोजें',
+  'Was this helpful?': 'क्या यह मददगार था?',
+  Yes: 'हाँ',
+  No: 'नहीं',
+  'Thank you. You said this helped.': 'धन्यवाद। आपने बताया कि इससे मदद मिली।',
+  'Thank you. You said this did not help; the school office can help further.':
+    'धन्यवाद। आपने बताया कि इससे मदद नहीं मिली; विद्यालय कार्यालय आगे मदद कर सकता है।',
+  'Nothing matches your search. The school office can help with anything else.':
+    'आपकी खोज से कुछ नहीं मिला। किसी और बात में विद्यालय कार्यालय मदद कर सकता है।',
+  'No questions yet. For anything else, the school office is the first contact.':
+    'अभी कोई प्रश्न नहीं। किसी और बात के लिए विद्यालय कार्यालय पहला संपर्क है।',
   Open: 'खुला',
   'Ask for a copy of the data the school holds, a correction, or raise a grievance.':
     'विद्यालय के पास मौजूद डेटा की प्रति, सुधार या शिकायत के लिए अनुरोध करें।',

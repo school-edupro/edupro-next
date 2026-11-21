@@ -206,3 +206,8 @@ InsightsController_catalogue
 InsightsController_conversations
 InsightsController_conversation
 InsightsController_ask
+
+# Help kept by the school (0406, docs/design/89 "Help kept by the school"): the questions for me, and
+# "Was this helpful?"
+FamilyHelpController_mine
+FamilyHelpController_vote

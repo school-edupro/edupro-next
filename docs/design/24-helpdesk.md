@@ -39,3 +39,29 @@ Admin: Parent engagement → Helpdesk dashboard (6 months per desk, every count 
 Staff queries, ERP provider tickets, Helpdesk set-up, Leave requests. Teacher app: Queries (to answer,
 leave requests, my requests) + raise staff query / ticket to the provider. Parent app: attachments on
 raise and reply, attachment links, resolution, reopen.
+
+## Help for families (0406, 21 Nov 2026)
+
+The parents' and students' **Help** page (website `/help`, app Help) is the school's own, kept on **Helpdesk set-up
+→ Help for families** (the helpdesk set-up right, `helpdesk.settings.manage`). The user's decisions: on Helpdesk
+set-up (no new menu entry); every school starts with the standard questions as its own, editable; each question is
+for parents, students or both; headings, a search box, "Was this helpful?" and a button to the screen an answer is
+about.
+
+- **Model** (`family_help_headings`, `family_help_questions`, `family_help_votes`, `family_help_settings`): headings
+  and questions in the school's order, English with Hindi optional (the English shows where no Hindi), audience
+  `both | parent | student`, `page` (a family screen of `@edupro/menus`, not Home or Help), hidden, soft-deleted;
+  `standard_key` marks the standard ones. A school's first use of Help (the office or a family) puts in the six
+  standard headings and ten questions (`family_help_settings` once); **Restore the standard questions** puts back
+  any deleted (each last in its place). Deleting a heading moves its questions to **Other questions** (no heading,
+  last).
+- **Families** (`GET engagement/help?for=parent|student`; without `for`, a login whose memberships here are all
+  student reads the students'): shown questions for them, without those about a screen they cannot open (the same
+  rights as the menu, `familyScreens`), empty headings dropped; each with the person's own vote. A vote
+  (`POST engagement/help/:id/vote`, `{helpful}`) is once per person per question, a second vote replaces the first;
+  hidden questions take none.
+- **The office** (`helpdesk/family-help`: list with `pages` and `standardMissing`; headings and questions add /
+  change / delete / move up or down; `restore`): the Yes / No counts are the votes since the answer (English or
+  Hindi) last changed — a new answer starts them again. Every change is in the audit trail
+  (`helpdesk.family_help.*`).
+- Tests: `apps/api/test/family-help.e2e-spec.ts`.

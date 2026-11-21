@@ -547,6 +547,8 @@ const PAGES = [
   '/engagement/helpdesk/provider/164',
   '/engagement/helpdesk/staff/224',
   '/engagement/helpdesk/setup',
+  // Help for families kept by the school (0406)
+  '/engagement/helpdesk/setup/family-help',
   '/engagement/leave',
   '/people/withdrawals/95',
   '/reports/strength?report=classwise&run=1&groupBy=section',

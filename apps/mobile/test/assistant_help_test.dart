@@ -3,6 +3,7 @@ import 'package:edupro/app_services.dart';
 import 'package:edupro/family/assistant.dart';
 import 'package:edupro/family/common.dart';
 import 'package:edupro/family/help.dart';
+import 'package:edupro/family/results.dart' show ResultsScreen;
 import 'package:edupro/family/profile.dart' show ProfileScreen;
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/theme/theme.dart';
@@ -60,6 +61,72 @@ class School {
 
   /// ok · blocked (403 on the catalogue) · consent (asking needs the consent first)
   final String mode;
+
+  /// The school's Help (empty: the school has none); votes given here.
+  List<Map<String, Object?>> help = [
+    {
+      'id': '1',
+      'title': 'Attendance and leave',
+      'titleHi': 'उपस्थिति और अवकाश',
+      'questions': [
+        {
+          'id': '2',
+          'question': 'How do I apply for leave?',
+          'questionHi': 'अवकाश के लिए आवेदन कैसे करूँ?',
+          'answer': 'Attendance → Apply for leave, with the dates and the reason.',
+          'answerHi': 'उपस्थिति → अवकाश के लिए आवेदन करें, तिथियाँ और कारण सहित।',
+          'page': '/attendance',
+          'pageLabel': 'Attendance',
+          'myVote': null,
+        },
+        {
+          'id': '3',
+          'question': 'Why did I not get an absence alert?',
+          'questionHi': null,
+          'answer': 'Alerts go once a day per child after the attendance time.',
+          'answerHi': null,
+          'page': null,
+          'pageLabel': null,
+          'myVote': true,
+        },
+      ],
+    },
+    {
+      'id': '4',
+      'title': 'Results',
+      'titleHi': 'परिणाम',
+      'questions': [
+        {
+          'id': '5',
+          'question': 'Where is the report card?',
+          'questionHi': 'रिपोर्ट कार्ड कहाँ है?',
+          'answer': 'Results shows each released term; the PDF button prepares the card.',
+          'answerHi': 'परिणाम हर जारी सत्र दिखाता है; PDF बटन कार्ड तैयार करता है।',
+          'page': '/results',
+          'pageLabel': 'Results',
+          'myVote': null,
+        },
+      ],
+    },
+    {
+      'id': null,
+      'title': 'Other questions',
+      'titleHi': 'अन्य प्रश्न',
+      'questions': [
+        {
+          'id': '6',
+          'question': 'When does the bus leave?',
+          'questionHi': null,
+          'answer': 'At 7:10 from the first stop.',
+          'answerHi': null,
+          'page': null,
+          'pageLabel': null,
+          'myVote': null,
+        },
+      ],
+    },
+  ];
+  final Map<String, bool> votes = {};
   final Map<String, List<Map<String, Object?>>> messages = {
     'c-1': [
       {'id': '1', 'role': 'user', 'content': 'Fees due?', 'refused': false, 'citations': []},
@@ -169,6 +236,27 @@ class School {
       final m = messages[conv.group(1)];
       if (m == null) throw const ApiException(404, 'not-found', 'Conversation not found');
       return {'id': conv.group(1), 'title': m.first['content'], 'messages': m};
+    }
+    if (key == 'GET /engagement/help') {
+      final student = c.query?['for'] == 'student';
+      return {
+        'audience': student ? 'student' : 'parent',
+        'groups': [
+          for (final g in help)
+            if (!student || g['id'] != null)
+              {
+                ...g,
+                'questions': (g['questions'] as List)
+                    .map((q) => {...q as Map, 'myVote': votes[q['id']] ?? q['myVote']})
+                    .toList(),
+              },
+        ],
+      };
+    }
+    final vote = RegExp(r'^POST /engagement/help/(\d+)/vote$').firstMatch(key);
+    if (vote != null) {
+      votes[vote.group(1)!] = c.body!['helpful'] as bool;
+      return {'ok': true, 'helpful': c.body!['helpful']};
     }
     throw ApiException(404, 'not-found', 'no fake for $key');
   }
@@ -331,42 +419,99 @@ void main() {
     });
   });
 
-  group('Help in the app (no web page)', () {
-    testWidgets('a parent: every question, each answer folded until tapped', (tester) async {
+  group('Help in the app, as the school keeps it (no web page)', () {
+    testWidgets('headings fold, then questions; the answer, its screen and “Was this helpful?”', (
+      tester,
+    ) async {
       await tall(tester);
-      await pump(tester, const HelpScreen(profile: parent));
+      final t = await pump(tester, const HelpScreen(profile: parent));
+      expect(t.calls.firstWhere((c) => c.path == '/engagement/help').query, {'for': 'parent'});
       expect(find.byKey(const Key('helpIntro')), findsOneWidget);
-      expect(find.byType(ExpansionTile), findsNWidgets(10));
-      expect(find.text('How do I switch between my children?'), findsOneWidget);
-      expect(find.text('How do I ask to meet a teacher?'), findsOneWidget);
-      // the app's way: leave from Attendance, the language in Settings
-      expect(find.textContaining('Attendance → Apply for leave'), findsNothing);
+      expect(find.text('Attendance and leave'), findsOneWidget);
+      expect(find.text('2 questions'), findsOneWidget);
+      expect(find.text('Other questions'), findsOneWidget);
+      expect(find.text('How do I apply for leave?'), findsNothing);
+
+      await tapIn(tester, find.text('Attendance and leave'));
+      expect(find.text('How do I apply for leave?'), findsOneWidget);
+      expect(find.textContaining('Apply for leave, with the dates'), findsNothing);
       await tapIn(tester, find.text('How do I apply for leave?'));
-      expect(find.textContaining('Attendance → Apply for leave'), findsOneWidget);
-      await tapIn(tester, find.text('How do I change the language?'));
-      expect(find.textContaining('Settings (at the top of the home screen)'), findsOneWidget);
+      expect(find.textContaining('Apply for leave, with the dates'), findsOneWidget);
+      expect(find.text('Open Attendance'), findsOneWidget);
+      expect(find.text('Was this helpful?'), findsOneWidget);
+
+      await tapIn(tester, find.byKey(const Key('helpYes-2')));
+      final vote = t.calls.lastWhere((c) => c.method == 'POST');
+      expect(vote.path, '/engagement/help/2/vote');
+      expect(vote.body, {'helpful': true});
+      expect(find.text('Thank you. You said this helped.'), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('helpNo-2')));
+      expect(t.calls.lastWhere((c) => c.method == 'POST').body, {'helpful': false});
+      expect(find.textContaining('You said this did not help'), findsOneWidget);
+
+      // a vote the person gave before shows; an answer with no screen has no button
+      await tapIn(tester, find.text('Why did I not get an absence alert?'));
+      expect(find.byKey(const Key('helpThanks-3')), findsOneWidget);
+      expect(find.byKey(const Key('helpOpen-3')), findsNothing);
     });
 
-    testWidgets('a student: no child switch, no paying, no appointments', (tester) async {
+    testWidgets('the screen an answer is about opens in the app', (tester) async {
       await tall(tester);
-      await pump(
+      await pump(tester, const HelpScreen(profile: parent));
+      await tapIn(tester, find.text('Results'));
+      await tapIn(tester, find.text('Where is the report card?'));
+      await tapIn(tester, find.byKey(const Key('helpOpen-5')));
+      expect(find.byType(ResultsScreen), findsOneWidget);
+    });
+
+    testWidgets('the search opens the headings it finds something under', (tester) async {
+      await tall(tester);
+      await pump(tester, const HelpScreen(profile: parent));
+      await tester.enterText(find.byKey(const Key('helpSearch')), 'report');
+      await tester.pumpAndSettle();
+      expect(find.text('1 question for “report”'), findsOneWidget);
+      expect(find.text('Where is the report card?'), findsOneWidget);
+      expect(find.text('Attendance and leave'), findsNothing);
+      // the answers are searched too
+      await tester.enterText(find.byKey(const Key('helpSearch')), '7:10');
+      await tester.pumpAndSettle();
+      expect(find.text('When does the bus leave?'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('helpSearch')), 'zzz');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Nothing matches your search'), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('helpClear')));
+      expect(find.text('Attendance and leave'), findsOneWidget);
+      expect(find.text('Where is the report card?'), findsNothing);
+    });
+
+    testWidgets('a student asks for the students’ questions', (tester) async {
+      await tall(tester);
+      final t = await pump(
         tester,
         const HelpScreen(profile: student),
         school: School(kind: 'student'),
       );
-      expect(find.byType(ExpansionTile), findsNWidgets(7));
-      expect(find.text('How do I switch between my children?'), findsNothing);
-      expect(find.text('I paid online but the receipt is not showing.'), findsNothing);
-      expect(find.text('How do I ask to meet a teacher?'), findsNothing);
-      expect(find.text('Where is the report card?'), findsOneWidget);
+      expect(t.calls.firstWhere((c) => c.path == '/engagement/help').query, {'for': 'student'});
+      expect(find.text('Other questions'), findsNothing);
     });
 
-    testWidgets('in Hindi', (tester) async {
+    testWidgets('a school with no questions', (tester) async {
+      await tall(tester);
+      await pump(tester, const HelpScreen(profile: parent), school: School()..help = []);
+      expect(find.textContaining('No questions yet'), findsOneWidget);
+      expect(find.byKey(const Key('helpSearch')), findsNothing);
+    });
+
+    testWidgets('in Hindi, with the English where the school wrote no Hindi', (tester) async {
       await tall(tester);
       await pump(tester, const HelpScreen(profile: parent), hindi: true);
-      expect(find.text('रिपोर्ट कार्ड कहाँ है?'), findsOneWidget);
-      await tapIn(tester, find.text('रिपोर्ट कार्ड कहाँ है?'));
-      expect(find.textContaining('परिणाम हर जारी सत्र दिखाता है'), findsOneWidget);
+      expect(find.text('उपस्थिति और अवकाश'), findsOneWidget);
+      expect(find.text('2 प्रश्न'), findsOneWidget);
+      await tapIn(tester, find.text('उपस्थिति और अवकाश'));
+      await tapIn(tester, find.text('अवकाश के लिए आवेदन कैसे करूँ?'));
+      expect(find.textContaining('तिथियाँ और कारण सहित'), findsOneWidget);
+      expect(find.text('उपस्थिति खोलें'), findsOneWidget);
+      expect(find.text('Why did I not get an absence alert?'), findsOneWidget);
     });
   });
 
@@ -387,7 +532,8 @@ void main() {
           await tapIn(tester, find.byKey(const Key('asstConv-c-1')));
           await tapIn(tester, find.byKey(const Key('asstCanAsk')));
         } else {
-          await tapIn(tester, find.byKey(const Key('help-0')));
+          await tapIn(tester, find.text(hindi ? 'उपस्थिति और अवकाश' : 'Attendance and leave'));
+          await tapIn(tester, find.byKey(const Key('help-2')));
         }
         for (final g in [
           androidTapTargetGuideline,
@@ -414,7 +560,10 @@ void main() {
     await tapIn(tester, find.byKey(const Key('asstCanAsk')));
     expect(tester.takeException(), isNull);
     await pump(tester, const HelpScreen(profile: parent), text: 2);
-    await tapIn(tester, find.byKey(const Key('help-5')));
+    await tapIn(tester, find.text('Attendance and leave'));
+    await tapIn(tester, find.byKey(const Key('help-2')));
+    await tester.enterText(find.byKey(const Key('helpSearch')), 'leave');
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 }

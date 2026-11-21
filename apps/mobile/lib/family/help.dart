@@ -1,142 +1,267 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../api/endpoints.g.dart';
+import '../app_services.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
+import '../ui/home_shell.dart' show nativeScreen;
+import 'common.dart';
+import 'data.dart';
 
-/// One common question and its answer, in English and Hindi; [needs] is the menu page the answer is about (the
-/// question is left out when the person has no such page), [parentOnly] for questions only a parent has.
-class _Faq {
-  const _Faq(this.q, this.qHi, this.a, this.aHi, {this.needs, this.parentOnly = false});
-  final String q;
-  final String qHi;
-  final String a;
-  final String aHi;
-  final String? needs;
-  final bool parentOnly;
+/// The words of Help (as the website's, in English and Hindi).
+extension HelpWords on S {
+  String _h(String en, String hi) => hindi ? hi : en;
+
+  String get helpIntro => _h(
+    'Answers to the common questions. For anything else, the school office is the first contact.',
+    'आम प्रश्नों के उत्तर। किसी और बात के लिए विद्यालय कार्यालय पहला संपर्क है।',
+  );
+  String get helpSearch => _h('Search the questions', 'प्रश्न खोजें');
+  String get helpClear => _h('Clear the search', 'खोज हटाएँ');
+  String helpCount(int n) => _h(n == 1 ? '1 question' : '$n questions', '$n प्रश्न');
+  String helpFound(int n, String q) =>
+      _h('${helpCount(n)} for “$q”', '“$q” के लिए ${helpCount(n)}');
+  String get helpNothing => _h(
+    'Nothing matches your search. The school office can help with anything else.',
+    'आपकी खोज से कुछ नहीं मिला। किसी और बात में विद्यालय कार्यालय मदद कर सकता है।',
+  );
+  String get helpNone => _h(
+    'No questions yet. For anything else, the school office is the first contact.',
+    'अभी कोई प्रश्न नहीं। किसी और बात के लिए विद्यालय कार्यालय पहला संपर्क है।',
+  );
+  String helpOpen(String screen) => _h('Open $screen', '$screen खोलें');
+  String get helpHelpful => _h('Was this helpful?', 'क्या यह मददगार था?');
+  String get helpYes => _h('Yes', 'हाँ');
+  String get helpNo => _h('No', 'नहीं');
+  String get helpThanksYes =>
+      _h('Thank you. You said this helped.', 'धन्यवाद। आपने बताया कि इससे मदद मिली।');
+  String get helpThanksNo => _h(
+    'Thank you. You said this did not help; the school office can help further.',
+    'धन्यवाद। आपने बताया कि इससे मदद नहीं मिली; विद्यालय कार्यालय आगे मदद कर सकता है।',
+  );
 }
 
-/// The help centre as the website has it (apps/parent/app/(app)/help), with the answers that name a web-only place
-/// (leave under Queries, the Retry button, the language link) said the app's way.
-const _faq = <_Faq>[
-  _Faq(
-    'How do I switch between my children?',
-    'मैं अपने बच्चों के बीच कैसे बदलूँ?',
-    'Every screen with a child switch shows one child at a time; tap the name at the top to change. Fees, results and attendance are per child.',
-    'बच्चा बदलने वाली हर स्क्रीन एक समय में एक बच्चा दिखाती है; बदलने के लिए ऊपर नाम पर टैप करें। शुल्क, परिणाम और उपस्थिति प्रति बच्चा हैं।',
-    parentOnly: true,
-  ),
-  _Faq(
-    'I paid online but the receipt is not showing.',
-    'मैंने ऑनलाइन भुगतान किया पर रसीद नहीं दिख रही।',
-    'Open Fees; Online payments lists each payment as Waiting, Paid or Failed. A receipt appears only after the gateway confirms; the school office can see the transaction too.',
-    'शुल्क खोलें; ऑनलाइन भुगतान में हर भुगतान प्रतीक्षा में, भुगतान हुआ या असफल दिखता है। रसीद गेटवे की पुष्टि के बाद ही बनती है; कार्यालय भी लेन-देन देख सकता है।',
-    needs: '/fees',
-    parentOnly: true,
-  ),
-  _Faq(
-    'How do I apply for leave?',
-    'अवकाश के लिए आवेदन कैसे करूँ?',
-    'Attendance → Apply for leave, with the dates and the reason. The class teacher approves it and the attendance shows leave for those days.',
-    'उपस्थिति → अवकाश के लिए आवेदन करें, तिथियाँ और कारण सहित। कक्षा शिक्षक स्वीकृत करते हैं और उपस्थिति में वे दिन अवकाश दिखते हैं।',
-    needs: '/attendance',
-  ),
-  _Faq(
-    'How do I ask to meet a teacher?',
-    'शिक्षक से मिलने का अनुरोध कैसे करूँ?',
-    'Appointments → Book an appointment: pick the child, whom to meet, an open day and a free time. The school confirms it and the gate pass shows on the appointment.',
-    'भेंट → बच्चा, किससे मिलना है और दिन चुनें, फिर खाली समय। विद्यालय पुष्टि करके गेट पास भेजता है।',
-    needs: '/appointments',
-  ),
-  _Faq(
-    'Why did I not get an absence alert?',
-    'मुझे अनुपस्थिति अलर्ट क्यों नहीं मिला?',
-    'Alerts go once a day per child after the attendance time. Check Profile → Your consents; safety and attendance alerts are always sent, but the mobile number on record must be current.',
-    'अलर्ट उपस्थिति समय के बाद प्रति बच्चा दिन में एक बार जाते हैं। प्रोफ़ाइल → आपकी सहमतियाँ देखें; सुरक्षा और उपस्थिति अलर्ट हमेशा जाते हैं, पर दर्ज मोबाइल नंबर सही होना चाहिए।',
-  ),
-  _Faq(
-    'How do I change my mobile number or address?',
-    'मोबाइल नंबर या पता कैसे बदलूँ?',
-    'Profile → Update on the section (address, contact, parents). Some changes save at once; others wait for the school’s approval and may need a document such as an electricity bill. Follow them under Changes asked for.',
-    'प्रोफ़ाइल → अनुभाग पर बदलें (पता, संपर्क, माता-पिता)। कुछ बदलाव तुरंत सहेजे जाते हैं; अन्य विद्यालय की स्वीकृति की प्रतीक्षा करते हैं और बिजली बिल जैसे दस्तावेज़ की आवश्यकता हो सकती है। उन्हें माँगे गए बदलाव में देखें।',
-    needs: '/profile',
-  ),
-  _Faq(
-    'Where is the report card?',
-    'रिपोर्ट कार्ड कहाँ है?',
-    'Results shows each released term; the PDF button prepares the card for download. A card can be withheld while fees are due.',
-    'परिणाम हर जारी सत्र दिखाता है; PDF बटन कार्ड डाउनलोड के लिए तैयार करता है। शुल्क बकाया होने पर कार्ड रोका जा सकता है।',
-    needs: '/results',
-  ),
-  _Faq(
-    'What data does the school hold about my child?',
-    'विद्यालय मेरे बच्चे का कौन सा डेटा रखता है?',
-    'Profile → Your data lets you ask for a copy, a correction or raise a grievance under the DPDP Act. The school answers within the legal time.',
-    'प्रोफ़ाइल → आपका डेटा से DPDP अधिनियम के तहत प्रति, सुधार या शिकायत माँग सकते हैं। विद्यालय कानूनी समय में उत्तर देता है।',
-    needs: '/profile',
-  ),
-  _Faq(
-    'The app works offline but shows old data.',
-    'ऐप ऑफ़लाइन चलता है पर पुराना डेटा दिखाता है।',
-    'The app keeps the last copy of pages for reading when offline; it refreshes when the connection returns. Sign out clears the copies.',
-    'ऐप ऑफ़लाइन पढ़ने के लिए पृष्ठों की अंतिम प्रति रखता है; कनेक्शन लौटने पर ताज़ा होता है। साइन आउट प्रतियाँ हटा देता है।',
-  ),
-  _Faq(
-    'How do I change the language?',
-    'भाषा कैसे बदलूँ?',
-    'Settings (at the top of the home screen) → Language: English or हिन्दी switches every screen.',
-    'सेटिंग्स (होम स्क्रीन पर ऊपर) → भाषा: English या हिन्दी हर स्क्रीन बदल देता है।',
-  ),
-];
+/// The school's Help for this parent or student (kept on Helpdesk set-up): headings with their questions.
+final familyHelpProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((ref, p) async {
+  final r = await cached(
+    'help:${p.id}',
+    () => ref.read(apiProvider).familyHelpMine(for_: p.kind == 'student' ? 'student' : 'parent'),
+  );
+  return Loaded(asJson(r.data), r.at, stale: r.stale);
+});
 
-/// Help as the website shows it: the common questions, each folded until tapped, in the app's language.
-class HelpScreen extends ConsumerWidget {
+/// Help as the website shows it: the school's own questions under headings that fold, a search box, the screen an
+/// answer is about (opened in the app) and "Was this helpful?" — no web page.
+class HelpScreen extends ConsumerStatefulWidget {
   const HelpScreen({super.key, required this.profile});
   final Profile profile;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HelpScreen> createState() => _HelpScreenState();
+}
+
+class _HelpScreenState extends ConsumerState<HelpScreen> {
+  final _search = TextEditingController();
+  String _q = '';
+
+  /// Votes given on this screen (the list keeps the vote the API had when it loaded).
+  final _votes = <String, bool>{};
+  final _busy = <String>{};
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _vote(String id, bool helpful) async {
+    final s = ref.read(stringsProvider);
+    setState(() => _busy.add(id));
+    try {
+      await ref
+          .read(apiProvider)
+          .familyHelpVote(
+            id: id,
+            body: FamilyHelpVoteDto(helpful: helpful),
+          );
+      if (!mounted) return;
+      setState(() {
+        _busy.remove(id);
+        _votes[id] = helpful;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy.remove(id));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(s, e))));
+    }
+  }
+
+  void _open(String page, String label) {
+    final s = ref.read(stringsProvider);
+    final screen = nativeScreen(widget.profile, page, s);
+    if (screen != null) pushPage(context, s.menu(label), screen);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
-    // the pages the person has; until the menu is in, every question shows
-    final menu = ref.watch(menuProvider(profile.id)).value;
-    final pages = menu == null
-        ? null
-        : {
-            for (final g in menu.groups)
-              for (final i in g.items) i.href.split('?').first,
-          };
-    final faq = _faq.where(
-      (f) =>
-          (!f.parentOnly || profile.kind == 'parent') &&
-          (f.needs == null || pages == null || pages.contains(f.needs)),
-    );
-    return ListView(
-      padding: const EdgeInsets.all(Tokens.sp4),
-      children: [
-        Text(
-          s.hindi ? 'आम प्रश्नों के उत्तर। किसी और बात के लिए विद्यालय कार्यालय पहला संपर्क है।' : 'Answers to the common questions. For anything else, the school office is the first contact.',
-          key: const Key('helpIntro'),
-          style: TextStyle(color: muted, fontSize: 14),
-        ),
-        const SizedBox(height: Tokens.sp3),
-        for (final (i, f) in faq.indexed)
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: ExpansionTile(
-              key: Key('help-$i'),
-              leading: const Icon(Icons.help_outline),
-              title: Text(
-                s.hindi ? f.qHi : f.q,
-                style: const TextStyle(fontWeight: Tokens.fwSemibold),
+    String pick(Json x, String key) => s.hindi ? '${x['${key}Hi'] ?? x[key]}' : '${x[key]}';
+    final words = _q.toLowerCase();
+    bool matches(Json x) =>
+        words.isEmpty ||
+        [
+          x['question'],
+          x['questionHi'],
+          x['answer'],
+          x['answerHi'],
+        ].any((v) => v is String && v.toLowerCase().contains(words));
+    return LoadedList<Json>(
+      value: ref.watch(familyHelpProvider(widget.profile)),
+      refresh: () => ref.refresh(familyHelpProvider(widget.profile).future),
+      children: (d) {
+        final groups = asList(d['groups']);
+        final shown = [for (final g in groups) (g, asList(g['questions']).where(matches).toList())]
+            .where((x) => x.$2.isNotEmpty)
+            .toList();
+        final found = shown.fold<int>(0, (n, x) => n + x.$2.length);
+        return [
+          Text(
+            s.helpIntro,
+            key: const Key('helpIntro'),
+            style: TextStyle(color: muted, fontSize: 14),
+          ),
+          const SizedBox(height: Tokens.sp3),
+          if (groups.isEmpty)
+            EmptyLine(s.helpNone)
+          else ...[
+            TextField(
+              key: const Key('helpSearch'),
+              controller: _search,
+              textInputAction: TextInputAction.search,
+              maxLength: 100,
+              decoration: InputDecoration(
+                labelText: s.helpSearch,
+                prefixIcon: const Icon(Icons.search),
+                counterText: '',
+                border: const OutlineInputBorder(),
+                suffixIcon: _q.isEmpty
+                    ? null
+                    : IconButton(
+                        key: const Key('helpClear'),
+                        tooltip: s.helpClear,
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(() {
+                          _search.clear();
+                          _q = '';
+                        }),
+                      ),
               ),
-              shape: const Border(),
-              collapsedShape: const Border(),
-              expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-              childrenPadding: const EdgeInsets.fromLTRB(Tokens.sp4, 0, Tokens.sp4, Tokens.sp4),
-              children: [Text(s.hindi ? f.aHi : f.a)],
+              onChanged: (v) => setState(() => _q = v.trim()),
+            ),
+            const SizedBox(height: Tokens.sp2),
+            if (_q.isNotEmpty)
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  found > 0 ? s.helpFound(found, _q) : s.helpNothing,
+                  key: const Key('helpFound'),
+                  style: TextStyle(color: muted, fontSize: 13),
+                ),
+              ),
+            const SizedBox(height: Tokens.sp2),
+            for (final (g, questions) in shown)
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: ExpansionTile(
+                  // a search opens every heading it found something under
+                  key: Key('helpGroup-${g['id'] ?? 'other'}-${_q.isNotEmpty}'),
+                  initiallyExpanded: _q.isNotEmpty,
+                  leading: const Icon(Icons.help_outline),
+                  title: Text(
+                    pick(g, 'title'),
+                    style: const TextStyle(fontWeight: Tokens.fwSemibold),
+                  ),
+                  subtitle: Text(
+                    s.helpCount(questions.length),
+                    style: TextStyle(color: muted, fontSize: 13),
+                  ),
+                  shape: const Border(),
+                  collapsedShape: const Border(),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [for (final x in questions) _question(context, s, x, pick, muted)],
+                ),
+              ),
+          ],
+        ];
+      },
+    );
+  }
+
+  Widget _question(
+    BuildContext context,
+    S s,
+    Json x,
+    String Function(Json, String) pick,
+    Color muted,
+  ) {
+    final id = '${x['id']}';
+    final vote = _votes[id] ?? x['myVote'] as bool?;
+    final page = x['page'] as String?;
+    final label = x['pageLabel'] as String?;
+    final busy = _busy.contains(id);
+    return ExpansionTile(
+      key: Key('help-$id'),
+      title: Text(pick(x, 'question'), style: const TextStyle(fontWeight: Tokens.fwSemibold)),
+      shape: const Border(),
+      collapsedShape: const Border(),
+      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+      childrenPadding: const EdgeInsets.fromLTRB(Tokens.sp4, 0, Tokens.sp4, Tokens.sp3),
+      children: [
+        Text(pick(x, 'answer')),
+        const SizedBox(height: Tokens.sp2),
+        if (page != null && label != null) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: Key('helpOpen-$id'),
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: Text(s.helpOpen(s.menu(label))),
+              onPressed: () => _open(page, label),
+            ),
+          ),
+          const SizedBox(height: Tokens.sp2),
+        ],
+        Wrap(
+          spacing: Tokens.sp2,
+          runSpacing: Tokens.sp1,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(s.helpHelpful, style: TextStyle(color: muted, fontSize: 13)),
+            ChoiceChip(
+              key: Key('helpYes-$id'),
+              label: Text(s.helpYes),
+              selected: vote == true,
+              onSelected: busy ? null : (_) => _vote(id, true),
+            ),
+            ChoiceChip(
+              key: Key('helpNo-$id'),
+              label: Text(s.helpNo),
+              selected: vote == false,
+              onSelected: busy ? null : (_) => _vote(id, false),
+            ),
+          ],
+        ),
+        if (vote != null)
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              vote ? s.helpThanksYes : s.helpThanksNo,
+              key: Key('helpThanks-$id'),
+              style: TextStyle(color: muted, fontSize: 13),
             ),
           ),
       ],

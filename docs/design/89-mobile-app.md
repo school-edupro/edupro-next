@@ -871,3 +871,12 @@ folded until tapped, in English or Hindi. Three answers say the app's way where 
 leave is Attendance → Apply for leave, a payment shows under Online payments as Waiting / Paid / Failed, the language
 is in Settings. A question about a page the person does not have is left out: a student has no child switch, paying or
 appointments (seven questions; a parent ten).
+
+## As built — Help kept by the school (21 Nov 2026)
+
+Help in the app now reads the school's own list (docs/design/24, "Help for families"; `GET engagement/help?for=`
+the profile's kind): headings folded with how many questions each has, then each question folded; the answer (in
+Hindi where the school wrote it), **Open <screen>** opening the app's own screen for it, and **Was this helpful?**
+Yes / No (`POST engagement/help/:id/vote`; the person's earlier vote shows, with a thank-you line). A search box
+searches questions and answers in both languages and opens every heading it finds something under. The list is
+kept on the phone for reading offline like the other screens. The fixed questions of the first Help screen are gone.

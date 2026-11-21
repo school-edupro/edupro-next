@@ -33,6 +33,29 @@ export default async function HelpdeskSetupPage({
       ) : (
         <Notice params={sp} />
       )}
+      <section
+        className="ep-card"
+        aria-labelledby="hd-family-help"
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        <h2 id="hd-family-help" className="ep-cdash__h3" style={{ marginTop: 0 }}>
+          Help for families
+        </h2>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          The questions and answers parents and students see on Help, in the app and on the website.
+        </p>
+        <ul className="ep-setup-links">
+          <li>
+            <a href="/engagement/helpdesk/setup/family-help">
+              <strong>Help questions and answers</strong>
+            </a>
+            <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+              Headings, questions in English and Hindi, who sees each, the screen it is about, and
+              how often families found an answer helpful
+            </span>
+          </li>
+        </ul>
+      </section>
       <HelpdeskSetup initial={setup} />
       <MessageTemplates
         templates={setup.templates ?? []}

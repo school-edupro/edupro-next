@@ -30,6 +30,8 @@ import { GatePassService } from './gatepass.service';
 import { CandidateQueriesController } from './candidate-queries.controller';
 import { CandidateQueriesService } from './candidate-queries.service';
 import { HelpdeskController } from './helpdesk.controller';
+import { FamilyHelpController } from './family-help.controller';
+import { FamilyHelpService } from './family-help.service';
 import { HelpdeskService } from './helpdesk.service';
 import { EngagementPlusController } from './plus.controller';
 import { EngagementPlusService } from './plus.service';
@@ -70,6 +72,7 @@ import { QueriesService } from './queries.service';
     DsrController,
     PortalProfileController,
     HelpdeskController,
+    FamilyHelpController,
     CandidateQueriesController,
     AppointmentsController,
     PublicAppointmentsController,
@@ -82,6 +85,7 @@ import { QueriesService } from './queries.service';
   providers: [
     QueriesService,
     HelpdeskService,
+    FamilyHelpService,
     CandidateQueriesService,
     AppointmentsService,
     VisitorsService,
