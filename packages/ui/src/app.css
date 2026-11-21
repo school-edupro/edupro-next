@@ -1024,6 +1024,13 @@
   transform: translateX(18px);
 }
 
+/* The shared Tabs component: the tab row, then the panel under it. A bare .ep-tabs is restyled
+   further down as a wrapping chip row (link-tab and chip pages); the modifier keeps Tabs a block,
+   and its two classes outrank that rule wherever it sits. */
+.ep-tabs.ep-tabs--panels {
+  display: block;
+  margin-bottom: 0;
+}
 .ep-tabs__list {
   display: flex;
   gap: var(--sp-1);
@@ -4547,6 +4554,8 @@ a.ep-tabs__tab {
   font-weight: var(--fw-semibold);
   padding: 0 var(--sp-1);
 }
+/* A row of link tabs or chips that wraps (helpdesk desks, payroll, leave, purchase and library
+   views). The shared Tabs component (.ep-tabs--panels) stays a block: see the Tabs rules. */
 .ep-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -8157,11 +8166,7 @@ a.db-list__main:hover strong {
 .db-qa__search:focus-within {
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
-/* the Admin pages / Teacher app tabs: the tab row above the tiles (.ep-tabs is a chip row elsewhere) */
-.db-qa .ep-tabs {
-  display: block;
-  margin-bottom: 0;
-}
+/* the Admin pages / Teacher app tabs: a closer tab row above the tiles */
 .db-qa .ep-tabs__list {
   margin-bottom: var(--sp-3);
 }

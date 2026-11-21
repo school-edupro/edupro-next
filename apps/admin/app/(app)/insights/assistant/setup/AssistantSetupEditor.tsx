@@ -1,7 +1,7 @@
 'use client';
-import { Button, Switch } from '@edupro/ui';
+import { Button, Switch, Tabs } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import {
   AUDIENCE_LABEL,
   DAILY_LIMIT,
@@ -189,27 +189,6 @@ export function AssistantSetupEditor({
   const [values, setValues] = useState<AssistantSetupValues>(saved);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, start] = useTransition();
-  const [tab, setTab] = useState<SetupAudience>('student');
-  /** Starter-question tabs: arrow keys, Home and End move between audiences (WAI-ARIA tabs). */
-  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
-    const i = SETUP_AUDIENCES.indexOf(tab);
-    const n = SETUP_AUDIENCES.length;
-    const to =
-      e.key === 'ArrowRight'
-        ? (i + 1) % n
-        : e.key === 'ArrowLeft'
-          ? (i - 1 + n) % n
-          : e.key === 'Home'
-            ? 0
-            : e.key === 'End'
-              ? n - 1
-              : -1;
-    if (to < 0) return;
-    e.preventDefault();
-    const next = SETUP_AUDIENCES[to]!;
-    setTab(next);
-    document.getElementById(`as-tab-${next}`)?.focus();
-  };
   const dirty = !sameValues(values, saved);
   const problems = setupProblems(values);
 
@@ -419,39 +398,12 @@ export function AssistantSetupEditor({
           The chips on the chat&apos;s start screen, in order (up to {String(MAX_STARTERS)}). A
           question about a topic switched off, or one a person may not ask, is left out for them.
         </p>
-        <div
-          role="tablist"
-          aria-label="Starter questions of each audience"
-          className="ep-tabs__list"
-        >
-          {SETUP_AUDIENCES.map((a) => (
-            <button
-              key={a}
-              id={`as-tab-${a}`}
-              role="tab"
-              type="button"
-              aria-selected={a === tab}
-              aria-controls={`as-panel-${a}`}
-              tabIndex={a === tab ? 0 : -1}
-              className="ep-tabs__tab"
-              onClick={() => setTab(a)}
-              onKeyDown={onTabKey}
-            >
-              {AUDIENCE_LABEL[a]}
-              {values.starters[a].length ? ` (${String(values.starters[a].length)})` : ''}
-            </button>
-          ))}
-        </div>
-        {SETUP_AUDIENCES.map((a) => (
-          <div
-            key={a}
-            id={`as-panel-${a}`}
-            role="tabpanel"
-            aria-labelledby={`as-tab-${a}`}
-            hidden={a !== tab}
-            tabIndex={0}
-          >
-            {a === tab ? (
+        <Tabs
+          ariaLabel="Starter questions of each audience"
+          items={SETUP_AUDIENCES.map((a) => ({
+            id: a,
+            label: `${AUDIENCE_LABEL[a]}${values.starters[a].length ? ` (${String(values.starters[a].length)})` : ''}`,
+            content: (
               <StarterList
                 audience={a}
                 items={values.starters[a]}
@@ -460,9 +412,9 @@ export function AssistantSetupEditor({
                 canEdit={canEdit}
                 onChange={(next) => change({ starters: { ...values.starters, [a]: next } })}
               />
-            ) : null}
-          </div>
-        ))}
+            ),
+          }))}
+        />
       </section>
 
       {canEdit ? (

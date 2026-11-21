@@ -42,7 +42,7 @@ export function Tabs({ items, defaultTab, activeTab, onChange, ariaLabel }: Tabs
     }
   };
   return (
-    <div className="ep-tabs">
+    <div className="ep-tabs ep-tabs--panels">
       <div role="tablist" aria-label={ariaLabel} className="ep-tabs__list">
         {items.map((item, index) => {
           const selected = item.id === current;
