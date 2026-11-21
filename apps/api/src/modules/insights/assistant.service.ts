@@ -6,7 +6,9 @@ import {
   BudgetMeter,
   MemoryBudgetStore,
   MockProvider,
+  matchQuestion,
   providerFromEnv,
+  redact,
   type AiAuditEvent,
   type AiAuditSink,
   type AiProvider,
@@ -23,6 +25,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ENV, type Env } from '../../config/env';
 import { buildCatalogue, runEntry, type CatalogueEntry } from './catalogue';
+import { META, genericAnswer, tableCard, type Card } from './catalogue-meta';
 
 export interface AskDto {
   question: string;
@@ -44,12 +47,22 @@ export interface AskResponse {
   answer: string;
   refused: boolean;
   citations: Citation[];
-  suggestions: Array<{ id: string; title: string }>;
+  suggestions: Array<{ id: string; title: string; question?: string }>;
   usage: { inputTokens: number; outputTokens: number };
   costPaise: number;
   provider: string;
   model: string;
+  /** docs/design/91: the records shown with the answer (figures or a short table). */
+  card?: Card | null;
+  /** The screen the answer is about: the app's own screen and the asking website's page. */
+  link?: { label: string; labelHi: string; app: string | null; web: string | null } | null;
+  /** Related questions the person may ask next. */
+  followUps?: Array<{ id: string; question: string }>;
+  /** Two queries fit the question equally: which one. */
+  didYouMean?: Array<{ id: string; question: string }>;
 }
+
+type Chip = { id: string; question: string };
 
 /** Token budgets in Redis (shared across API instances); memory when Redis is unreachable. */
 class RedisBudgetStore implements BudgetStore {
@@ -134,6 +147,12 @@ parent's language, with the figures from the results; name the source query. Nev
 speculate about other children or staff; if no tool fits, say so kindly.`;
 
 const HI = /[ऀ-ॿ]/;
+/** Words that are not part of a student's name in a staff question. */
+const STOP = new Set(
+  'attendance fees fee ledger instalments instalment student students show tell give what how much the for of and with this last days month week today was present absent record records class section please about details'.split(
+    ' ',
+  ),
+);
 /** Hinglish: Latin script with Hindi function words; two hits or one strong marker. */
 const HINGLISH_WORDS =
   /\b(kya|kitna|kitni|kitne|kaun|kab|kaise|kyun|hai|hain|tha|the|ka|ki|ke|mera|mere|meri|bachcha|bachche|bachchi|bakaya|baki|hazri|haziri|chhutti|aaj|kal|abhi|nahi|nahin|dikhao|batao|bataiye|dijiye|kar|karo|wala|wale)\b/gi;
@@ -245,6 +264,8 @@ export function catalogueMockResponder(
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
   private readonly provider: AiProvider;
+  /** No outside model (docs/design/91): EduPro's own matcher reads the question. */
+  private readonly local: boolean;
   private readonly budget: BudgetMeter;
   private readonly redis: Redis;
 
@@ -253,6 +274,7 @@ export class AssistantService {
     private readonly db: DbService,
     private readonly viewer: ViewerService,
   ) {
+    this.local = env.AI_PROVIDER !== 'claude';
     this.provider = providerFromEnv({
       AI_PROVIDER: env.AI_PROVIDER,
       AI_MODEL: env.AI_MODEL,
@@ -328,6 +350,9 @@ export class AssistantService {
       description: e.description,
       params: e.params,
       allowed: allowed.has(e.id),
+      // the question its chip asks (docs/design/91)
+      ask: META[e.id]?.ask ?? e.title,
+      askHi: META[e.id]?.askHi ?? e.titleHi,
     }));
   }
 
@@ -364,6 +389,8 @@ export class AssistantService {
             { status: 403, extra: { purpose: 'ai.assistant' } },
           );
       }
+      if (this.local)
+        return this.askLocal(c, ctx, dto, { entries: mine, language, surface, today });
       const conversationId = await this.openConversation(c, dto.conversationId, language, surface);
       const history = await this.history(c, conversationId);
       const citations: Citation[] = [];
@@ -473,6 +500,274 @@ export class AssistantService {
     });
   }
 
+  /**
+   * The answer with no outside model (docs/design/91): EduPro's matcher picks the approved query the person may run
+   * and reads its inputs; the query runs with the person's rights (RLS, scope); the answer is a sentence, the records
+   * as a card, the screen to open, and related questions. "Did you mean" when two fit; a kind no with suggestions when
+   * none does — never a guess, never anything from outside the school's records.
+   */
+  private async askLocal(
+    c: PoolClient,
+    ctx: RequestContext,
+    dto: AskDto,
+    o: {
+      entries: CatalogueEntry[];
+      language: 'en' | 'hi' | 'hinglish';
+      surface: 'admin' | 'teacher' | 'parent';
+      today: string;
+    },
+  ): Promise<AskResponse> {
+    const tenant = requireTenant(ctx);
+    const { entries, language, surface, today } = o;
+    const hi = language === 'hi';
+    // the daily allowance is checked first, as with a model (no tokens are spent here)
+    const allowance = await this.budget.check({ schoolId: tenant.schoolId, userId: ctx.user.id });
+    if (!allowance.allowed) {
+      const e = new BudgetExceededError(allowance);
+      throw new DomainError('ai.budget_exceeded', e.message, {
+        status: 429,
+        extra: { reason: allowance.reason },
+      });
+    }
+    const byId = new Map(entries.map((e) => [e.id, e]));
+    const chip = (e: CatalogueEntry): Chip => ({
+      id: e.id,
+      question: hi ? (META[e.id]?.askHi ?? e.titleHi) : (META[e.id]?.ask ?? e.title),
+    });
+    const conversationId = await this.openConversation(c, dto.conversationId, language, surface);
+    const classes = (
+      await c.query<{ id: string; code: string }>(
+        `SELECT id::text, code FROM classes WHERE deleted_at IS NULL`,
+      )
+    ).rows;
+    const sections = (
+      await c.query<{ id: string; label: string }>(
+        `SELECT cs.id::text, k.code || '-' || cs.name AS label FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE k.deleted_at IS NULL`,
+      )
+    ).rows;
+    const match = matchQuestion(
+      dto.question,
+      entries.map((e) => ({
+        id: e.id,
+        keywords: e.keywords,
+        phrases: [META[e.id]?.ask, META[e.id]?.askHi, ...(META[e.id]?.phrases ?? [])].filter(
+          (x): x is string => !!x,
+        ),
+        params: e.params,
+      })),
+      { today, classes, sections },
+    );
+
+    let answer: string;
+    let refused = false;
+    let card: Card | null = null;
+    let link: AskResponse['link'] = null;
+    let followUps: Chip[] = [];
+    let didYouMean: Chip[] = [];
+    let suggestions: AskResponse['suggestions'] = [];
+    const citations: Citation[] = [];
+    const t = (en: string, hindi: string, hinglish = en) =>
+      hi ? hindi : language === 'hinglish' ? hinglish : en;
+
+    if (match.kind === 'match') {
+      const entry = byId.get(match.id)!;
+      let params = match.params;
+      let ready = true;
+      // a query about one student: who, from the question (a name or an admission number)
+      if (entry.params.some((p) => p.name === 'studentId' && p.required) && !params.studentId) {
+        const found = await this.studentsNamed(c, dto.question);
+        if (found.length === 1) params = { ...params, studentId: found[0]!.id };
+        else {
+          ready = false;
+          answer =
+            found.length > 1
+              ? t(
+                  'Which student do you mean?',
+                  'आपका मतलब किस विद्यार्थी से है?',
+                  'Kaunsa student?',
+                )
+              : t(
+                  'Which student? Add the name or the admission number to the question.',
+                  'कौन सा विद्यार्थी? प्रश्न में नाम या प्रवेश संख्या जोड़ें।',
+                  'Kaunsa student? Naam ya admission number likhiye.',
+                );
+          if (found.length > 1)
+            card = tableCard(
+              found.map((x) => ({
+                student: x.name,
+                admission_no: x.admissionNo,
+                section: x.section,
+              })),
+            );
+          else refused = true;
+        }
+      }
+      // another input the query needs: a name or words from the question, else ask for it
+      for (const p of entry.params.filter((x) => x.required && x.name !== 'studentId'))
+        if (ready && (params[p.name] === undefined || params[p.name] === '')) {
+          const words = dto.question
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, ' ')
+            .split(/\s+/)
+            .filter((w) => w.length >= 3 && !STOP.has(w));
+          if (p.type === 'text' && words.length) params = { ...params, [p.name]: words.join(' ') };
+          else {
+            ready = false;
+            refused = true;
+            answer = t(
+              `Please add ${p.description.toLowerCase()} to the question.`,
+              `कृपया प्रश्न में यह जोड़ें: ${p.description}।`,
+            );
+          }
+        }
+      if (ready) {
+        const out = await runEntry(c, entry, params);
+        const meta = META[entry.id];
+        answer = meta?.answer
+          ? meta.answer(out.rows, params, language)
+          : genericAnswer(entry.title, entry.titleHi, out.rows, params, language);
+        card = out.rows.length ? (meta?.card ? meta.card(out.rows) : tableCard(out.rows)) : null;
+        if (meta?.screen) {
+          const screen = meta.screen;
+          link = {
+            label: screen.label,
+            labelHi: screen.labelHi,
+            app: screen.app ?? null,
+            web: screen[surface] ?? null,
+          };
+          if (!link.app && !link.web) link = null;
+        }
+        followUps = [
+          ...(meta?.followUps ?? []),
+          ...entries.filter((x) => x.department === entry.department).map((x) => x.id),
+        ]
+          .filter((id, i, all) => id !== entry.id && byId.has(id) && all.indexOf(id) === i)
+          .slice(0, 3)
+          .map((id) => chip(byId.get(id)!));
+        citations.push({
+          query: entry.id,
+          title: hi ? entry.titleHi : entry.title,
+          params,
+          rows: out.rows.length,
+        });
+      }
+    } else if (match.kind === 'ambiguous') {
+      answer = t(
+        'Did you mean one of these?',
+        'आपका मतलब इनमें से कौन सा है?',
+        'Inmein se kaunsa?',
+      );
+      didYouMean = match.ids.filter((id) => byId.has(id)).map((id) => chip(byId.get(id)!));
+    } else {
+      refused = true;
+      const near = match.near.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
+      const offer = (near.length ? near : entries).slice(0, 3);
+      suggestions = offer.map((e) => ({ ...chip(e), title: hi ? e.titleHi : e.title }));
+      answer =
+        match.reason === 'not_data'
+          ? t(
+              'I can only read your school records here. I cannot change anything or answer about things outside the school.',
+              'मैं यहाँ केवल आपके विद्यालय के रिकॉर्ड पढ़ सकता हूँ। मैं कुछ बदल नहीं सकता, न विद्यालय के बाहर की बातें बता सकता हूँ।',
+              'Main sirf aapke school ke records padh sakta hoon; kuch badal nahi sakta, na bahar ki baatein bata sakta hoon.',
+            )
+          : t(
+              'I can answer questions about your school records, such as:',
+              'मैं आपके विद्यालय के रिकॉर्ड के बारे में बता सकता हूँ, जैसे:',
+              'Main aapke school ke records ke baare mein bata sakta hoon, jaise:',
+            );
+    }
+
+    // stored and audited with personal details masked; nothing leaves the server
+    const question = redact(dto.question.slice(0, 4000));
+    const sink = new DbAuditSink(c);
+    const at = new Date().toISOString();
+    const base = {
+      schoolId: tenant.schoolId,
+      userId: ctx.user.id,
+      requestId: ctx.requestId,
+      conversationId,
+      provider: 'local',
+      model: 'local-matcher',
+    };
+    await sink.record({
+      ...base,
+      kind: 'prompt',
+      text: question.text,
+      redactions: question.total,
+      at,
+    });
+    await sink.record({
+      ...base,
+      kind: refused ? 'refusal' : 'answer',
+      text: answer!.slice(0, 2000),
+      redactions: 0,
+      costPaise: 0,
+      citations: citations.map((x) => x.query),
+      at,
+    });
+    await c.query(
+      `INSERT INTO ai_messages (school_id, conversation_id, role, content) VALUES (app.current_school_id(), $1, 'user', $2)`,
+      [conversationId, question.text],
+    );
+    await c.query(
+      `INSERT INTO ai_messages (school_id, conversation_id, role, content, refused, citations, usage, display)
+       VALUES (app.current_school_id(), $1, 'assistant', $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)`,
+      [
+        conversationId,
+        answer!.slice(0, 8000),
+        refused,
+        JSON.stringify(citations),
+        JSON.stringify({ inputTokens: 0, outputTokens: 0 }),
+        JSON.stringify({ card, link, followUps, didYouMean, suggestions }),
+      ],
+    );
+    await c.query(
+      `UPDATE ai_conversations SET turns = turns + 1, title = COALESCE(title, $2), updated_at = now() WHERE id = $1`,
+      [conversationId, question.text.slice(0, 80)],
+    );
+    return {
+      conversationId,
+      answer: answer!,
+      refused,
+      citations,
+      suggestions,
+      card,
+      link,
+      followUps,
+      didYouMean,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      costPaise: 0,
+      provider: 'local',
+      model: 'local-matcher',
+    };
+  }
+
+  /** Students a staff question names (an admission number, or words of a name), at most five. */
+  private async studentsNamed(c: PoolClient, question: string) {
+    const words = question
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !STOP.has(w));
+    if (!words.length) return [];
+    const r = await c.query<{
+      id: string;
+      name: string;
+      admissionNo: string;
+      section: string | null;
+    }>(
+      `SELECT s.id::text, s.display_name AS name, s.admission_no AS "admissionNo",
+              (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+                WHERE e.student_id = s.id AND e.status = 'active' ORDER BY e.id DESC LIMIT 1) AS section
+         FROM students s
+        WHERE s.deleted_at IS NULL AND (lower(s.admission_no) = ANY($1::text[])
+           OR (SELECT bool_and(lower(s.display_name) LIKE '%' || w || '%') FROM unnest($2::text[]) AS w))
+        ORDER BY s.display_name LIMIT 5`,
+      [words, words.filter((w) => !/\d/.test(w))],
+    );
+    return r.rows;
+  }
+
   private nearest(question: string, entries: CatalogueEntry[]): CatalogueEntry[] {
     const q = question.toLowerCase();
     return entries
@@ -531,7 +826,7 @@ export class AssistantService {
       if (!conv.rows[0])
         throw new DomainError('not-found', 'Conversation not found', { status: 404 });
       const msgs = await c.query(
-        `SELECT id::text, role, content, refused, citations, usage, created_at AS "createdAt" FROM ai_messages WHERE conversation_id = $1 ORDER BY id`,
+        `SELECT id::text, role, content, refused, citations, usage, display, created_at AS "createdAt" FROM ai_messages WHERE conversation_id = $1 ORDER BY id`,
         [id],
       );
       return { ...conv.rows[0], messages: msgs.rows };

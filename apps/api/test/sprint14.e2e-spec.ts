@@ -854,8 +854,10 @@ describe('adjustments, hostel, misc, exams and the assistant (e2e, Sprint 14)', 
       params: { classId, minAmount: 1000 },
     });
     expect(a.citations[0]!.rows).toBeGreaterThan(0);
-    expect(a.answer).toContain('fee_defaulters');
-    expect(a.provider).toBe('mock');
+    // docs/design/91: a sentence, the rows as a card, the screen to open, related questions; no outside model
+    expect(a.answer).toMatch(/^Fee defaulters.*\d+ records?\.$/);
+    expect((a as unknown as { card: { kind: string } }).card.kind).toBe('table');
+    expect(a.provider).toBe('local');
     // the same list the fees screen shows
     const screen = await inject({
       method: 'GET',

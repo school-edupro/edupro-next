@@ -1116,8 +1116,9 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
       expect(ask.statusCode).toBe(201);
       expect(ask.json().refused).toBe(false);
       expect(ask.json().citations[0]).toMatchObject({ query: 'my_absentees', rows: 1 });
-      expect(ask.json().answer).toContain('Chirag Fifteen');
-      expect(ask.json().answer).not.toContain('Deep');
+      // docs/design/91: the pupils are in the answer's card
+      expect(JSON.stringify(ask.json().card)).toContain('Chirag Fifteen');
+      expect(JSON.stringify(ask.json())).not.toContain('Deep');
       const other = await inject({
         method: 'POST',
         url: '/insights/assistant',
@@ -1126,8 +1127,8 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
       });
       expect(other.statusCode).toBe(201);
       expect(other.json().citations[0]).toMatchObject({ query: 'my_absentees', rows: 1 });
-      expect(other.json().answer).toContain('Deep Fifteen');
-      expect(other.json().answer).toMatch(/ se 1 row/); // Hinglish narration
+      expect(JSON.stringify(other.json().card)).toContain('Deep Fifteen');
+      expect(other.json().answer).toMatch(/1 record mile/); // Hinglish
       const staffOnly = await inject({
         method: 'POST',
         url: '/insights/assistant',
@@ -1180,7 +1181,7 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
       expect(dues.json().citations[0]).toMatchObject({ query: 'child_dues' });
       expect(dues.json().answer).toContain('Asha Fifteen');
       expect(dues.json().answer).not.toContain('Bhanu');
-      expect(dues.json().answer).toMatch(/ se \d+ row/);
+      expect(dues.json().answer).toMatch(/baki hai/); // Hinglish
       const absent = await inject({
         method: 'POST',
         url: '/insights/assistant',
@@ -1191,7 +1192,14 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
         query: 'child_attendance',
         params: { days: 7 },
       });
-      expect(absent.json().answer).toContain('absent_days: 0');
+      expect(absent.json().answer).toMatch(/absent 0\./);
+      expect(absent.json().card).toMatchObject({ kind: 'figures' });
+      expect(absent.json().link).toMatchObject({
+        label: 'Attendance',
+        app: '/attendance',
+        web: '/attendance',
+      });
+      expect(absent.json().followUps.length).toBeGreaterThan(0);
       const conv = await inject({
         method: 'GET',
         url: '/insights/assistant/conversations',

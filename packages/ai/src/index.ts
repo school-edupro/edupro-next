@@ -8,3 +8,4 @@ export * from './assistant';
 export * from './config';
 export * from './narrative';
 export * from './structured';
+export * from './matcher';

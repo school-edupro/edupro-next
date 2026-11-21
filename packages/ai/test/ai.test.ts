@@ -198,9 +198,13 @@ describe('claude provider', () => {
 });
 
 describe('provider from env', () => {
-  it('defaults to mock outside production and refuses it in production', () => {
+  it('defaults to local (no outside model) everywhere; mock is refused in production', () => {
+    // docs/design/91: local is the chatbot's own matcher; reports keep their template narrative
     expect(providerFromEnv({}).name).toBe('mock');
-    expect(() => providerFromEnv({ NODE_ENV: 'production' })).toThrow(/refused in production/);
+    expect(providerFromEnv({ NODE_ENV: 'production' }).name).toBe('mock');
+    expect(() => providerFromEnv({ AI_PROVIDER: 'mock', NODE_ENV: 'production' })).toThrow(
+      /refused in production/,
+    );
     expect(() => providerFromEnv({ AI_PROVIDER: 'claude' })).toThrow(/ANTHROPIC_API_KEY/);
     expect(
       providerFromEnv({

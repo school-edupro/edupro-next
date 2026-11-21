@@ -15,7 +15,7 @@ export interface AiEnv {
  * development default and is refused in production, like every other development bypass in this code base.
  */
 export function providerFromEnv(env: AiEnv): AiProvider {
-  const name = (env.AI_PROVIDER ?? 'mock').toLowerCase();
+  const name = (env.AI_PROVIDER ?? 'local').toLowerCase();
   if (name === 'claude') {
     if (!env.ANTHROPIC_API_KEY) throw new Error('AI_PROVIDER=claude needs ANTHROPIC_API_KEY');
     return new ClaudeProvider({
@@ -24,10 +24,12 @@ export function providerFromEnv(env: AiEnv): AiProvider {
       baseUrl: env.ANTHROPIC_BASE_URL,
     });
   }
+  // no outside model (docs/design/91): the chatbot answers with EduPro's own matcher; reports use the template
+  if (name === 'local') return new MockProvider();
   if (name === 'mock') {
     if (env.NODE_ENV === 'production')
-      throw new Error('AI_PROVIDER=mock is refused in production; set AI_PROVIDER=claude');
+      throw new Error('AI_PROVIDER=mock is refused in production; set AI_PROVIDER=local or claude');
     return new MockProvider();
   }
-  throw new Error(`Unknown AI_PROVIDER "${name}" (claude or mock)`);
+  throw new Error(`Unknown AI_PROVIDER "${name}" (local, claude or mock)`);
 }

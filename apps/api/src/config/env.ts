@@ -61,7 +61,8 @@ const EnvSchema = z.object({
   CCAVENUE_WORKING_KEY: z.string().min(8).default('dev-ccavenue-working-key'),
   CCAVENUE_BASE_URL: z.string().url().default('https://test.ccavenue.com'),
   /** Sprint 14: the assistant's model provider (packages/ai). mock is refused in production. */
-  AI_PROVIDER: z.enum(['mock', 'claude']).default('mock'),
+  // local: no outside model — the chatbot's own matcher (docs/design/91); claude: the Claude API
+  AI_PROVIDER: z.enum(['local', 'mock', 'claude']).default('local'),
   AI_MODEL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().url().optional(),
@@ -138,7 +139,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   if (env.NODE_ENV === 'production' && env.AI_PROVIDER === 'mock') {
     throw new Error(
-      'Refusing to start: AI_PROVIDER must be claude (with ANTHROPIC_API_KEY) in production',
+      'Refusing to start: AI_PROVIDER must be local (no outside model) or claude (with ANTHROPIC_API_KEY) in production',
     );
   }
   if (env.AI_PROVIDER === 'claude' && !env.ANTHROPIC_API_KEY) {
