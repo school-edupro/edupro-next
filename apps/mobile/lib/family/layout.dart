@@ -162,15 +162,7 @@ class FamilyLayoutView {
 /// The family layout of a profile, kept for offline use; the app as it was when none has come (or the call fails
 /// with no copy kept).
 final familyLayoutProvider = FutureProvider.family<FamilyLayoutView, Profile>((ref, p) async {
-  final menu = await ref
-      .watch(menuProvider(p.id).future)
-      .then<Set<String>?>(
-        (m) => {
-          for (final g in m.groups)
-            for (final i in g.items) i.href,
-        },
-      )
-      .catchError((_) => null);
+  // the layout first (the copy kept last time when there is no network); the menu only for the fallback
   try {
     final r = await cached(
       'layout:${p.id}',
@@ -178,10 +170,21 @@ final familyLayoutProvider = FutureProvider.family<FamilyLayoutView, Profile>((r
           ref.read(apiProvider).familyLayoutMine(kind: p.kind == 'student' ? 'student' : 'parent'),
     );
     final v = FamilyLayoutView.fromJson(asJson(r.data));
-    return v.tabs.length >= 2 ? v : FamilyLayoutView.fallback(p, menu);
+    if (v.tabs.length >= 2) return v;
   } catch (_) {
-    return FamilyLayoutView.fallback(p, menu);
+    // no layout and no copy: the app as it was
   }
+  final menu = await ref
+      .read(menuProvider(p.id).future)
+      .then<Set<String>?>(
+        (m) => {
+          for (final g in m.groups)
+            for (final i in g.items) i.href,
+        },
+      )
+      .timeout(const Duration(seconds: 5))
+      .catchError((_) => null);
+  return FamilyLayoutView.fallback(p, menu);
 });
 
 /// A screen's own icon in the app (the shortcut tiles and the tabs); else the web apps' icon name.

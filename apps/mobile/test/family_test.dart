@@ -6,7 +6,9 @@ import 'package:edupro/app_services.dart';
 import 'package:edupro/auth/session_store.dart';
 import 'package:edupro/family/attendance.dart';
 import 'package:edupro/family/data.dart';
+import 'package:edupro/family/layout.dart' show familyLayoutProvider;
 import 'package:edupro/family/queries.dart';
+import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/staff/data.dart' show PickedFile;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -3105,6 +3107,45 @@ void main() {
       ),
       throwsA(isA<ApiException>()),
     );
+  });
+
+  test('the school\'s layout is kept for offline use; none kept: the app as it was', () async {
+    SharedPreferences.setMockInitialValues({});
+    await clearCache();
+    final school = School()
+      ..kind = 'student'
+      ..layout = layoutJson(
+        tabs: ['academics', '/library', '/results'],
+        shortcuts: ['/library', '/health', '/certificates', '/help'],
+        cards: ['notices'],
+        academics: ['/timetable', '/homework'],
+      );
+    const p = Profile(
+      id: 'student:7:41',
+      kind: 'student',
+      schoolId: '7',
+      schoolName: 'Sample School',
+      name: 'Kid Sample',
+      app: 'parent',
+      studentId: '41',
+    );
+    Future<List<String>> tabs() async {
+      final c = ProviderContainer(
+        overrides: [transportProvider.overrideWithValue(FakeTransport(school.answer))],
+      );
+      addTearDown(c.dispose);
+      final l = await c.read(familyLayoutProvider(p).future);
+      return [for (final t in l.tabs) t.href];
+    }
+
+    const theSchools = ['/', 'academics', '/library', '/results', 'more'];
+    expect(await tabs(), theSchools);
+    // no network, a fresh start: the copy kept last time
+    school.offline = true;
+    expect(await tabs(), theSchools);
+    // no copy either: the app as it was
+    await clearCache();
+    expect(await tabs(), ['/', '/homework', '/timetable', '/results', 'more']);
   });
 
   test('money in Indian grouping, dates in English and Hindi', () {
