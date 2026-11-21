@@ -1674,6 +1674,31 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a layout published while the app is away reaches it when it comes back', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final school = School();
+      await pumpFamily(tester, kind: 'student', school: school);
+      expect(tab('Library'), findsNothing);
+      // the school publishes; the app goes to the background and comes back
+      school.layout = studentLayout();
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pumpAndSettle();
+      expect(tab('Library'), findsOneWidget);
+      expect(find.byKey(const Key('shortcut-health')), findsOneWidget);
+    });
+
     testWidgets('in Hindi: the cards and the words of Edit shortcuts', (tester) async {
       await tester.binding.setSurfaceSize(const Size(420, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));

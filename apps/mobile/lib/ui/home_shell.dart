@@ -164,12 +164,13 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // the school of the profile in use: its logo and name on the sign-in and PIN screens from now on
     ref.listenManual(profilesProvider, (_, next) {
       final p = next.value?.current;
@@ -177,6 +178,20 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         ref.read(schoolBrandProvider.notifier).remember(code: p.schoolCode, name: p.schoolName);
       }
     }, fireImmediately: true);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back on the screen: the school may have published a new layout meanwhile (docs/design/90).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final p = ref.read(profilesProvider).value?.current;
+    if (p != null && !p.isStaff) ref.invalidate(familyLayoutProvider(p));
   }
 
   @override

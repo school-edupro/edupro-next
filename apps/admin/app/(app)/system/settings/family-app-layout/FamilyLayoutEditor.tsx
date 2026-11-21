@@ -1,7 +1,7 @@
 'use client';
 import { Button, Dialog } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import {
   ACADEMICS_TAB,
   AUDIENCE_NAME,
@@ -329,10 +329,13 @@ export function FamilyLayoutEditor({
   audience,
   initial,
   canEdit,
+  onDirty,
 }: {
   audience: FamilyAudience;
   initial: FamilyLayoutSetup;
   canEdit: boolean;
+  /** Tells the page whether this audience has edits not saved yet (the switch marks it, leaving asks first). */
+  onDirty?: (audience: FamilyAudience, dirty: boolean) => void;
 }) {
   const router = useRouter();
   const [setup, setSetup] = useState(initial);
@@ -351,6 +354,7 @@ export function FamilyLayoutEditor({
   });
   const cardLabel = (key: string) => cardOf.get(key)?.label ?? key;
   const dirty = !sameLayout(draft, state.draft);
+  useEffect(() => onDirty?.(audience, dirty), [onDirty, audience, dirty]);
   const problems = layoutProblems(audience, draft, catalogue);
   const set = (part: Part) => (next: string[]) => {
     setMsg(null);
@@ -603,6 +607,70 @@ export function FamilyLayoutEditor({
           <p>The draft goes back to what families have now. Changes not saved yet are lost too.</p>
         </Dialog>
       ) : null}
+    </>
+  );
+}
+
+/**
+ * Students | Parents on the page itself: both drafts stay in the editor while switching (nothing unsaved is lost), the
+ * switch marks an audience with edits not saved yet, and leaving the page with unsaved edits asks first.
+ */
+export function FamilyLayoutAudiences({
+  initialAudience,
+  initial,
+  canEdit,
+}: {
+  initialAudience: FamilyAudience;
+  initial: FamilyLayoutSetup;
+  canEdit: boolean;
+}) {
+  const [current, setCurrent] = useState<FamilyAudience>(initialAudience);
+  const [unsaved, setUnsaved] = useState<Record<FamilyAudience, boolean>>({
+    student: false,
+    parent: false,
+  });
+  const onDirty = useMemo(
+    () => (a: FamilyAudience, d: boolean) => setUnsaved((u) => (u[a] === d ? u : { ...u, [a]: d })),
+    [],
+  );
+  const anyUnsaved = unsaved.student || unsaved.parent;
+  useEffect(() => {
+    if (!anyUnsaved) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [anyUnsaved]);
+  return (
+    <>
+      <nav className="ep-tabs-links" aria-label="Whose app">
+        {(['student', 'parent'] as const).map((a) => (
+          <a
+            key={a}
+            href={`/system/settings/family-app-layout?for=${a}`}
+            aria-current={a === current ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              setCurrent(a);
+              window.history.replaceState(null, '', `/system/settings/family-app-layout?for=${a}`);
+            }}
+          >
+            {AUDIENCE_NAME[a]}
+            {unsaved[a]
+              ? ' · not saved'
+              : initial.layouts[a].changed
+                ? ' · draft not published'
+                : ''}
+          </a>
+        ))}
+      </nav>
+      {(['student', 'parent'] as const).map((a) => (
+        <div key={a} hidden={a !== current}>
+          <FamilyLayoutEditor audience={a} initial={initial} canEdit={canEdit} onDirty={onDirty} />
+        </div>
+      ))}
     </>
   );
 }
