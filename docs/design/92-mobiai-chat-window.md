@@ -1,6 +1,6 @@
 # 92 — MobiAI chat window (websites and app)
 
-Status: planned 21 Nov 2026 · builds on doc 91 (the chatbot) · owner: Insights
+Status: built 21 Nov 2026 (phases A–E) · builds on doc 91 (the chatbot) · owner: Insights
 
 ## The ask
 
@@ -12,12 +12,12 @@ Mobilise App Lab Limited". EduPro has the same assistant (doc 91) as a full page
 
 ## Decisions (asked and answered, 21 Nov 2026)
 
-| Question     | Answer                                                                                                     |
-| ------------ | ---------------------------------------------------------------------------------------------------------- |
+| Question     | Answer                                                                                                      |
+| ------------ | ----------------------------------------------------------------------------------------------------------- |
 | Where        | All three websites (admin, teacher, parent) on every page, and the app (its Ask button opens the same look) |
 | Topic bar    | The topics the person may ask (rights, scope and Assistant set-up); a tap asks the topic's main question    |
 | Quick Update | Yes, per audience (admin, teacher, parent, student), when the window opens                                  |
-| Name         | The school can rename it: a name (default **MobiAI**) and a subtitle per audience in Assistant set-up      |
+| Name         | The school can rename it: a name (default **MobiAI**) and a subtitle per audience in Assistant set-up       |
 
 Decided without asking: the bin starts a new conversation (past questions stay in the audit trail — they are never
 deleted from the window); the full Assistant page stays (an "Open full page" link in the window); the colours are
@@ -99,3 +99,7 @@ the person's language).
   `apps/mobile/test/assistant_help_test.dart` (the window, starters, topics, typed questions, did you mean, earlier
   conversations, the bin, Close, consent, ask a parent, switched off, the limit, staff, blocked, Hindi; light, dark,
   Hindi and 2× text with the accessibility guidelines — the dark answer bubble is deep navy for contrast).
+- **E (21 Nov 2026).** Closed: the API's chatbot suites (window, set-up, scopes, evaluation, red team, sprints
+  14–16), the database security test, the app (209 tests, analyze, the generated calls), the four type-checks, lint
+  and formatting, and the accessibility lists pass. Not in this plan: the window inside the app's web pages (the app
+  has its own), a school's own avatar picture, and voice inside the window (the keyboard's mic, as doc 91).
