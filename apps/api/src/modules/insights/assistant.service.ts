@@ -8,6 +8,7 @@ import {
   MockProvider,
   matchQuestion,
   providerFromEnv,
+  readParams,
   redact,
   type AiAuditEvent,
   type AiAuditSink,
@@ -28,8 +29,11 @@ import { buildCatalogue, runEntry, type CatalogueEntry } from './catalogue';
 import { META, genericAnswer, tableCard, type Card } from './catalogue-meta';
 import {
   AUDIENCES,
+  DEFAULT_NAME,
   DEFAULT_SETTINGS,
   DEFAULT_STARTERS,
+  DEFAULT_SUBTITLES,
+  QUICK,
   TOPICS,
   audienceOfKind,
   entriesOfAudience,
@@ -873,14 +877,22 @@ export class AssistantService {
       daily_limit: number;
       topics_off: Record<string, string[]>;
       starters: Record<string, string[]>;
+      name: string;
+      subtitles: Record<string, string>;
       updated_at: string;
       updated_by: string | null;
     }>(
-      `SELECT s.audiences, s.daily_limit, s.topics_off, s.starters, s.updated_at, u.display_name AS updated_by
+      `SELECT s.audiences, s.daily_limit, s.topics_off, s.starters, s.name, s.subtitles, s.updated_at,
+              u.display_name AS updated_by
          FROM assistant_settings s LEFT JOIN users u ON u.id = s.updated_by`,
     );
     const row = r.rows[0];
-    if (!row) return { ...DEFAULT_SETTINGS, starters: { ...DEFAULT_STARTERS } };
+    if (!row)
+      return {
+        ...DEFAULT_SETTINGS,
+        starters: { ...DEFAULT_STARTERS },
+        subtitles: { ...DEFAULT_SETTINGS.subtitles },
+      };
     const per = <T>(o: Record<string, T> | undefined, fallback: Record<Audience, T>) =>
       Object.fromEntries(AUDIENCES.map((a) => [a, o?.[a] ?? fallback[a]])) as Record<Audience, T>;
     const starters = per(row.starters, DEFAULT_STARTERS);
@@ -890,6 +902,8 @@ export class AssistantService {
       dailyLimit: row.daily_limit,
       topicsOff: per(row.topics_off, DEFAULT_SETTINGS.topicsOff),
       starters,
+      name: row.name || DEFAULT_NAME,
+      subtitles: per(row.subtitles, DEFAULT_SETTINGS.subtitles),
       updatedAt: row.updated_at,
       updatedBy: row.updated_by,
     };
@@ -919,7 +933,12 @@ export class AssistantService {
     const settings = await this.db.tenant(tenant, (c) => this.loadSettings(c));
     return {
       ...settings,
-      defaults: { starters: DEFAULT_STARTERS, dailyLimit: DEFAULT_SETTINGS.dailyLimit },
+      defaults: {
+        starters: DEFAULT_STARTERS,
+        dailyLimit: DEFAULT_SETTINGS.dailyLimit,
+        name: DEFAULT_NAME,
+        subtitles: DEFAULT_SUBTITLES,
+      },
       topics: TOPICS,
       catalogue: Object.fromEntries(
         AUDIENCES.map((a) => [
@@ -943,6 +962,8 @@ export class AssistantService {
       dailyLimit: number;
       topicsOff: Record<Audience, string[]>;
       starters: Record<Audience, string[]>;
+      name?: string;
+      subtitles?: Record<Audience, string>;
     },
   ) {
     const tenant = requireTenant(ctx);
@@ -969,15 +990,21 @@ export class AssistantService {
       });
     await this.db.tenant(tenant, (c) =>
       c.query(
-        `INSERT INTO assistant_settings (school_id, audiences, daily_limit, topics_off, starters, updated_by, updated_at)
-         VALUES (app.current_school_id(), $1::jsonb, $2, $3::jsonb, $4::jsonb, app.current_user_id(), now())
+        // the name and subtitles left out of the body: the saved ones stay (docs/design/92)
+        `INSERT INTO assistant_settings (school_id, audiences, daily_limit, topics_off, starters, name, subtitles, updated_by, updated_at)
+         VALUES (app.current_school_id(), $1::jsonb, $2, $3::jsonb, $4::jsonb, COALESCE($5, 'MobiAI'), COALESCE($6::jsonb, '{}'::jsonb),
+                 app.current_user_id(), now())
          ON CONFLICT (school_id) DO UPDATE SET audiences = EXCLUDED.audiences, daily_limit = EXCLUDED.daily_limit,
-           topics_off = EXCLUDED.topics_off, starters = EXCLUDED.starters, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+           topics_off = EXCLUDED.topics_off, starters = EXCLUDED.starters,
+           name = COALESCE($5, assistant_settings.name), subtitles = COALESCE($6::jsonb, assistant_settings.subtitles),
+           updated_by = EXCLUDED.updated_by, updated_at = now()`,
         [
           JSON.stringify(dto.audiences),
           dto.dailyLimit,
           JSON.stringify(dto.topicsOff),
           JSON.stringify(dto.starters),
+          dto.name ?? null,
+          dto.subtitles ? JSON.stringify(dto.subtitles) : null,
         ],
       ),
     );
@@ -1023,6 +1050,68 @@ export class AssistantService {
         );
         consent = r.rows[0]?.ok ? 'granted' : 'ask_parent';
       }
+      const on = settings.audiences[audience];
+      const mayAsk = on && (consent === null || consent === 'granted');
+      // the topic bar (docs/design/92): each topic the person may ask, with its main question — the school's first
+      // starter in that topic, else the topic's first question
+      const order = [...settings.starters[audience], ...mine.keys()];
+      const topics = TOPICS.flatMap((tp) => {
+        const id = order.find((x) => mine.get(x)?.department === tp.key);
+        const e = id ? mine.get(id) : undefined;
+        return e
+          ? [
+              {
+                key: tp.key,
+                label: tp.label,
+                labelHi: tp.labelHi,
+                id: e.id,
+                question: META[e.id]?.ask ?? e.title,
+                questionHi: META[e.id]?.askHi ?? e.titleHi,
+              },
+            ]
+          : [];
+      });
+      // the Quick Update: the one-line answers of the audience's quick queries, with the person's rights
+      const quick: Array<{
+        id: string;
+        topic: string;
+        text: string;
+        textHi: string;
+        question: string;
+        questionHi: string;
+      }> = [];
+      if (mayAsk)
+        for (const id of QUICK[audience]) {
+          const e = mine.get(id);
+          if (!e) continue;
+          const ask = META[e.id]?.ask ?? e.title;
+          const params = readParams(ask.toLowerCase(), e, { today, classes: [], sections: [] });
+          if (e.params.some((p) => p.required && params[p.name] === undefined)) continue;
+          try {
+            await c.query('SAVEPOINT quick');
+            const out = await runEntry(c, e, params);
+            await c.query('RELEASE SAVEPOINT quick');
+            const say = (lang: 'en' | 'hi') =>
+              META[e.id]?.answer
+                ? META[e.id]!.answer!(out.rows, params, lang, scope.kind === 'student')
+                : genericAnswer(e.title, e.titleHi, out.rows, params, lang);
+            quick.push({
+              id: e.id,
+              topic: e.department,
+              text: say('en'),
+              textHi: say('hi'),
+              question: ask,
+              questionHi: META[e.id]?.askHi ?? e.titleHi,
+            });
+          } catch (err) {
+            // a line that cannot be read is left out; the window still opens
+            await c.query('ROLLBACK TO SAVEPOINT quick');
+            this.logger.warn(`quick update ${e.id}: ${(err as Error).message}`);
+          }
+        }
+      const me = await c.query<{ name: string | null }>(
+        `SELECT display_name AS name FROM users WHERE id = app.current_user_id()`,
+      );
       const recent = await c.query<{ question: string }>(
         `SELECT question FROM (
            SELECT DISTINCT ON (lower(m.content)) m.content AS question, m.id
@@ -1031,10 +1120,18 @@ export class AssistantService {
             ORDER BY lower(m.content), m.id DESC) q
           ORDER BY id DESC LIMIT 5`,
       );
+      const own = settings.subtitles[audience]?.trim();
       return {
         audience,
-        on: settings.audiences[audience],
+        on,
         consent,
+        // the chat window (docs/design/92): its name, the subtitle for this audience, the person's first name
+        name: settings.name,
+        subtitle: own || DEFAULT_SUBTITLES[audience].en,
+        subtitleHi: own || DEFAULT_SUBTITLES[audience].hi,
+        firstName: (me.rows[0]?.name ?? '').trim().split(/\s+/)[0] || null,
+        topics,
+        quick,
         dailyLimit: settings.dailyLimit,
         askedToday: await this.askedToday(c),
         starters: settings.starters[audience]

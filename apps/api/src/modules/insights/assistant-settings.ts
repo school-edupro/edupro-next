@@ -70,11 +70,37 @@ export const DEFAULT_STARTERS: Record<Audience, string[]> = {
   ],
 };
 
+/** The chat window's name before the school gives its own (docs/design/92). */
+export const DEFAULT_NAME = 'MobiAI';
+
+/** The subtitle under the name per audience, in English and Hindi, before the school writes its own. */
+export const DEFAULT_SUBTITLES: Record<Audience, { en: string; hi: string }> = {
+  student: { en: 'Your smart study assistant', hi: 'आपका स्मार्ट पढ़ाई सहायक' },
+  parent: { en: 'Your smart parent assistant', hi: 'आपका स्मार्ट अभिभावक सहायक' },
+  teacher: { en: 'Your smart teaching assistant', hi: 'आपका स्मार्ट शिक्षण सहायक' },
+  admin: { en: 'Your smart admin assistant', hi: 'आपका स्मार्ट प्रशासनिक सहायक' },
+};
+
+/**
+ * The Quick Update when the window opens (docs/design/92): each line is the one-line answer of an approved query run
+ * with the person's rights; one the person may not run, or whose topic is off, is left out.
+ */
+export const QUICK: Record<Audience, string[]> = {
+  student: ['child_attendance', 'child_timetable_today', 'child_homework'],
+  parent: ['child_attendance', 'child_dues', 'child_homework'],
+  teacher: ['my_absentees', 'my_timetable_today', 'my_leave_balance'],
+  admin: ['today_summary', 'open_queries'],
+};
+
 export interface AssistantSettings {
   audiences: Record<Audience, boolean>;
   dailyLimit: number;
   topicsOff: Record<Audience, string[]>;
   starters: Record<Audience, string[]>;
+  /** the chat window's name */
+  name: string;
+  /** the school's subtitle per audience ('' = the standard one) */
+  subtitles: Record<Audience, string>;
   updatedAt: string | null;
   updatedBy: string | null;
 }
@@ -84,6 +110,8 @@ export const DEFAULT_SETTINGS: AssistantSettings = {
   dailyLimit: 30,
   topicsOff: { student: [], parent: [], teacher: [], admin: [] },
   starters: { ...DEFAULT_STARTERS },
+  name: DEFAULT_NAME,
+  subtitles: { student: '', parent: '', teacher: '', admin: '' },
   updatedAt: null,
   updatedBy: null,
 };
@@ -111,5 +139,8 @@ export const AssistantSettingsSchema = z.object({
   dailyLimit: z.number().int().min(1).max(500),
   topicsOff: PerAudience(Topics),
   starters: PerAudience(Ids),
+  /** docs/design/92: left out, the saved name and subtitles stay */
+  name: z.string().trim().min(1).max(40).optional(),
+  subtitles: PerAudience(z.string().trim().max(80)).optional(),
 });
 export class AssistantSettingsDto extends createZodDto(AssistantSettingsSchema) {}
