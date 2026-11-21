@@ -214,7 +214,8 @@ void main() {
       await tester.tap(find.byKey(const Key('homeAsk')));
       await tester.pumpAndSettle();
       expect(find.byType(AssistantScreen), findsOneWidget);
-      await tester.pageBack();
+      // the chat window has its own Close
+      await tester.tap(find.byKey(const Key('asstClose')));
       await tester.pumpAndSettle();
 
       // More: the parent's menu, then in Hindi

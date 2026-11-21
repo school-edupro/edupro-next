@@ -24,30 +24,6 @@ extension AssistantWords on S {
     'admin' => _as('Ask about the school', 'विद्यालय के बारे में पूछें'),
     _ => _as('Ask about your children', 'अपने बच्चों के बारे में पूछें'),
   };
-  String asstIntroOf(String audience) => switch (audience) {
-    'student' => _as(
-      'Your attendance, timetable, homework, exams, results and library books, in English, Hindi or Hinglish. Answers come only from school records and name their source.',
-      'आपकी उपस्थिति, समय-सारिणी, गृहकार्य, परीक्षाएँ, परिणाम और पुस्तकालय की पुस्तकें, अंग्रेज़ी, हिन्दी या हिंग्लिश में। उत्तर केवल विद्यालय के अभिलेखों से आते हैं और अपना स्रोत बताते हैं।',
-    ),
-    'teacher' => _as(
-      'Your sections’ attendance, homework and marks, and your own attendance, leave and timetable. Answers come only from school records and name their source.',
-      'आपके अनुभागों की उपस्थिति, गृहकार्य और अंक, और आपकी अपनी उपस्थिति, अवकाश और समय-सारिणी। उत्तर केवल विद्यालय के अभिलेखों से आते हैं और अपना स्रोत बताते हैं।',
-    ),
-    'admin' => _as(
-      'Today’s figures, attendance, fees, admissions and staff, as far as your rights go. Answers come only from school records and name their source.',
-      'आज के आँकड़े, उपस्थिति, शुल्क, प्रवेश और कर्मचारी, आपके अधिकारों के अनुसार। उत्तर केवल विद्यालय के अभिलेखों से आते हैं और अपना स्रोत बताते हैं।',
-    ),
-    _ => _as(
-      'Fees due, attendance, homework and notices of your own children, in English, Hindi or Hinglish. Answers come only from school records and name their source.',
-      'अपने बच्चों का बकाया शुल्क, उपस्थिति, गृहकार्य और सूचनाएँ, अंग्रेज़ी, हिन्दी या हिंग्लिश में। उत्तर केवल विद्यालय के अभिलेखों से आते हैं और अपना स्रोत बताते हैं।',
-    ),
-  };
-  String asstHintOf(String audience) => switch (audience) {
-    'student' => 'Aaj ki classes? · My homework this week · मेरा परिणाम',
-    'teacher' => 'Who is absent today? · Marks entry status · मेरा अवकाश शेष',
-    'admin' => 'Today at a glance · Fee defaulters · आज की उपस्थिति',
-    _ => 'Kitni fees baki hai? · Was my child absent this week? · इस हफ्ते का गृहकार्य',
-  };
   String get asstBlocked => _as(
     'The assistant is not open to you at this school.',
     'इस विद्यालय में सहायक आपके लिए खुला नहीं है।',
@@ -68,48 +44,53 @@ extension AssistantWords on S {
     'You have asked $n questions today, the most your school allows. Try again tomorrow.',
     'आपने आज $n प्रश्न पूछे हैं, जितने आपका विद्यालय अनुमति देता है। कल फिर पूछें।',
   );
-  String asstToday(int asked, int limit) =>
-      _as('$asked of $limit questions asked today', 'आज $limit में से $asked प्रश्न पूछे');
   String get asstOpenProfile => _as('Open profile', 'प्रोफ़ाइल खोलें');
   String get asstYou => _as('You', 'आप');
-  String get asstName => _as('Assistant', 'सहायक');
-  String get asstQuestion => _as('Your question', 'आपका प्रश्न');
-  String get asstMic => _as(
-    'To speak your question, tap the mic on your keyboard.',
-    'प्रश्न बोलने के लिए कीबोर्ड का माइक दबाएँ।',
-  );
-  String get asstLanguage => _as('Language', 'भाषा');
-  String get asstAuto => _as('Auto', 'स्वतः');
   String get asstAsk => _as('Ask', 'पूछें');
   String get asstNew => _as('New conversation', 'नई बातचीत');
+  String get asstEarlier => _as('Earlier conversations', 'पिछली बातचीत');
+  String get asstNoEarlier => _as('No earlier conversations yet.', 'अभी कोई पिछली बातचीत नहीं।');
+  String get asstClose => _as('Close', 'बंद करें');
+  String get asstToday => _as('Today', 'आज');
+  String get asstQuick => _as('Your Quick Update', 'आपका त्वरित अपडेट');
+  String get asstPlaceholder => _as('Type your question…', 'अपना प्रश्न लिखें…');
+  String get asstQuestion => _as('Your question', 'आपका प्रश्न');
+  String get asstSend => _as('Send', 'भेजें');
   String get asstTry => _as('Try asking', 'ऐसे पूछें');
-  String get asstAgain => _as('Ask again', 'फिर पूछें');
   String get asstNext => _as('Ask next', 'आगे पूछें');
   String get asstDidYouMean => _as('Did you mean', 'क्या आपका मतलब है');
   String get asstInstead => _as('You can ask', 'आप पूछ सकते हैं');
+  String get asstTopics => _as('Topics', 'विषय');
+  String get asstRetry => _as('Try again', 'फिर कोशिश करें');
   String asstOpen(String screen) => _as('Open $screen', '$screen खोलें');
   String asstMore(int n) => _as('and $n more', 'और $n');
-  String get asstCanAsk => _as('What you can ask', 'आप क्या पूछ सकते हैं');
-  String asstCanAskHint(int n) =>
-      _as(n == 1 ? '1 kind of question' : '$n kinds of question', '$n तरह के प्रश्न');
-  String get asstStored => _as(
-    'Your questions are stored with personal details masked. Nothing is sent outside the school’s system.',
-    'आपके प्रश्न व्यक्तिगत विवरण छिपाकर संग्रहीत होते हैं। विद्यालय की प्रणाली से बाहर कुछ नहीं भेजा जाता।',
-  );
-  String get asstRecent => _as('Recent conversations', 'हाल की बातचीत');
-  String asstRecentHint(int n) => _as('$n · latest first', '$n · नवीनतम पहले');
+  String asstSource(String t) => _as('Source: $t', 'स्रोत: $t');
   String get asstNeedQuestion =>
       _as('Write a question (at least 2 letters).', 'प्रश्न लिखें (कम से कम 2 अक्षर)।');
   String get asstThinking => _as('Finding the answer…', 'उत्तर खोजा जा रहा है…');
-  String asstSource(String t) => _as('Source: $t', 'स्रोत: $t');
+  String get asstPowered => _as('Powered by', 'संचालित:');
+
+  /// "Good evening, Asha! I'm MobiAI. Ask me about attendance, fees … — in English, Hindi or Hinglish."
+  String asstGreeting(DateTime now, String? firstName, String name, List<String> topics) {
+    final h = now.hour;
+    final part = h >= 5 && h < 12
+        ? _as('Good morning', 'सुप्रभात')
+        : h >= 12 && h < 17
+        ? _as('Good afternoon', 'नमस्कार')
+        : _as('Good evening', 'शुभ संध्या');
+    final who = firstName == null || firstName.isEmpty ? '' : ', $firstName';
+    final list = topics.join(', ');
+    return hindi
+        ? '$part$who! मैं $name हूँ।${list.isEmpty ? '' : ' मुझसे पूछें: $list।'} अंग्रेज़ी, हिन्दी या हिंग्लिश में।'
+        : '$part$who! I’m $name.${list.isEmpty ? ' Ask me' : ' Ask me about $list'} — in English, Hindi or Hinglish.';
+  }
 }
 
-/// The assistant's start for the person: on for them, the consent, starter and recent questions, today's count
-/// (docs/design/91 §C), what may be asked and the conversations. Null: the assistant is not open to them (403).
+/// The assistant's start for the person (docs/design/91 §C, 92): on, consent, the name and subtitle, the topic bar,
+/// Your Quick Update, starters, today's count; and their conversations. Null: not open to them (403).
 class AssistantHome {
-  const AssistantHome({required this.start, required this.catalogue, required this.conversations});
+  const AssistantHome({required this.start, required this.conversations});
   final Json start;
-  final List<Json> catalogue;
   final List<Json> conversations;
 
   String get audience => '${start['audience'] ?? 'parent'}';
@@ -120,6 +101,12 @@ class AssistantHome {
   int get askedToday => (start['askedToday'] as num?)?.toInt() ?? 0;
   int get dailyLimit => (start['dailyLimit'] as num?)?.toInt() ?? 0;
   bool get atLimit => dailyLimit > 0 && askedToday >= dailyLimit;
+  String get name => '${start['name'] ?? 'MobiAI'}';
+  String subtitle(bool hindi) => '${(hindi ? start['subtitleHi'] : start['subtitle']) ?? ''}';
+  String? get firstName => start['firstName'] as String?;
+  List<Json> get topics => asList(start['topics']);
+  List<Json> get quick => asList(start['quick']);
+  List<Json> get starters => asList(start['starters']);
 }
 
 final assistantHomeProvider = FutureProvider.autoDispose.family<Loaded<AssistantHome?>, Profile>((
@@ -128,17 +115,9 @@ final assistantHomeProvider = FutureProvider.autoDispose.family<Loaded<Assistant
 ) async {
   final api = ref.read(apiProvider);
   try {
-    final r = await Future.wait([
-      api.insightsStart(),
-      api.insightsCatalogue(),
-      api.insightsConversations(),
-    ]);
+    final r = await Future.wait([api.insightsStart(), api.insightsConversations()]);
     return Loaded(
-      AssistantHome(
-        start: asJson(r[0]),
-        catalogue: asList(asJson(r[1])['data']),
-        conversations: asList(asJson(r[2])['data']),
-      ),
+      AssistantHome(start: asJson(r[0]), conversations: asList(asJson(r[1])['data'])),
       DateTime.now(),
     );
   } on ApiException catch (e) {
@@ -159,20 +138,72 @@ final assistantConversationProvider = FutureProvider.autoDispose.family<Json?, S
   }
 });
 
-/// The assistant in the app for every profile (docs/design/91 phase D): the start (starters, ask again, today's
-/// count), the conversation with each answer's card, the screen to open and the questions to ask next — no web page.
+/// Opens the assistant over the app as its own screen (the Ask button on Home, More → Assistant): the chat window's
+/// look, with a close button (docs/design/92 phase D).
+Future<void> openAssistant(BuildContext context, Profile profile) => Navigator.of(context).push(
+  MaterialPageRoute<void>(
+    builder: (c) => Scaffold(
+      backgroundColor: Tokens.mobNavy800,
+      body: SafeArea(
+        bottom: false,
+        child: AssistantScreen(profile: profile, onClose: () => Navigator.of(c).pop()),
+      ),
+    ),
+  ),
+);
+
+/// The topic icons of the topic bar and Your Quick Update.
+IconData _topicIcon(String key) => switch (key) {
+  'attendance' => Icons.fact_check_outlined,
+  'academics' => Icons.menu_book_outlined,
+  'exams' => Icons.assignment_outlined,
+  'fees' => Icons.account_balance_wallet_outlined,
+  'transport' => Icons.directions_bus_outlined,
+  'communication' => Icons.campaign_outlined,
+  'admissions' => Icons.person_add_alt_outlined,
+  'hr' => Icons.groups_outlined,
+  'school' => Icons.home_outlined,
+  _ => Icons.chat_bubble_outline,
+};
+
+String _clock(DateTime t) {
+  final l = t.toLocal();
+  final h = l.hour % 12 == 0 ? 12 : l.hour % 12;
+  return '${h.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')} ${l.hour < 12 ? 'am' : 'pm'}';
+}
+
+String _lowerFirst(String x) => x.isEmpty ? x : x[0].toLowerCase() + x.substring(1);
+
+/// The assistant in the app for every profile, as the websites' chat window (docs/design/92 phase D): the header with
+/// the school's name for it and the audience's subtitle, the topic bar, Today, the greeting and Your Quick Update, the
+/// conversation in bubbles with their times (each answer with its records, the screen to open, the source and what to
+/// ask next), three dots while it looks, the question bar and "Powered by Mobilise App Lab Limited".
 class AssistantScreen extends ConsumerStatefulWidget {
-  const AssistantScreen({super.key, required this.profile});
+  const AssistantScreen({super.key, required this.profile, this.onClose});
   final Profile profile;
+
+  /// shown as a close button (opened over the app); none inside a tab
+  final VoidCallback? onClose;
 
   @override
   ConsumerState<AssistantScreen> createState() => _AssistantScreenState();
 }
 
+/// A question asked here, shown at once (before the conversation is read back).
+class _Pending {
+  const _Pending(this.text, this.at, this.base);
+  final String text;
+  final DateTime at;
+
+  /// the conversation's messages when it was asked: shown until the conversation read back has more
+  final int base;
+}
+
 class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   final _question = TextEditingController();
+  final _scroll = ScrollController();
   String? _current;
-  String _language = '';
+  _Pending? _pending;
   bool _busy = false;
 
   /// the API said so when asking (the start may be older than a consent withdrawn or a limit reached meanwhile)
@@ -183,18 +214,35 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   @override
   void dispose() {
     _question.dispose();
+    _scroll.dispose();
     super.dispose();
   }
+
+  void _toEnd() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  });
 
   Future<void> _ask([String? text]) async {
     final s = ref.read(stringsProvider);
     final q = (text ?? _question.text).trim();
     if (q.length < 2) return setState(() => _error = s.asstNeedQuestion);
+    if (_busy) return;
     FocusManager.instance.primaryFocus?.unfocus();
+    final base = _current == null
+        ? 0
+        : asList(ref.read(assistantConversationProvider(_current!)).value?['messages']).length;
     setState(() {
       _busy = true;
       _error = null;
+      _pending = _Pending(q, DateTime.now(), base);
     });
+    _toEnd();
     try {
       final r = asJson(
         await ref
@@ -203,7 +251,8 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
               body: AskAssistantDto(
                 question: q,
                 conversationId: _current,
-                language: _language.isEmpty ? null : _language,
+                // the answer in the app's language (auto otherwise: Hinglish stays Hinglish)
+                language: s.hindi ? 'hi' : null,
                 // the staff app is the teachers' website; families ask as the parents' website
                 surface: widget.profile.isStaff ? 'teacher' : 'parent',
               ),
@@ -213,15 +262,20 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
       if (text == null) _question.clear();
       final id = '${r['conversationId']}';
       ref.invalidate(assistantConversationProvider(id));
+      setState(() => _current = id);
+      await ref.read(assistantConversationProvider(id).future);
+      if (!mounted) return;
       ref.invalidate(assistantHomeProvider(widget.profile));
       setState(() {
         _busy = false;
-        _current = id;
+        _pending = null;
       });
+      _toEnd();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _busy = false;
+        _pending = null;
         if (e is ApiException && e.type == 'consent-required') {
           _consent = widget.profile.kind == 'student' ? 'ask_parent' : 'needed';
         } else if (e is ApiException && e.type == 'ai.daily_limit') {
@@ -236,10 +290,14 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     }
   }
 
-  void _open(String? id) => setState(() {
-    _current = id;
-    _error = null;
-  });
+  void _fresh() {
+    setState(() {
+      _current = null;
+      _pending = null;
+      _error = null;
+    });
+    ref.invalidate(assistantHomeProvider(widget.profile));
+  }
 
   Future<void> _openProfile() async {
     final s = ref.read(stringsProvider);
@@ -257,246 +315,710 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     ref.invalidate(assistantHomeProvider(widget.profile));
   }
 
+  Future<void> _earlier(List<Json> conversations) async {
+    final s = ref.read(stringsProvider);
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: ListView(
+          key: const Key('asstEarlier'),
+          shrinkWrap: true,
+          children: [
+            ListTile(title: Text(s.asstEarlier, style: Theme.of(c).textTheme.titleMedium)),
+            if (conversations.isEmpty)
+              Padding(padding: const EdgeInsets.all(Tokens.sp4), child: Text(s.asstNoEarlier)),
+            for (final x in conversations.take(15))
+              ListTile(
+                key: Key('asstConv-${x['id']}'),
+                leading: const Icon(Icons.chat_bubble_outline),
+                title: Text(
+                  '${x['title'] ?? '${x['id']}'.substring(0, 8)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(s.dayShort(DateTime.tryParse('${x['updatedAt']}')?.toLocal() ?? '')),
+                selected: x['id'] == _current,
+                onTap: () => Navigator.of(c).pop('${x['id']}'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (chosen != null && mounted) {
+      setState(() {
+        _current = chosen;
+        _error = null;
+      });
+      _toEnd();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
-    return LoadedList<AssistantHome?>(
-      value: ref.watch(assistantHomeProvider(widget.profile)),
-      refresh: () => ref.refresh(assistantHomeProvider(widget.profile).future),
-      children: (home) {
-        final audience =
-            home?.audience ??
-            (widget.profile.isStaff
-                ? 'teacher'
-                : (widget.profile.kind == 'student' ? 'student' : 'parent'));
-        final head = [
-          Semantics(
-            header: true,
-            child: Text(
-              s.asstTitleOf(audience),
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+    final value = ref.watch(assistantHomeProvider(widget.profile));
+    final home = value.value?.data;
+    final blocked = value.hasValue && home == null;
+    final consent = _consent ?? home?.consent;
+    final waiting = consent == 'needed' || consent == 'ask_parent';
+    final limitHit = _limit != null || (home?.atLimit ?? false);
+    final on = home?.on ?? true;
+    final canAsk = home != null && on && !waiting && !limitHit;
+    final conv = _current == null ? null : ref.watch(assistantConversationProvider(_current!));
+    final messages = asList(conv?.value?['messages']);
+    final muted = dark ? Tokens.mobGray300 : Tokens.textMuted;
+
+    final log = <Widget>[
+      Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Tokens.sp2, vertical: 2),
+          decoration: BoxDecoration(
+            color: dark ? Tokens.mobGray700 : Tokens.mobGray100,
+            borderRadius: BorderRadius.circular(Tokens.radiusSm),
+          ),
+          child: Text(s.asstToday, style: const TextStyle(fontSize: 12)),
+        ),
+      ),
+      const SizedBox(height: Tokens.sp3),
+      if (blocked)
+        _Note(id: 'asstBlocked', text: s.asstBlocked)
+      else if (home != null) ...[
+        _Bubble(
+          key: const Key('asstGreeting'),
+          children: [
+            Text(
+              s.asstGreeting(DateTime.now(), home.firstName, home.name, [
+                for (final t in home.topics)
+                  s.hindi ? '${t['labelHi'] ?? t['label']}' : _lowerFirst('${t['label']}'),
+              ]),
+            ),
+            if (_current == null && canAsk)
+              _Chips(
+                id: 'asstStarters',
+                title: s.asstTry,
+                questions: [
+                  for (final x in home.starters.take(4))
+                    s.hindi ? '${x['questionHi'] ?? x['question']}' : '${x['question']}',
+                ],
+                onAsk: _busy ? null : _ask,
+              ),
+          ],
+        ),
+        if (home.quick.isNotEmpty)
+          _Bubble(
+            key: const Key('asstQuick'),
+            children: [
+              Text(s.asstQuick, style: const TextStyle(fontWeight: Tokens.fwBold)),
+              for (final q in home.quick)
+                Padding(
+                  padding: const EdgeInsets.only(top: Tokens.sp2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        _topicIcon('${q['topic']}'),
+                        size: 18,
+                        color: dark ? Tokens.mobCyan500 : Tokens.mobCyan700,
+                      ),
+                      const SizedBox(width: Tokens.sp2),
+                      Expanded(
+                        child: Text(s.hindi ? '${q['textHi'] ?? q['text']}' : '${q['text']}'),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        if (conv != null && conv.isLoading && !conv.hasValue && _pending == null)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: Tokens.sp3),
+            child: LinearProgressIndicator(),
+          ),
+        ..._thread(context, s, messages, canAsk),
+        if (_pending != null && messages.length <= _pending!.base)
+          _UserBubble(text: _pending!.text, at: _pending!.at),
+        if (_busy)
+          _Bubble(
+            key: const Key('asstTyping'),
+            children: [Semantics(liveRegion: true, label: s.asstThinking, child: const _Dots())],
+          ),
+        if (!on)
+          _Note(id: 'asstOff', text: s.asstOff)
+        else if (consent == 'needed')
+          _Note(
+            id: 'asstConsent',
+            text: s.asstConsent,
+            action: OutlinedButton(
+              key: const Key('asstOpenProfile'),
+              onPressed: _openProfile,
+              child: Text(s.asstOpenProfile),
+            ),
+          )
+        else if (consent == 'ask_parent')
+          _Note(id: 'asstAskParent', text: s.asstAskParent)
+        else if (limitHit)
+          _Note(
+            id: 'asstLimit',
+            text: s.asstLimit(
+              (_limit ?? 0) > 0
+                  ? _limit!
+                  : (home.dailyLimit > 0 ? home.dailyLimit : home.askedToday),
             ),
           ),
-          Text(s.asstIntroOf(audience), style: TextStyle(color: muted, fontSize: 14)),
-          const SizedBox(height: Tokens.sp3),
-        ];
-        if (home == null) {
-          return [...head, _Banner(id: 'asstBlocked', text: s.asstBlocked)];
-        }
-        final consent = _consent ?? home.consent;
-        final waiting = consent == 'needed' || consent == 'ask_parent';
-        final limit = _limit != null ? (_limit! > 0 ? _limit! : home.dailyLimit) : null;
-        final atLimit = limit != null || home.atLimit;
-        final canAsk = home.on && !waiting && !atLimit;
-        final allowed = home.catalogue.where((e) => e['allowed'] == true).toList();
-        final starters = asList(home.start['starters']);
-        final recent = asList(home.start['recent']);
-        return [
-          ...head,
-          if (!home.on) ...[
-            _Banner(id: 'asstOff', text: s.asstOff),
-            const SizedBox(height: Tokens.sp3),
-          ],
-          if (home.on && consent == 'needed') ...[
-            _Banner(
-              id: 'asstConsent',
-              text: s.asstConsent,
-              action: OutlinedButton(
-                key: const Key('asstOpenProfile'),
-                onPressed: _openProfile,
-                child: Text(s.asstOpenProfile),
-              ),
+        if (_error != null) ErrorText(_error!),
+      ],
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Header(
+          name: home?.name ?? 'MobiAI',
+          subtitle: home?.subtitle(s.hindi) ?? '',
+          onFresh: home == null || _busy ? null : _fresh,
+          onEarlier: home == null ? null : () => _earlier(home.conversations),
+          onClose: widget.onClose,
+        ),
+        Expanded(
+          child: ColoredBox(
+            color: dark ? Tokens.mobGray900 : Tokens.mobGray50,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (canAsk && home.topics.isNotEmpty)
+                  _TopicBar(home: home, onAsk: _busy ? null : _ask),
+                Expanded(
+                  child: value.hasError && !value.hasValue
+                      ? ListView(
+                          padding: const EdgeInsets.all(Tokens.sp4),
+                          children: [
+                            ErrorText(errorText(s, value.error!)),
+                            const SizedBox(height: Tokens.sp2),
+                            OutlinedButton(
+                              key: const Key('asstRetry'),
+                              onPressed: () =>
+                                  ref.invalidate(assistantHomeProvider(widget.profile)),
+                              child: Text(s.asstRetry),
+                            ),
+                          ],
+                        )
+                      : !value.hasValue
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView(
+                          key: const Key('asstLog'),
+                          controller: _scroll,
+                          padding: const EdgeInsets.all(Tokens.sp3),
+                          children: log,
+                        ),
+                ),
+              ],
             ),
-            const SizedBox(height: Tokens.sp3),
+          ),
+        ),
+        ColoredBox(
+          color: dark ? Tokens.mobGray900 : Tokens.mobWhite,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (canAsk)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(Tokens.sp3, Tokens.sp3, Tokens.sp3, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const Key('asstQuestion'),
+                            controller: _question,
+                            minLines: 1,
+                            maxLines: 4,
+                            maxLength: 1000,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _ask(),
+                            decoration: InputDecoration(
+                              labelText: s.asstQuestion,
+                              hintText: s.asstPlaceholder,
+                              counterText: '',
+                              isDense: true,
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: Tokens.sp2),
+                        IconButton.filled(
+                          key: const Key('asstAsk'),
+                          tooltip: s.asstSend,
+                          style: IconButton.styleFrom(
+                            backgroundColor: Tokens.mobNavy800,
+                            foregroundColor: Tokens.mobWhite,
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: _busy ? null : () => _ask(),
+                          icon: const Icon(Icons.send_outlined),
+                        ),
+                      ],
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Tokens.sp2),
+                  child: Text.rich(
+                    TextSpan(
+                      text: '${s.asstPowered} ',
+                      children: const [
+                        TextSpan(
+                          text: 'Mobilise App Lab Limited',
+                          style: TextStyle(fontWeight: Tokens.fwSemibold),
+                        ),
+                      ],
+                    ),
+                    key: const Key('asstFooter'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: muted),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The conversation's messages as bubbles: on the latest answer, what to ask next.
+  List<Widget> _thread(BuildContext context, S s, List<Json> messages, bool canAsk) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final last = messages.lastIndexWhere((m) => m['role'] == 'assistant');
+    String q(Json x) => '${x['question'] ?? x['title'] ?? ''}';
+    final out = <Widget>[];
+    for (final (i, m) in messages.indexed) {
+      if (m['role'] == 'user') {
+        out.add(
+          _UserBubble(
+            text: '${m['content'] ?? ''}',
+            at: DateTime.tryParse('${m['createdAt']}') ?? DateTime.now(),
+          ),
+        );
+        continue;
+      }
+      final d = asJson(m['display']);
+      final card = asJson(d['card']);
+      final link = asJson(d['link']);
+      final open = link.isEmpty ? null : _opener(context, s, link);
+      final latest = i == last && canAsk && !_busy;
+      final citations = asList(m['citations']);
+      out.add(
+        _Bubble(
+          key: Key('asstAnswer-$i'),
+          at: DateTime.tryParse('${m['createdAt']}'),
+          children: [
+            Text('${m['content'] ?? ''}'),
+            if (card['kind'] == 'figures' && asList(card['figures']).isNotEmpty) ...[
+              const SizedBox(height: Tokens.sp2),
+              FigureGrid(
+                key: Key('asstFigures-$_current'),
+                tiles: [
+                  for (final f in asList(card['figures']))
+                    FigureTile(
+                      label: s.hindi ? '${f['labelHi'] ?? f['label']}' : '${f['label']}',
+                      value: '${f['value'] ?? '—'}',
+                      icon: Icons.info_outline,
+                    ),
+                ],
+              ),
+            ],
+            if (card['kind'] == 'table' && asList(card['rows']).isNotEmpty) ...[
+              const SizedBox(height: Tokens.sp2),
+              _TableCard(card: card),
+            ],
+            if (open != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: Key('asstOpen-${link['app'] ?? link['web']}'),
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                  label: Text(
+                    s.asstOpen(
+                      s.hindi ? '${link['labelHi'] ?? link['label']}' : '${link['label']}',
+                    ),
+                  ),
+                  onPressed: open,
+                ),
+              ),
+            if (citations.isNotEmpty)
+              Text(
+                s.asstSource(citations.map((c) => '${c['title']}').join(', ')),
+                style: TextStyle(fontSize: 12, color: dark ? Tokens.mobGray300 : Tokens.textMuted),
+              ),
+            if (latest) ...[
+              _Chips(
+                id: 'asstNext',
+                title: s.asstNext,
+                questions: [for (final x in asList(d['followUps'])) q(x)],
+                onAsk: _ask,
+              ),
+              _Chips(
+                id: 'asstDidYouMean',
+                title: s.asstDidYouMean,
+                questions: [for (final x in asList(d['didYouMean'])) q(x)],
+                onAsk: _ask,
+              ),
+              if (asList(d['followUps']).isEmpty && asList(d['didYouMean']).isEmpty)
+                _Chips(
+                  id: 'asstInstead',
+                  title: s.asstInstead,
+                  questions: [for (final x in asList(d['suggestions'])) q(x)],
+                  onAsk: _ask,
+                ),
+            ],
           ],
-          if (home.on && consent == 'ask_parent') ...[
-            _Banner(id: 'asstAskParent', text: s.asstAskParent),
-            const SizedBox(height: Tokens.sp3),
-          ],
-          if (home.on && !waiting && atLimit) ...[
-            _Banner(id: 'asstLimit', text: s.asstLimit(limit ?? home.askedToday)),
-            const SizedBox(height: Tokens.sp3),
-          ],
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(Tokens.sp4),
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// The screen an answer is about: the app's own when the person's menu has it, else the website's page in the
+  /// app; none when neither (the website itself refuses a screen the school does not offer).
+  VoidCallback? _opener(BuildContext context, S s, Json link) {
+    final label = s.hindi ? '${link['labelHi'] ?? link['label']}' : '${link['label']}';
+    final app = link['app'] as String?;
+    final web = link['web'] as String?;
+    final menu = ref.watch(menuProvider(widget.profile.id));
+    // offline (no menu to check against) the app's own screens still open; while it loads, nothing yet
+    if (menu.isLoading && !menu.hasValue) return null;
+    final m = menu.value;
+    final inMenu =
+        app != null &&
+        (m == null || m.groups.any((g) => g.items.any((i) => i.href.split('?').first == app)));
+    final screen = inMenu ? nativeScreen(widget.profile, app, s) : null;
+    if (screen != null) return () => pushPage(context, label, screen);
+    if (web == null) return null;
+    return () => context.push(
+      Uri(
+        path: '/web',
+        queryParameters: {
+          'app': widget.profile.isStaff ? 'teacher' : 'parent',
+          'to': web,
+          'title': label,
+        },
+      ).toString(),
+    );
+  }
+}
+
+/// The navy top: the icon, the school's name for the assistant with the audience's subtitle and a green dot; earlier
+/// conversations, a new conversation and (opened over the app) close.
+class _Header extends ConsumerWidget {
+  const _Header({
+    required this.name,
+    required this.subtitle,
+    required this.onFresh,
+    required this.onEarlier,
+    required this.onClose,
+  });
+  final String name;
+  final String subtitle;
+  final VoidCallback? onFresh;
+  final VoidCallback? onEarlier;
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    Widget tool(String key, IconData icon, String tip, VoidCallback? on) => Padding(
+      padding: const EdgeInsets.only(left: Tokens.sp1),
+      child: IconButton(
+        key: Key(key),
+        tooltip: tip,
+        onPressed: on,
+        style: IconButton.styleFrom(
+          backgroundColor: Tokens.mobNavy700,
+          foregroundColor: Tokens.mobWhite,
+          disabledBackgroundColor: Tokens.mobNavy700,
+          disabledForegroundColor: Tokens.mobNavy100,
+          minimumSize: const Size(48, 48),
+        ),
+        icon: Icon(icon),
+      ),
+    );
+    return Container(
+      color: Tokens.mobNavy800,
+      padding: const EdgeInsets.fromLTRB(Tokens.sp4, Tokens.sp2, Tokens.sp2, Tokens.sp3),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Tokens.mobNavy700,
+              borderRadius: BorderRadius.circular(Tokens.radiusMd),
+            ),
+            child: const Icon(Icons.auto_awesome_outlined, color: Tokens.mobWhite),
+          ),
+          const SizedBox(width: Tokens.sp3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    name,
+                    key: const Key('asstName'),
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(color: Tokens.mobWhite, fontWeight: Tokens.fwSemibold),
+                  ),
+                ),
+                if (subtitle.isNotEmpty)
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Tokens.mobGreen600,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: Tokens.sp1),
+                      Flexible(
+                        child: Text(
+                          subtitle,
+                          key: const Key('asstSubtitle'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Tokens.mobNavy100, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          tool('asstEarlierBtn', Icons.history, s.asstEarlier, onEarlier),
+          tool('asstNew', Icons.delete_outline, s.asstNew, onFresh),
+          if (onClose != null) tool('asstClose', Icons.close, s.asstClose, onClose),
+        ],
+      ),
+    );
+  }
+}
+
+/// The topic bar: each topic the person may ask; a tap asks its main question.
+class _TopicBar extends ConsumerWidget {
+  const _TopicBar({required this.home, required this.onAsk});
+  final AssistantHome home;
+  final void Function(String)? onAsk;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Semantics(
+      label: s.asstTopics,
+      container: true,
+      explicitChildNodes: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: dark ? Tokens.mobGray900 : Tokens.mobWhite,
+          border: Border(bottom: BorderSide(color: dark ? Tokens.mobGray700 : Tokens.mobGray100)),
+        ),
+        child: SingleChildScrollView(
+          key: const Key('asstTopics'),
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: Tokens.sp3, vertical: Tokens.sp2),
+          child: Row(
+            children: [
+              for (final t in home.topics)
+                Padding(
+                  padding: const EdgeInsets.only(right: Tokens.sp2),
+                  child: OutlinedButton.icon(
+                    key: Key('asstTopic-${t['key']}'),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                    icon: Icon(_topicIcon('${t['key']}'), size: 18),
+                    label: Text(s.hindi ? '${t['labelHi'] ?? t['label']}' : '${t['label']}'),
+                    onPressed: onAsk == null
+                        ? null
+                        : () => onAsk!(
+                            s.hindi ? '${t['questionHi'] ?? t['question']}' : '${t['question']}',
+                          ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The assistant's bubble (left, with the small icon) and its time.
+class _Bubble extends StatelessWidget {
+  const _Bubble({super.key, required this.children, this.at});
+  final List<Widget> children;
+  final DateTime? at;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Tokens.sp3, right: Tokens.sp5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: const BoxDecoration(color: Tokens.mobNavy800, shape: BoxShape.circle),
+            child: const Icon(Icons.auto_awesome_outlined, size: 15, color: Tokens.mobWhite),
+          ),
+          const SizedBox(width: Tokens.sp2),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.all(Tokens.sp3),
+              decoration: BoxDecoration(
+                // dark: deep navy, so links and muted words keep their contrast
+                color: dark ? Tokens.mobNavy900 : Tokens.mobWhite,
+                border: Border.all(color: dark ? Tokens.mobGray700 : Tokens.mobGray100),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(Tokens.radiusLg),
+                  topRight: Radius.circular(Tokens.radiusLg),
+                  bottomRight: Radius.circular(Tokens.radiusLg),
+                  bottomLeft: Radius.circular(Tokens.radiusSm),
+                ),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (_current != null)
-                    _Thread(
-                      id: _current!,
-                      profile: widget.profile,
-                      onAsk: canAsk && !_busy ? _ask : null,
-                    )
-                  else if (canAsk) ...[
-                    if (starters.isNotEmpty)
-                      _Chips(
-                        id: 'asstStarters',
-                        title: s.asstTry,
-                        questions: [
-                          for (final x in starters)
-                            s.hindi ? '${x['questionHi'] ?? x['question']}' : '${x['question']}',
-                        ],
-                        onAsk: _busy ? null : _ask,
-                      ),
-                    if (recent.isNotEmpty)
-                      _Chips(
-                        id: 'asstAgain',
-                        title: s.asstAgain,
-                        icon: Icons.history,
-                        questions: [for (final x in recent) '${x['question']}'],
-                        onAsk: _busy ? null : _ask,
-                      ),
-                  ],
-                  if (canAsk) ...[
-                    TextField(
-                      key: const Key('asstQuestion'),
-                      controller: _question,
-                      minLines: 2,
-                      maxLines: 6,
-                      maxLength: 1000,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        labelText: s.asstQuestion,
-                        hintText: s.asstHintOf(audience),
-                        hintMaxLines: 3,
-                        helperText: s.asstMic,
-                        helperMaxLines: 2,
-                        alignLabelWithHint: true,
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: Tokens.sp2),
-                    Text(s.asstLanguage, style: TextStyle(color: muted, fontSize: 13)),
+                  ...children,
+                  if (at != null) ...[
                     const SizedBox(height: Tokens.sp1),
-                    Wrap(
-                      spacing: Tokens.sp2,
-                      runSpacing: Tokens.sp2,
-                      children: [
-                        for (final (v, label) in [
-                          ('', s.asstAuto),
-                          ('en', 'English'),
-                          ('hi', 'हिन्दी'),
-                          ('hinglish', 'Hinglish'),
-                        ])
-                          ChoiceChip(
-                            key: Key('asstLang-${v.isEmpty ? 'auto' : v}'),
-                            label: Text(label),
-                            selected: _language == v,
-                            showCheckmark: false,
-                            onSelected: (_) => setState(() => _language = v),
-                          ),
-                      ],
-                    ),
-                  ],
-                  if (_error != null) ...[const SizedBox(height: Tokens.sp3), ErrorText(_error!)],
-                  const SizedBox(height: Tokens.sp3),
-                  if (_busy) ...[
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(s.asstThinking, style: TextStyle(color: muted)),
-                    ),
-                    const SizedBox(height: Tokens.sp2),
-                    const LinearProgressIndicator(),
-                    const SizedBox(height: Tokens.sp3),
-                  ],
-                  Wrap(
-                    spacing: Tokens.sp2,
-                    runSpacing: Tokens.sp2,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      if (canAsk)
-                        FilledButton.icon(
-                          key: const Key('asstAsk'),
-                          icon: const Icon(Icons.send_outlined),
-                          label: Text(s.asstAsk),
-                          onPressed: _busy ? null : () => _ask(),
-                        ),
-                      if (_current != null)
-                        OutlinedButton(
-                          key: const Key('asstNew'),
-                          onPressed: _busy ? null : () => _open(null),
-                          child: Text(s.asstNew),
-                        ),
-                    ],
-                  ),
-                  if (home.on && home.dailyLimit > 0) ...[
-                    const SizedBox(height: Tokens.sp2),
                     Text(
-                      s.asstToday(home.askedToday, home.dailyLimit),
-                      key: const Key('asstCount'),
-                      style: TextStyle(color: muted, fontSize: 13),
+                      _clock(at!),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: dark ? Tokens.mobGray100 : Tokens.textMuted,
+                      ),
                     ),
                   ],
                 ],
               ),
             ),
           ),
-          const SizedBox(height: Tokens.sp3),
-          _fold(
-            context,
-            id: 'asstCanAsk',
-            icon: Icons.lightbulb_outline,
-            title: s.asstCanAsk,
-            hint: s.asstCanAskHint(allowed.length),
-            children: [
-              for (final e in allowed)
-                ListTile(
-                  dense: true,
-                  title: Text(
-                    s.hindi ? '${e['titleHi'] ?? e['title']}' : '${e['title']}',
-                    style: const TextStyle(fontWeight: Tokens.fwSemibold),
-                  ),
-                  subtitle: s.hindi || e['description'] == null
-                      ? null
-                      : Text('${e['description']}', style: TextStyle(color: muted)),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Tokens.sp4, Tokens.sp2, Tokens.sp4, Tokens.sp4),
-                child: Text(s.asstStored, style: TextStyle(color: muted, fontSize: 13)),
-              ),
-            ],
-          ),
-          if (home.conversations.isNotEmpty) ...[
-            const SizedBox(height: Tokens.sp3),
-            _fold(
-              context,
-              id: 'asstRecent',
-              title: s.asstRecent,
-              hint: s.asstRecentHint(home.conversations.length.clamp(0, 10)),
-              children: [
-                for (final c in home.conversations.take(10))
-                  ListTile(
-                    key: Key('asstConv-${c['id']}'),
-                    selected: c['id'] == _current,
-                    leading: const Icon(Icons.chat_bubble_outline),
-                    title: Text(
-                      '${c['title'] ?? '${c['id']}'.substring(0, 8)}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      s.dayShort(DateTime.tryParse('${c['updatedAt']}')?.toLocal() ?? ''),
-                      style: TextStyle(color: muted, fontSize: 13),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _open('${c['id']}'),
-                  ),
-              ],
-            ),
-          ],
-        ];
-      },
+        ],
+      ),
     );
   }
 }
 
-/// A note in a bordered box (switched off, consent, today's limit), read out when it appears.
-class _Banner extends StatelessWidget {
-  const _Banner({required this.id, required this.text, this.action});
+/// The person's question (right, navy) and its time.
+class _UserBubble extends ConsumerWidget {
+  const _UserBubble({required this.text, required this.at});
+  final String text;
+  final DateTime at;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Tokens.sp3, left: Tokens.sp7),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Semantics(
+          label: '${s.asstYou}: $text',
+          excludeSemantics: true,
+          child: Container(
+            padding: const EdgeInsets.all(Tokens.sp3),
+            decoration: const BoxDecoration(
+              color: Tokens.mobNavy800,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(Tokens.radiusLg),
+                topRight: Radius.circular(Tokens.radiusLg),
+                bottomLeft: Radius.circular(Tokens.radiusLg),
+                bottomRight: Radius.circular(Tokens.radiusSm),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(text, style: const TextStyle(color: Tokens.mobWhite)),
+                const SizedBox(height: Tokens.sp1),
+                Text(_clock(at), style: const TextStyle(color: Tokens.mobNavy100, fontSize: 12)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Three dots while the answer is found.
+class _Dots extends StatefulWidget {
+  const _Dots();
+  @override
+  State<_Dots> createState() => _DotsState();
+}
+
+class _DotsState extends State<_Dots> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // still for those who asked for less motion
+    if (MediaQuery.of(context).disableAnimations) {
+      _c.stop();
+    } else if (!_c.isAnimating) {
+      _c.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, _) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < 3; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: Tokens.sp1),
+              child: Opacity(
+                opacity: (_c.value * 3).floor() == i ? 1 : 0.35,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: dark ? Tokens.mobGray100 : Tokens.textMuted,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A note in a bordered box (not open, switched off, consent, today's limit), read out when it appears.
+class _Note extends StatelessWidget {
+  const _Note({required this.id, required this.text, this.action});
   final String id;
   final String text;
   final Widget? action;
@@ -506,6 +1028,7 @@ class _Banner extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       key: Key(id),
+      margin: const EdgeInsets.only(bottom: Tokens.sp3),
       padding: const EdgeInsets.all(Tokens.sp3),
       decoration: BoxDecoration(
         color: (dark ? Tokens.mobGray900 : Tokens.statusWarningBg),
@@ -523,20 +1046,18 @@ class _Banner extends StatelessWidget {
   }
 }
 
-/// Questions to tap (starters, ask again, ask next, did you mean): a tap asks it.
+/// Questions to tap (starters, ask next, did you mean, you can ask): a tap asks it.
 class _Chips extends StatelessWidget {
   const _Chips({
     required this.id,
     required this.title,
     required this.questions,
     required this.onAsk,
-    this.icon = Icons.chat_outlined,
   });
   final String id;
   final String title;
   final List<String> questions;
   final void Function(String)? onAsk;
-  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -545,14 +1066,14 @@ class _Chips extends StatelessWidget {
     if (shown.isEmpty) return const SizedBox.shrink();
     return Padding(
       key: Key(id),
-      padding: const EdgeInsets.only(bottom: Tokens.sp3),
+      padding: const EdgeInsets.only(top: Tokens.sp2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
             style: TextStyle(
-              color: dark ? Tokens.mobGray300 : Tokens.textMuted,
+              color: dark ? Tokens.mobGray100 : Tokens.textMuted,
               fontSize: 13,
               fontWeight: Tokens.fwSemibold,
             ),
@@ -560,12 +1081,11 @@ class _Chips extends StatelessWidget {
           const SizedBox(height: Tokens.sp1),
           Wrap(
             spacing: Tokens.sp2,
-            runSpacing: Tokens.sp2,
+            runSpacing: Tokens.sp1,
             children: [
               for (final (i, q) in shown.indexed)
                 ActionChip(
                   key: Key('$id-$i'),
-                  avatar: Icon(icon, size: 18),
                   label: Text(q),
                   onPressed: onAsk == null ? null : () => onAsk!(q),
                 ),
@@ -573,177 +1093,6 @@ class _Chips extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// The messages of the conversation in use: the person's questions and the assistant's answers with the records
-/// (figures or a short table), the screen to open, the sources and — on the last answer — what to ask next.
-class _Thread extends ConsumerWidget {
-  const _Thread({required this.id, required this.profile, required this.onAsk});
-  final String id;
-  final Profile profile;
-  final void Function(String)? onAsk;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(stringsProvider);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
-    final conv = ref.watch(assistantConversationProvider(id));
-    // the screens of the person's menu: an answer opens only those (a screen the school hides is not offered)
-    final menu = ref.watch(menuProvider(profile.id));
-    if (conv.isLoading && !conv.hasValue) {
-      return const Padding(
-        padding: EdgeInsets.only(bottom: Tokens.sp3),
-        child: LinearProgressIndicator(),
-      );
-    }
-    final messages = asList(conv.value?['messages']);
-    if (messages.isEmpty) return const SizedBox.shrink();
-    final last = messages.lastIndexWhere((m) => m['role'] == 'assistant');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Tokens.sp3),
-      child: Column(
-        key: const Key('asstThread'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final (i, m) in messages.indexed)
-            Container(
-              margin: const EdgeInsets.only(bottom: Tokens.sp3),
-              padding: const EdgeInsets.only(left: Tokens.sp3),
-              decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(
-                    width: 3,
-                    color: m['role'] == 'user'
-                        ? (dark ? Tokens.mobGray700 : Tokens.mobGray100)
-                        : Tokens.mobCyan500,
-                  ),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    m['role'] == 'user' ? s.asstYou : s.asstName,
-                    style: TextStyle(color: muted, fontSize: 12, fontWeight: Tokens.fwBold),
-                  ),
-                  Text('${m['content'] ?? ''}'),
-                  if (m['role'] == 'assistant')
-                    ..._said(context, s, asJson(m['display']), menu, latest: i == last),
-                  if (asList(m['citations']).isNotEmpty) ...[
-                    const SizedBox(height: Tokens.sp2),
-                    Wrap(
-                      spacing: Tokens.sp2,
-                      runSpacing: Tokens.sp1,
-                      children: [
-                        for (final c in asList(m['citations']))
-                          Semantics(
-                            label: s.asstSource('${c['title']}'),
-                            excludeSemantics: true,
-                            child: StatusChip('${c['title']}', Tone.neutral),
-                          ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// What was shown with an answer: the card, the screen to open; on the latest, the questions to ask next.
-  List<Widget> _said(
-    BuildContext context,
-    S s,
-    Json d,
-    AsyncValue<ProfileMenu> menu, {
-    required bool latest,
-  }) {
-    final card = asJson(d['card']);
-    final link = asJson(d['link']);
-    final open = link.isEmpty ? null : _opener(context, s, link, menu);
-    String q(Json x) => '${x['question'] ?? x['title'] ?? ''}';
-    return [
-      if (card['kind'] == 'figures' && asList(card['figures']).isNotEmpty) ...[
-        const SizedBox(height: Tokens.sp2),
-        FigureGrid(
-          key: Key('asstFigures-$id'),
-          tiles: [
-            for (final f in asList(card['figures']))
-              FigureTile(
-                label: s.hindi ? '${f['labelHi'] ?? f['label']}' : '${f['label']}',
-                value: '${f['value'] ?? '—'}',
-                icon: Icons.info_outline,
-              ),
-          ],
-        ),
-      ],
-      if (card['kind'] == 'table' && asList(card['rows']).isNotEmpty) ...[
-        const SizedBox(height: Tokens.sp2),
-        _TableCard(card: card),
-      ],
-      if (open != null) ...[
-        const SizedBox(height: Tokens.sp2),
-        OutlinedButton.icon(
-          key: Key('asstOpen-${link['app'] ?? link['web']}'),
-          icon: const Icon(Icons.open_in_new, size: 18),
-          label: Text(
-            s.asstOpen(s.hindi ? '${link['labelHi'] ?? link['label']}' : '${link['label']}'),
-          ),
-          onPressed: open,
-        ),
-      ],
-      if (latest) ...[
-        const SizedBox(height: Tokens.sp2),
-        _Chips(
-          id: 'asstNext',
-          title: s.asstNext,
-          icon: Icons.arrow_forward,
-          questions: [for (final x in asList(d['followUps'])) q(x)],
-          onAsk: onAsk,
-        ),
-        _Chips(
-          id: 'asstDidYouMean',
-          title: s.asstDidYouMean,
-          icon: Icons.help_outline,
-          questions: [for (final x in asList(d['didYouMean'])) q(x)],
-          onAsk: onAsk,
-        ),
-        if (asList(d['followUps']).isEmpty && asList(d['didYouMean']).isEmpty)
-          _Chips(
-            id: 'asstInstead',
-            title: s.asstInstead,
-            questions: [for (final x in asList(d['suggestions'])) q(x)],
-            onAsk: onAsk,
-          ),
-      ],
-    ];
-  }
-
-  /// The screen an answer is about: the app's own when the person's menu has it, else the website's page in the
-  /// app; none when neither (the website itself refuses a screen the school does not offer).
-  VoidCallback? _opener(BuildContext context, S s, Json link, AsyncValue<ProfileMenu> menu) {
-    final label = s.hindi ? '${link['labelHi'] ?? link['label']}' : '${link['label']}';
-    final app = link['app'] as String?;
-    final web = link['web'] as String?;
-    // offline (no menu to check against) the app's own screens still open; while it loads, nothing yet
-    if (menu.isLoading && !menu.hasValue) return null;
-    final m = menu.value;
-    final inMenu =
-        app != null &&
-        (m == null || m.groups.any((g) => g.items.any((i) => i.href.split('?').first == app)));
-    final screen = inMenu ? nativeScreen(profile, app, s) : null;
-    if (screen != null) return () => pushPage(context, label, screen);
-    if (web == null) return null;
-    return () => context.push(
-      Uri(
-        path: '/web',
-        queryParameters: {'app': profile.isStaff ? 'teacher' : 'parent', 'to': web, 'title': label},
-      ).toString(),
     );
   }
 }
@@ -778,9 +1127,9 @@ class _TableCard extends ConsumerWidget {
         for (final r in rows)
           Container(
             margin: const EdgeInsets.only(bottom: Tokens.sp2),
-            padding: const EdgeInsets.all(Tokens.sp3),
+            padding: const EdgeInsets.all(Tokens.sp2),
             decoration: BoxDecoration(
-              color: dark ? Tokens.mobGray900 : Tokens.mobWhite,
+              color: dark ? Tokens.mobGray900 : Tokens.mobGray50,
               borderRadius: BorderRadius.circular(Tokens.radiusSm),
               border: Border.all(color: dark ? Tokens.mobGray700 : Tokens.mobGray200),
             ),
@@ -803,32 +1152,4 @@ class _TableCard extends ConsumerWidget {
       ],
     );
   }
-}
-
-/// A part of the page folded in a card until tapped, with a line saying what is inside.
-Widget _fold(
-  BuildContext context, {
-  required String id,
-  required String title,
-  required String hint,
-  required List<Widget> children,
-  IconData icon = Icons.history_outlined,
-}) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  return Card(
-    clipBehavior: Clip.antiAlias,
-    child: ExpansionTile(
-      key: Key(id),
-      leading: Icon(icon),
-      title: Text(title, style: const TextStyle(fontWeight: Tokens.fwSemibold)),
-      subtitle: Text(
-        hint,
-        style: TextStyle(color: (dark ? Tokens.mobGray300 : Tokens.textMuted), fontSize: 13),
-      ),
-      shape: const Border(),
-      collapsedShape: const Border(),
-      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
-    ),
-  );
 }

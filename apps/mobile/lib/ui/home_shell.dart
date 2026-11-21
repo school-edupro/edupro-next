@@ -242,8 +242,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                   ),
                   icon: const Icon(Icons.forum_outlined),
                   label: Text(s.asstAsk),
-                  onPressed: () =>
-                      pushPage(context, s.menu(asst.label), AssistantScreen(profile: p)),
+                  onPressed: () => openAssistant(context, p),
                 )
               : null,
           body: SafeArea(
@@ -452,6 +451,11 @@ class MoreList extends ConsumerWidget {
                 subtitle: i.help == null ? null : Text(s.menu(i.help!)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
+                  // the assistant opens over the app as the chat window (docs/design/92)
+                  if (i.href.split('?').first == '/assistant') {
+                    openAssistant(context, profile);
+                    return;
+                  }
                   final native = nativeScreen(profile, i.href, s);
                   if (native != null) {
                     pushPage(context, s.menu(i.label), native);

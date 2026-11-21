@@ -77,6 +77,9 @@ class School {
   /// questions asked today
   int asked = 0;
 
+  /// the school's name for the assistant
+  String name = 'MobiAI';
+
   /// what was shown with an answer (docs/design/91): by a word of the question
   Map<String, Object?>? display(String q) {
     final w = q.toLowerCase();
@@ -326,6 +329,60 @@ class School {
           'recent': [
             {'question': 'Fees due?'},
           ],
+          // the chat window (docs/design/92)
+          'name': name,
+          'subtitle': kind == 'staff'
+              ? 'Your smart teaching assistant'
+              : kind == 'student'
+              ? 'Your smart study assistant'
+              : 'Your smart parent assistant',
+          'subtitleHi': kind == 'staff'
+              ? 'आपका स्मार्ट शिक्षण सहायक'
+              : kind == 'student'
+              ? 'आपका स्मार्ट पढ़ाई सहायक'
+              : 'आपका स्मार्ट अभिभावक सहायक',
+          'firstName': kind == 'staff' ? 'Asha' : 'Mina',
+          'topics': kind == 'staff'
+              ? [
+                  {
+                    'key': 'hr',
+                    'label': 'Staff and HR',
+                    'labelHi': 'कर्मचारी और HR',
+                    'id': 'my_leave_balance',
+                    'question': 'My leave balance',
+                    'questionHi': 'मेरा अवकाश शेष',
+                  },
+                ]
+              : [
+                  {
+                    'key': 'attendance',
+                    'label': 'Attendance',
+                    'labelHi': 'उपस्थिति',
+                    'id': 'child_attendance',
+                    'question': 'Show the attendance record',
+                    'questionHi': 'उपस्थिति रिकॉर्ड दिखाओ',
+                  },
+                  {
+                    'key': 'fees',
+                    'label': 'Fees',
+                    'labelHi': 'शुल्क',
+                    'id': 'child_receipts',
+                    'question': 'Show the receipts',
+                    'questionHi': 'रसीदें दिखाओ',
+                  },
+                ],
+          'quick': mode == 'consent' || mode == 'off'
+              ? []
+              : [
+                  {
+                    'id': 'child_attendance',
+                    'topic': 'attendance',
+                    'text': 'Kid Sample: present 4 of 5 days (80%), absent 1.',
+                    'textHi': 'Kid Sample: 5 में से 4 दिन उपस्थित (80%), 1 अनुपस्थित।',
+                    'question': 'Show the attendance record',
+                    'questionHi': 'उपस्थिति रिकॉर्ड दिखाओ',
+                  },
+                ],
         };
       case 'GET /insights/assistant/catalogue':
         if (mode == 'blocked') throw const ApiException(403, 'forbidden', 'Not allowed');
@@ -452,7 +509,10 @@ Future<FakeTransport> pump(
           data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(text)),
           child: w!,
         ),
-        home: FamilyPage(title: 'Assistant', child: child),
+        // the assistant is a chat window of its own (docs/design/92); Help sits in the family page
+        home: child is AssistantScreen
+            ? Scaffold(body: SafeArea(child: child))
+            : FamilyPage(title: 'Assistant', child: child),
       ),
     ),
   );
@@ -477,94 +537,45 @@ List<Call> asks(FakeTransport t) =>
     t.calls.where((c) => c.method == 'POST' && c.path == '/insights/assistant').toList();
 
 void main() {
-  group('Assistant in the app (no web page)', () {
-    testWidgets('what may be asked and the recent conversations stay folded until tapped', (
+  group('Assistant in the app: the MobiAI chat (no web page)', () {
+    testWidgets('the window: name, subtitle, greeting, Quick Update, topics, footer', (
       tester,
     ) async {
       await tall(tester);
       await pump(tester, const AssistantScreen(profile: parent));
-      expect(find.text('Ask about your children'), findsOneWidget);
-      expect(find.textContaining('Answers come only from school records'), findsOneWidget);
-      expect(find.text('What you can ask'), findsOneWidget);
-      expect(find.text('1 kind of question'), findsOneWidget);
-      expect(find.text('Fees due'), findsNothing);
-      await tapIn(tester, find.text('What you can ask'));
-      expect(find.text('Fees due'), findsOneWidget);
-      expect(find.text('What is due for your child'), findsOneWidget);
-      // only what the person may run
-      expect(find.text('Staff on leave'), findsNothing);
-      expect(find.textContaining('personal details masked'), findsOneWidget);
-
-      expect(find.text('Recent conversations'), findsOneWidget);
-      expect(find.text('1 · latest first'), findsOneWidget);
-      await tapIn(tester, find.text('Recent conversations'));
-      await tapIn(tester, find.byKey(const Key('asstConv-c-1')));
-      expect(find.byKey(const Key('asstThread')), findsOneWidget);
-      expect(find.text('Rs 1,200 is due for Kid Sample.'), findsOneWidget);
-      expect(find.text('You'), findsOneWidget);
-      expect(find.text('Assistant'), findsWidgets);
+      expect(find.byKey(const Key('asstName')), findsOneWidget);
+      expect(find.text('MobiAI'), findsOneWidget);
+      expect(find.text('Your smart parent assistant'), findsOneWidget);
+      expect(find.text('Today'), findsOneWidget);
       expect(
-        find.descendant(of: find.byKey(const Key('asstThread')), matching: find.text('Fees due')),
+        find.textContaining('Mina! I’m MobiAI. Ask me about attendance, fees'),
         findsOneWidget,
       );
-
-      await tapIn(tester, find.byKey(const Key('asstNew')));
-      expect(find.byKey(const Key('asstThread')), findsNothing);
-      expect(find.byKey(const Key('asstNew')), findsNothing);
-    });
-
-    testWidgets('asks in the chosen language and goes on in the same conversation', (tester) async {
-      await tall(tester);
-      final t = await pump(tester, const AssistantScreen(profile: parent));
-      await tapIn(tester, find.byKey(const Key('asstAsk')));
-      expect(find.text('Write a question (at least 2 letters).'), findsOneWidget);
-      expect(asks(t), isEmpty);
-
-      await tapIn(tester, find.byKey(const Key('asstLang-hi')));
-      await tester.enterText(find.byKey(const Key('asstQuestion')), '  Kitni fees baki hai?  ');
-      await tapIn(tester, find.byKey(const Key('asstAsk')));
-      expect(asks(t).single.body, {
-        'question': 'Kitni fees baki hai?',
-        'language': 'hi',
-        'surface': 'parent',
-      });
-      expect(find.text('Write a question (at least 2 letters).'), findsNothing);
-      expect(find.text('Kitni fees baki hai?'), findsOneWidget);
-      expect(find.text('Answer 1: nothing is due.'), findsOneWidget);
-      // the box is empty for the next question, and the new conversation is in the recent list
-      expect(tester.widget<TextField>(find.byKey(const Key('asstQuestion'))).controller!.text, '');
-      expect(find.text('2 · latest first'), findsOneWidget);
-
-      await tapIn(tester, find.byKey(const Key('asstLang-auto')));
-      await tester.enterText(find.byKey(const Key('asstQuestion')), 'And next month?');
-      await tapIn(tester, find.byKey(const Key('asstAsk')));
-      expect(asks(t).last.body, {
-        'question': 'And next month?',
-        'conversationId': 'c-2',
-        'surface': 'parent',
-      });
-      expect(find.text('Answer 2: nothing is due.'), findsOneWidget);
-      expect(find.text('Answer 1: nothing is due.'), findsOneWidget);
-    });
-
-    testWidgets('the start: starters, ask again and today’s count; a tap asks it', (tester) async {
-      await tall(tester);
-      final t = await pump(tester, const AssistantScreen(profile: parent));
       expect(find.text('Try asking'), findsOneWidget);
-      expect(find.text('Ask again'), findsOneWidget);
-      expect(find.byKey(const Key('asstAgain-0')), findsOneWidget);
-      expect(find.text('0 of 30 questions asked today'), findsOneWidget);
-      expect(find.textContaining('mic on your keyboard'), findsOneWidget);
+      expect(find.text('Your Quick Update'), findsOneWidget);
+      expect(find.text('Kid Sample: present 4 of 5 days (80%), absent 1.'), findsOneWidget);
+      expect(find.byKey(const Key('asstTopic-attendance')), findsOneWidget);
+      expect(find.byKey(const Key('asstTopic-fees')), findsOneWidget);
+      expect(find.textContaining('Mobilise App Lab Limited', findRichText: true), findsOneWidget);
+      // the school's name for it
+      await pump(tester, const AssistantScreen(profile: parent), school: School()..name = 'Vidya');
+      expect(find.text('Vidya'), findsOneWidget);
+      expect(find.textContaining('I’m Vidya.'), findsOneWidget);
+    });
 
+    testWidgets('a starter asks; the answer with figures, its time, Open and Ask next', (
+      tester,
+    ) async {
+      await tall(tester);
+      final t = await pump(tester, const AssistantScreen(profile: parent));
       await tapIn(tester, find.byKey(const Key('asstStarters-0')));
       expect(asks(t).single.body, {'question': 'Show the attendance record', 'surface': 'parent'});
-      // the answer's records as figures, the screen to open, what to ask next
+      expect(find.text('Show the attendance record'), findsOneWidget);
       expect(find.byKey(const Key('asstFigures-c-2')), findsOneWidget);
       expect(find.text('School days'), findsOneWidget);
-      expect(find.text('Absent on'), findsOneWidget);
       expect(find.text('Open Attendance'), findsOneWidget);
       expect(find.text('Ask next'), findsOneWidget);
-      expect(find.text('1 of 30 questions asked today'), findsOneWidget);
+      expect(find.textContaining(RegExp(r'^\d\d:\d\d (am|pm)$')), findsWidgets);
       // the starters are for the start
       expect(find.text('Try asking'), findsNothing);
 
@@ -578,28 +589,36 @@ void main() {
       // what to ask next goes with the latest answer only
       expect(find.byKey(const Key('asstNext')), findsNothing);
 
-      // the screen an answer is about opens in the app
       await tapIn(tester, find.text('Open Attendance'));
       expect(find.byType(AttendanceScreen), findsOneWidget);
     });
 
-    testWidgets('ask again, a table of records; no button for a screen not in the menu', (
+    testWidgets('a topic asks its question; a typed question goes on in the conversation', (
       tester,
     ) async {
       await tall(tester);
       final t = await pump(tester, const AssistantScreen(profile: parent));
-      await tapIn(tester, find.byKey(const Key('asstAgain-0')));
-      expect(asks(t).single.body!['question'], 'Fees due?');
-
-      await tapIn(tester, find.byKey(const Key('asstNew')));
-      await tapIn(tester, find.byKey(const Key('asstStarters-1')));
+      await tapIn(tester, find.byKey(const Key('asstTopic-fees')));
+      expect(asks(t).single.body!['question'], 'Show the receipts');
       expect(find.byKey(const Key('asstTable')), findsOneWidget);
       expect(find.text('R-101'), findsOneWidget);
       expect(find.text('₹1,200'), findsOneWidget);
-      expect(find.text('₹25,000'), findsOneWidget);
       expect(find.text('2 Nov 2026'), findsOneWidget);
       expect(find.text('and 3 more'), findsOneWidget);
+      // a screen the person's menu does not have, and no web page: no button
       expect(find.text('Open Library'), findsNothing);
+
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(find.text('Write a question (at least 2 letters).'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('asstQuestion')), '  Kitni fees baki hai?  ');
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(asks(t).last.body, {
+        'question': 'Kitni fees baki hai?',
+        'conversationId': 'c-2',
+        'surface': 'parent',
+      });
+      expect(find.text('Kitni fees baki hai?'), findsOneWidget);
+      expect(tester.widget<TextField>(find.byKey(const Key('asstQuestion'))).controller!.text, '');
     });
 
     testWidgets('“did you mean” and, for what it cannot answer, what may be asked instead', (
@@ -611,7 +630,6 @@ void main() {
       await tapIn(tester, find.byKey(const Key('asstAsk')));
       expect(find.text('Did you mean'), findsOneWidget);
       expect(find.text('Show the results'), findsOneWidget);
-
       await tester.enterText(find.byKey(const Key('asstQuestion')), 'xyzzy plugh');
       await tapIn(tester, find.byKey(const Key('asstAsk')));
       expect(find.text('Did you mean'), findsNothing);
@@ -620,7 +638,50 @@ void main() {
       expect(asks(t).last.body!['question'], 'How much fees is due?');
     });
 
-    testWidgets('a parent without the consent: says so first and opens the profile in the app', (
+    testWidgets('earlier conversations open from the header; the bin starts afresh', (
+      tester,
+    ) async {
+      await tall(tester);
+      await pump(tester, const AssistantScreen(profile: parent));
+      await tapIn(tester, find.byKey(const Key('asstEarlierBtn')));
+      expect(find.byKey(const Key('asstEarlier')), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('asstConv-c-1')));
+      expect(find.text('Rs 1,200 is due for Kid Sample.'), findsOneWidget);
+      expect(find.text('Source: Fees due'), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('asstNew')));
+      expect(find.text('Rs 1,200 is due for Kid Sample.'), findsNothing);
+      expect(find.text('Try asking'), findsOneWidget);
+    });
+
+    testWidgets('opened over the app: Close goes back', (tester) async {
+      await tall(tester);
+      SharedPreferences.setMockInitialValues({});
+      final t = FakeTransport(School().answer);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [transportProvider.overrideWithValue(t)],
+          child: MaterialApp(
+            theme: eduproTheme(brightness: Brightness.light, webFonts: false),
+            home: Builder(
+              builder: (c) => Scaffold(
+                body: Center(
+                  child: TextButton(
+                    onPressed: () => openAssistant(c, parent),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tapIn(tester, find.text('open'));
+      expect(find.byType(AssistantScreen), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('asstClose')));
+      expect(find.byType(AssistantScreen), findsNothing);
+    });
+
+    testWidgets('a parent without the consent: says so and opens the profile; no Quick Update', (
       tester,
     ) async {
       await tall(tester);
@@ -630,12 +691,11 @@ void main() {
         school: School(mode: 'consent'),
       );
       expect(find.byKey(const Key('asstConsent')), findsOneWidget);
-      expect(find.textContaining('needs your consent (AI assistant) first'), findsOneWidget);
       expect(find.byKey(const Key('asstQuestion')), findsNothing);
-      expect(find.text('Try asking'), findsNothing);
+      expect(find.byKey(const Key('asstQuick')), findsNothing);
+      expect(find.byKey(const Key('asstTopics')), findsNothing);
       await tapIn(tester, find.byKey(const Key('asstOpenProfile')));
       expect(find.byType(ProfileScreen), findsOneWidget);
-      // back from the profile, the start is read again
       final before = t.calls.where((c) => c.path == '/insights/assistant/start').length;
       await tester.pageBack();
       await tester.pumpAndSettle();
@@ -655,34 +715,30 @@ void main() {
       expect(find.byKey(const Key('asstQuestion')), findsNothing);
     });
 
-    testWidgets('a student whose parent has not consented: ask a parent', (tester) async {
+    testWidgets('a student: ask a parent first; with the consent, their own', (tester) async {
       await tall(tester);
       await pump(
         tester,
         const AssistantScreen(profile: student),
         school: School(kind: 'student', mode: 'consent'),
       );
-      expect(find.text('Ask about your school day'), findsOneWidget);
+      expect(find.text('Your smart study assistant'), findsOneWidget);
       expect(find.byKey(const Key('asstAskParent')), findsOneWidget);
-      expect(find.textContaining('Ask a parent to turn on'), findsOneWidget);
       expect(find.byKey(const Key('asstOpenProfile')), findsNothing);
       expect(find.byKey(const Key('asstQuestion')), findsNothing);
-    });
-
-    testWidgets('a student with the consent asks about themself', (tester) async {
-      await tall(tester);
       final t = await pump(
         tester,
         const AssistantScreen(profile: student),
         school: School(kind: 'student'),
       );
-      expect(find.textContaining('Your attendance, timetable, homework'), findsOneWidget);
       await tapIn(tester, find.byKey(const Key('asstStarters-0')));
       expect(asks(t).single.body!['surface'], 'parent');
       expect(find.text('School days'), findsOneWidget);
     });
 
-    testWidgets('switched off for the audience', (tester) async {
+    testWidgets('switched off; today’s questions used up (at the start or when asking)', (
+      tester,
+    ) async {
       await tall(tester);
       await pump(
         tester,
@@ -691,11 +747,6 @@ void main() {
       );
       expect(find.byKey(const Key('asstOff')), findsOneWidget);
       expect(find.byKey(const Key('asstQuestion')), findsNothing);
-      expect(find.byKey(const Key('asstCount')), findsNothing);
-    });
-
-    testWidgets('today’s questions used up, at the start or when asking', (tester) async {
-      await tall(tester);
       await pump(
         tester,
         const AssistantScreen(profile: parent),
@@ -704,7 +755,6 @@ void main() {
       expect(find.byKey(const Key('asstLimit')), findsOneWidget);
       expect(find.textContaining('asked 30 questions today'), findsOneWidget);
       expect(find.byKey(const Key('asstQuestion')), findsNothing);
-
       await pump(
         tester,
         const AssistantScreen(profile: parent),
@@ -713,7 +763,6 @@ void main() {
       expect(find.byKey(const Key('asstLimit')), findsNothing);
       await tapIn(tester, find.byKey(const Key('asstStarters-0')));
       expect(find.byKey(const Key('asstLimit')), findsOneWidget);
-      expect(find.textContaining('asked 30 questions today'), findsOneWidget);
       expect(find.byKey(const Key('asstAsk')), findsNothing);
     });
 
@@ -724,9 +773,9 @@ void main() {
         const AssistantScreen(profile: staff),
         school: School(kind: 'staff'),
       );
-      expect(find.text('Ask about your classes'), findsOneWidget);
-      expect(find.byKey(const Key('asstConsent')), findsNothing);
-      await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+      expect(find.text('Your smart teaching assistant'), findsOneWidget);
+      expect(find.textContaining('Asha! I’m MobiAI. Ask me about staff and HR'), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('asstTopic-hr')));
       expect(asks(t).single.body, {'question': 'My leave balance', 'surface': 'teacher'});
       expect(find.text('Casual leave left'), findsOneWidget);
       await tapIn(tester, find.text('Open My leave'));
@@ -744,20 +793,22 @@ void main() {
       expect(find.byKey(const Key('asstQuestion')), findsNothing);
     });
 
-    testWidgets('in Hindi', (tester) async {
+    testWidgets('in Hindi: the words, the Quick Update and the answer’s language', (tester) async {
       await tall(tester);
-      await pump(tester, const AssistantScreen(profile: parent), hindi: true);
-      expect(find.text('अपने बच्चों के बारे में पूछें'), findsOneWidget);
-      expect(find.text('पूछें'), findsOneWidget);
+      final t = await pump(tester, const AssistantScreen(profile: parent), hindi: true);
+      expect(find.text('आपका स्मार्ट अभिभावक सहायक'), findsOneWidget);
+      expect(find.textContaining('मैं MobiAI हूँ। मुझसे पूछें: उपस्थिति, शुल्क'), findsOneWidget);
+      expect(find.text('आपका त्वरित अपडेट'), findsOneWidget);
+      expect(find.text('Kid Sample: 5 में से 4 दिन उपस्थित (80%), 1 अनुपस्थित।'), findsOneWidget);
       expect(find.text('ऐसे पूछें'), findsOneWidget);
-      expect(find.text('उपस्थिति रिकॉर्ड दिखाओ'), findsOneWidget);
-      expect(find.text('आज 30 में से 0 प्रश्न पूछे'), findsOneWidget);
       await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+      expect(asks(t).single.body, {
+        'question': 'उपस्थिति रिकॉर्ड दिखाओ',
+        'language': 'hi',
+        'surface': 'parent',
+      });
       expect(find.text('विद्यालय दिवस'), findsOneWidget);
       expect(find.text('उपस्थिति खोलें'), findsOneWidget);
-      await tapIn(tester, find.text('आप क्या पूछ सकते हैं'));
-      expect(find.text('बकाया शुल्क'), findsOneWidget);
-      expect(find.text('What is due for your child'), findsNothing);
     });
   });
 
@@ -871,7 +922,6 @@ void main() {
         await pump(tester, w, hindi: hindi, dark: dark);
         if (w is AssistantScreen) {
           await tapIn(tester, find.byKey(const Key('asstStarters-0')));
-          await tapIn(tester, find.byKey(const Key('asstCanAsk')));
         } else {
           await tapIn(tester, find.text(hindi ? 'उपस्थिति और अवकाश' : 'Attendance and leave'));
           await tapIn(tester, find.byKey(const Key('help-2')));
@@ -900,8 +950,7 @@ void main() {
     await tapIn(tester, find.byKey(const Key('asstNext-1')));
     await tapIn(tester, find.byKey(const Key('asstNew')));
     await tapIn(tester, find.byKey(const Key('asstStarters-1')));
-    await tapIn(tester, find.byKey(const Key('asstRecent')));
-    await tapIn(tester, find.byKey(const Key('asstCanAsk')));
+    await tapIn(tester, find.byKey(const Key('asstEarlierBtn')));
     expect(tester.takeException(), isNull);
     await pump(
       tester,

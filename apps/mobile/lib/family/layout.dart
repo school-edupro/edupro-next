@@ -8,6 +8,7 @@ import '../profiles/profiles.dart';
 import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
 import '../ui/home_shell.dart' show nativeScreen;
+import 'assistant.dart' show openAssistant;
 import '../ui/widgets.dart';
 import 'common.dart';
 import 'data.dart';
@@ -247,6 +248,11 @@ String screenKey(String href) {
 
 /// Opens a screen of the layout in the app (every family screen has one).
 void openFamilyScreen(BuildContext context, S s, Profile p, FamilyEntry e) {
+  // the assistant opens over the app as the chat window (docs/design/92)
+  if (e.href.split('?').first == '/assistant') {
+    openAssistant(context, p);
+    return;
+  }
   final screen = nativeScreen(p, e.href, s);
   if (screen != null) pushPage(context, shortLabel(s, e), screen);
 }

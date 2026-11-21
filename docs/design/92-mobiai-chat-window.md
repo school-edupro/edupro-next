@@ -89,3 +89,13 @@ the person's language).
   its own server actions (`lib/assistant-window.ts`: start, ask with the website's surface, the conversation).
   Checked on a made-up test school at 1280 and 375 px (open, topic, typed question, another page, Esc, the bin, not
   on the full page; axe) and with the parent, student, teacher and admin accessibility lists.
+- **D (21 Nov 2026).** The app's assistant (`apps/mobile/lib/family/assistant.dart`) has the window's look: the navy
+  header (the icon, the school's name for it, the audience's subtitle with a green dot; Earlier conversations as a
+  sheet, the bin, and Close when opened over the app), the topic bar, Today, the greeting and Try asking, Your Quick
+  Update with topic icons, the bubbles with their times (the answer's figures or record cards, Open <screen>, the
+  source, Ask next / Did you mean / You can ask), three dots while it looks, the notes, the question bar with Send and
+  the footer. Questions go in the app's language (Hindi asks in Hindi). `openAssistant` opens it over the app from
+  the Ask button on Home, More → Assistant and a Home shortcut; as a school's tab it sits in the tab. Tests:
+  `apps/mobile/test/assistant_help_test.dart` (the window, starters, topics, typed questions, did you mean, earlier
+  conversations, the bin, Close, consent, ask a parent, switched off, the limit, staff, blocked, Hindi; light, dark,
+  Hindi and 2× text with the accessibility guidelines — the dark answer bubble is deep navy for contrast).
