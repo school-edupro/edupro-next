@@ -1,6 +1,6 @@
 # 93 — The assistant with Claude's help (hybrid)
 
-Status: planned 21 Nov 2026 · builds on docs 07, 91 and 92 · owner: Insights
+Status: built 21 Nov 2026 (phases A–D) · builds on docs 07, 91 and 92 · owner: Insights
 
 ## The ask
 
@@ -83,3 +83,10 @@ place a question**, so most answers stay free, local and in the school.
   HI) on the full Assistant page (a badge), in the floating window and in the app; EduPro's own answers show nothing.
   Checked in a browser: the set-up on Alpha (Save caught, nothing saved) and a made-up test school's Claude answer,
   with axe; the app's tests (210) include the label in English and Hindi.
+- **D (21 Nov 2026).** `docs/runbooks/assistant-claude.md`: before switching on (the data-processing agreement, an
+  API key of EduPro's own with a spend limit — never a Max or Pro plan), turning it on (`AI_PROVIDER=hybrid`, the key
+  in the secret store, the smoke call), a school's limit (the script), what leaves EduPro, adding families later (the
+  draft consent text — a new version asks every family again — and `CLAUDE_AUDIENCES`), the data-processing
+  checklist and switching off. `.env.example` documents the settings (commented out: the default stays local).
+  Closed with the AI package (24 tests), the API's chatbot suites (68, incl. the fake-Claude suite), the RLS test,
+  the app (210), the four type-checks, lint and formatting. Real Claude calls wait for Mobilise's key.
