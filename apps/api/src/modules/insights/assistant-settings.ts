@@ -101,6 +101,10 @@ export interface AssistantSettings {
   name: string;
   /** the school's subtitle per audience ('' = the standard one) */
   subtitles: Record<Audience, string>;
+  /** docs/design/93: Claude's help per audience (families wait for a consent that names Anthropic) */
+  claude: Record<Audience, boolean>;
+  /** Claude answers a month, set by Mobilise (null: the server's default) */
+  claudeMonthlyLimit: number | null;
   updatedAt: string | null;
   updatedBy: string | null;
 }
@@ -112,6 +116,8 @@ export const DEFAULT_SETTINGS: AssistantSettings = {
   starters: { ...DEFAULT_STARTERS },
   name: DEFAULT_NAME,
   subtitles: { student: '', parent: '', teacher: '', admin: '' },
+  claude: { student: false, parent: false, teacher: false, admin: false },
+  claudeMonthlyLimit: null,
   updatedAt: null,
   updatedBy: null,
 };
@@ -142,5 +148,10 @@ export const AssistantSettingsSchema = z.object({
   /** docs/design/92: left out, the saved name and subtitles stay */
   name: z.string().trim().min(1).max(40).optional(),
   subtitles: PerAudience(z.string().trim().max(80)).optional(),
+  /** docs/design/93: left out, the saved switches stay */
+  claude: PerAudience(z.boolean()).optional(),
 });
+
+/** The audiences Claude may help today (docs/design/93: staff first; families after the consent names Anthropic). */
+export const CLAUDE_AUDIENCES: readonly Audience[] = ['teacher', 'admin'];
 export class AssistantSettingsDto extends createZodDto(AssistantSettingsSchema) {}

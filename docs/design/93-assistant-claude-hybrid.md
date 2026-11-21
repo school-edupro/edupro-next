@@ -12,15 +12,15 @@ place a question**, so most answers stay free, local and in the school.
 
 ## Decisions (asked and answered, 21 Nov 2026)
 
-| Question            | Answer                                                                                                  |
-| ------------------- | ------------------------------------------------------------------------------------------------------- |
-| How                 | Hybrid: the matcher first; Claude for questions it cannot place and for "did you mean" ties           |
-| Who pays            | One Mobilise API key in the server settings; each school's use is tracked (Assistant costs page)        |
-| What Claude sees    | The masked question and the records an approved query finds, contacts masked (phone, e-mail, Aadhaar …) |
-| Who gets it         | Teachers and office / admin staff first; parents and students later, after the consent names Anthropic |
-| Model               | Claude Haiku 5.5 (`claude-haiku-5-5`)                                                                   |
-| Monthly limit       | Set by Mobilise per school (a default for all, changeable per school); the school sees its use          |
-| Label               | A small "Answered with Claude" line on answers Claude wrote                                             |
+| Question         | Answer                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| How              | Hybrid: the matcher first; Claude for questions it cannot place and for "did you mean" ties             |
+| Who pays         | One Mobilise API key in the server settings; each school's use is tracked (Assistant costs page)        |
+| What Claude sees | The masked question and the records an approved query finds, contacts masked (phone, e-mail, Aadhaar …) |
+| Who gets it      | Teachers and office / admin staff first; parents and students later, after the consent names Anthropic  |
+| Model            | Claude Haiku 5.5 (`claude-haiku-5-5`)                                                                   |
+| Monthly limit    | Set by Mobilise per school (a default for all, changeable per school); the school sees its use          |
+| Label            | A small "Answered with Claude" line on answers Claude wrote                                             |
 
 ## How an answer is made
 
@@ -63,3 +63,16 @@ place a question**, so most answers stay free, local and in the school.
   (contact columns and values masked). `AI_PROVIDER=hybrid` (needs the key) keeps the chat local; `claudeFromEnv`
   gives Claude with no thinking and low effort. Haiku 5.5's price (and cache reads and writes) for the cost
   estimate. Tests: `packages/ai/test/ai.test.ts` (24, with a fake API; decoy environment values ignored).
+- **B (21 Nov 2026).** Migration **0412**: `assistant_settings.claude` (per audience; off until the school switches
+  it on) and `claude_monthly_limit` (Mobilise's, NULL = `AI_CLAUDE_MONTHLY_QUESTIONS`, default 500). `AI_PROVIDER`
+  gains `hybrid` (needs `ANTHROPIC_API_KEY`). `AssistantService.askLocal`: a clear match is answered as before; a tie
+  or no match (not a "change something" question) goes to `claudeAnswer` when the school has Claude on for a
+  teacher or office audience and the month is not used up — the person's approved queries as tools with their
+  inputs in words (a class like VI, a section like VI-A, a student's name; EduPro finds the ids), each run in a
+  savepoint with the person's rights, rows capped at 50 with contacts masked, the last four turns of the conversation
+  (masked) for context, Claude's rules cached. The answer keeps the card, the screen and the follow-ups of the query
+  Claude ran, is marked `by: 'claude'`, and is audited with the provider, tokens and an estimated cost; refusals and
+  errors fall back to the matcher's reply. Saving Claude on for parents or students is refused until their consent
+  names Anthropic. Settings show `claudeInfo` (key set, model, audiences, the month's limit and use).
+  `scripts/ai/claude-limit.mjs <SCHOOL_CODE> [number|default]` for Mobilise. Tests:
+  `apps/api/test/chatbot-claude.e2e-spec.ts` against a fake Claude server (no real calls).

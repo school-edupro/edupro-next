@@ -62,12 +62,15 @@ const EnvSchema = z.object({
   CCAVENUE_BASE_URL: z.string().url().default('https://test.ccavenue.com'),
   /** Sprint 14: the assistant's model provider (packages/ai). mock is refused in production. */
   // local: no outside model — the chatbot's own matcher (docs/design/91); claude: the Claude API
-  AI_PROVIDER: z.enum(['local', 'mock', 'claude']).default('local'),
+  // docs/design/93: hybrid = EduPro's matcher first, Claude (API key) for the questions it cannot place
+  AI_PROVIDER: z.enum(['local', 'hybrid', 'mock', 'claude']).default('local'),
   AI_MODEL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().url().optional(),
   AI_USER_DAILY_TOKENS: z.coerce.number().int().min(1000).default(200_000),
   AI_SCHOOL_MONTHLY_TOKENS: z.coerce.number().int().min(10_000).default(20_000_000),
+  /** docs/design/93: Claude answers a school may have a month unless Mobilise set its own limit (0: none). */
+  AI_CLAUDE_MONTHLY_QUESTIONS: z.coerce.number().int().min(0).default(500),
   /** Shared secret for provider delivery receipts (S10): header x-webhook-token. */
   COMMS_WEBHOOK_TOKEN: z.string().min(8).default('dev-comms-webhook-token'),
   /** Public base URL of this API, used to build local-driver file URLs. */
@@ -139,11 +142,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   if (env.NODE_ENV === 'production' && env.AI_PROVIDER === 'mock') {
     throw new Error(
-      'Refusing to start: AI_PROVIDER must be local (no outside model) or claude (with ANTHROPIC_API_KEY) in production',
+      'Refusing to start: AI_PROVIDER must be local (no outside model), hybrid or claude (with ANTHROPIC_API_KEY) in production',
     );
   }
-  if (env.AI_PROVIDER === 'claude' && !env.ANTHROPIC_API_KEY) {
-    throw new Error('AI_PROVIDER=claude needs ANTHROPIC_API_KEY');
+  if ((env.AI_PROVIDER === 'claude' || env.AI_PROVIDER === 'hybrid') && !env.ANTHROPIC_API_KEY) {
+    throw new Error(`AI_PROVIDER=${env.AI_PROVIDER} needs ANTHROPIC_API_KEY`);
   }
   if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER === 'mock') {
     throw new Error('Refusing to start: PAYMENT_PROVIDER must name a real gateway in production');
