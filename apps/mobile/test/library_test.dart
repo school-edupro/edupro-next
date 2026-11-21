@@ -374,6 +374,15 @@ Future<FakeTransport> pumpLibrary(
 
 Call last(FakeTransport t, String path) => t.calls.lastWhere((c) => c.path == path);
 
+/// Opens one of the Library's tabs (they sit under the figures, as the Calendar's).
+Future<void> tab(WidgetTester tester, String name) async {
+  final f = find.byKey(Key('libTab-$name'));
+  await tester.ensureVisible(f);
+  await tester.pumpAndSettle();
+  await tester.tap(f);
+  await tester.pumpAndSettle();
+}
+
 Future<void> tall(WidgetTester tester, [double height = 3200]) async {
   await tester.binding.setSurfaceSize(Size(420, height));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -433,7 +442,9 @@ void main() {
       ),
       findsOneWidget,
     );
-    // the reservations: waiting with the place in line, kept until a day, the ended one folded
+    // the reservations tab: waiting with the place in line, kept until a day, the ended one folded
+    expect(find.text('Reservations (2)'), findsOneWidget);
+    await tab(tester, 'reservations');
     expect(find.text('Waiting · No. 2 in line'), findsOneWidget);
     expect(find.text('Ready to collect · Main library · until ${s.date(day(2))}'), findsOneWidget);
     expect(find.byKey(const Key('libCancel-r1')), findsOneWidget);
@@ -444,13 +455,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Not collected in time · ${s.date(day(-30))}'), findsOneWidget);
     expect(find.byKey(const Key('libCancel-r3')), findsNothing);
-    // the history folded until tapped
-    expect(find.text('Read before · 3 books'), findsOneWidget);
+    // the history tab, with six months of borrowing and the subjects read most
     expect(find.byKey(const Key('libHistSearch')), findsNothing);
-    // six months of borrowing and the subjects read most
+    await tab(tester, 'history');
+    expect(find.text('Read before · 3 books'), findsOneWidget);
+    expect(find.byKey(const Key('libHistSearch')), findsOneWidget);
     expect(find.byKey(const Key('libMonths')), findsOneWidget);
     expect(find.text('Read most: Fiction (9), Science (3)'), findsOneWidget);
-    // the digital library: a web link opens, a link of another kind does not
+    // the digital library tab: a web link opens, a link of another kind does not
+    await tab(tester, 'digital');
     expect(find.text('Read Along Stories'), findsOneWidget);
     expect(find.text('E. Teller · E-books'), findsOneWidget);
     expect(find.byKey(const Key('libOpen-d1')), findsOneWidget);
@@ -466,8 +479,7 @@ void main() {
       await tall(tester);
       final t = await pumpLibrary(tester, Lib());
       final calls = t.calls.where((c) => c.path == '$base/history').length;
-      await tester.tap(find.text('Read before · 3 books'));
-      await tester.pumpAndSettle();
+      await tab(tester, 'history');
       // the first page is the one the figures came with: no second call
       expect(t.calls.where((c) => c.path == '$base/history').length, calls);
       expect(find.text('3 books'), findsOneWidget);
@@ -564,8 +576,13 @@ void main() {
     expect(find.byKey(const Key('libHistSearch')), findsNothing);
     await tester.tap(find.byKey(const Key('libFigRead')));
     await tester.pumpAndSettle();
+    expect(tester.widget<ChoiceChip>(find.byKey(const Key('libTab-history'))).selected, isTrue);
+    await tester.dragUntilVisible(
+      find.byKey(const Key('libHistSearch')),
+      find.byType(ListView).first,
+      const Offset(0, -300),
+    );
     expect(find.byKey(const Key('libHistSearch')), findsOneWidget);
-    expect(tester.getRect(find.byKey(const Key('libHistory'))).top, lessThan(800));
   });
 
   testWidgets(
@@ -573,8 +590,7 @@ void main() {
     (tester) async {
       await tall(tester);
       final t = await pumpLibrary(tester, Lib());
-      await tester.tap(find.byKey(const Key('libFind')));
-      await tester.pumpAndSettle();
+      await tab(tester, 'find');
       expect(last(t, '/library/portal/catalogue').query, {'page': 1});
       expect(find.text('21 books'), findsOneWidget);
       // on the shelf, out with the day the first copy is due back, read in the library only
@@ -621,9 +637,8 @@ void main() {
       expect(last(t, '/library/portal/catalogue').query, {'q': 'river', 'page': 1});
       expect(find.text('1 book'), findsOneWidget);
       expect(find.text('The Blue River'), findsOneWidget);
-      // back on the library page the new reservation is there
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
+      // on the Reservations tab the new reservation is there
+      await tab(tester, 'reservations');
       expect(find.byKey(const Key('libRes-r9')), findsOneWidget);
     },
   );
@@ -632,6 +647,7 @@ void main() {
     await tall(tester);
     final t = await pumpLibrary(tester, Lib());
     bool cancelled() => t.calls.any((c) => c.method == 'POST' && c.path.endsWith('/cancel'));
+    await tab(tester, 'reservations');
     await tester.tap(find.byKey(const Key('libCancel-r1')));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
@@ -662,22 +678,22 @@ void main() {
     await tall(tester);
     final t = await pumpLibrary(tester, Lib(empty: true));
     expect(find.text('No books on loan.'), findsOneWidget);
+    expect(find.text('No fine due'), findsOneWidget);
+    expect(find.byKey(const Key('libReady')), findsNothing);
+    expect(find.byKey(const Key('libDues')), findsNothing);
+    await tab(tester, 'reservations');
     expect(
       find.text('None. When every copy of a book is out, reserve it under Find a book.'),
       findsOneWidget,
     );
-    expect(find.text('No fine due'), findsOneWidget);
-    expect(find.byKey(const Key('libReady')), findsNothing);
-    expect(find.byKey(const Key('libDues')), findsNothing);
-    expect(find.text('Digital library'), findsNothing);
+    await tab(tester, 'digital');
+    expect(find.text('The library has not shared any e-books or links yet.'), findsOneWidget);
+    await tab(tester, 'history');
     expect(find.textContaining('Read most'), findsNothing);
-    await tester.tap(find.text('Read before · 0 books'));
-    await tester.pumpAndSettle();
     expect(find.text('No books for these filters.'), findsOneWidget);
     expect(find.byKey(const Key('download-libHistXlsx')), findsNothing);
     expect(find.byKey(const Key('view-libHistPdf')), findsNothing);
-    await tester.tap(find.byKey(const Key('libFind')));
-    await tester.pumpAndSettle();
+    await tab(tester, 'find');
     expect(find.text('No book found.'), findsOneWidget);
     expect(t.calls.where((c) => c.method != 'GET'), isEmpty);
   });
@@ -718,16 +734,32 @@ void main() {
       await tester.tap(find.byKey(const Key('libFigRead')));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      await tester.dragUntilVisible(
+        find.byKey(const Key('libHistSearch')),
+        find.byType(ListView).first,
+        const Offset(0, -300),
+      );
       expect(find.byKey(const Key('libHistSearch')), findsOneWidget);
       for (var i = 0; i < 25; i++) {
         await tester.drag(list, const Offset(0, -500));
         await tester.pumpAndSettle();
       }
       expect(tester.takeException(), isNull);
-      await tester.scrollUntilVisible(find.byKey(const Key('libFind')), -300, scrollable: scroller);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('libTab-find')),
+        -300,
+        scrollable: find
+            .descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable))
+            .first,
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('libFind')));
+      await tester.tap(find.byKey(const Key('libTab-find')));
       await tester.pumpAndSettle();
+      await tester.dragUntilVisible(
+        find.byKey(const Key('libCatSearch')),
+        find.byType(ListView).first,
+        const Offset(0, -300),
+      );
       expect(find.byKey(const Key('libCatSearch')), findsOneWidget);
       final cat = find.byType(ListView).first;
       for (var i = 0; i < 12; i++) {
@@ -758,12 +790,15 @@ void main() {
       }
 
       await check('the library page');
-      await tester.tap(find.text(w.libHistoryFold(3)));
-      await tester.pumpAndSettle();
+      await tab(tester, 'reservations');
+      await check('the reservations');
+      await tab(tester, 'history');
+      expect(find.text(w.libHistoryFold(3)), findsOneWidget);
       expect(find.byKey(const Key('libHistSearch')), findsOneWidget);
-      await check('the history open');
-      await tester.tap(find.byKey(const Key('libFind')));
-      await tester.pumpAndSettle();
+      await check('the history');
+      await tab(tester, 'digital');
+      await check('the digital library');
+      await tab(tester, 'find');
       expect(find.byKey(const Key('libReserve-t9')), findsOneWidget);
       await check('Find a book');
       handle.dispose();

@@ -806,3 +806,8 @@ or someone else with name, relation and a 10-digit mobile). **A pass in full** (
 pass card PDF with its QR code (View / Download; the API's QR drawing is an SVG the app does not draw itself), how it
 is used (the one-time code), the details, Cancel, and the approval steps. Calls: `gate-passes/mine` (list, POST),
 `/options`, `/:id`, `/:id/card`, `/:id/cancel`.
+
+**Library as tabs (21 Nov 2026).** Under the child, the help line and the six figures, the Library's parts are tabs as
+the Calendar's: **Books on loan** (ready to collect, the books, the dues), **Reservations (n open)** (earlier ones
+folded), **Find a book** (the catalogue itself, under the same figures and tabs), **History** (the filters, the rows,
+Excel and PDF, the six months and the most read) and **Digital library**. "Read this session" opens History.

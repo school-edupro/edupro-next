@@ -158,6 +158,11 @@ extension LibraryWords on S {
       _lw('Books borrowed, last six months: $list', 'पिछले छह महीनों में ली गई किताबें: $list');
   String libReadMost(String list) => _lw('Read most: $list', 'सबसे ज़्यादा पढ़ी: $list');
   String get libDigital => _lw('Digital library', 'डिजिटल पुस्तकालय');
+  String get libHistoryTab => _lw('History', 'इतिहास');
+  String get libNoDigital => _lw(
+    'The library has not shared any e-books or links yet.',
+    'पुस्तकालय ने अभी कोई ई-पुस्तक या लिंक साझा नहीं किया है।',
+  );
   String libOpenLink(String title) => _lw('Open $title', '$title खोलें');
   String get libCannotOpen => _lw('The link could not be opened.', 'लिंक नहीं खुल सका।');
 }
@@ -272,6 +277,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   String? _message;
   String? _error;
 
+  /// the tab shown, as the Calendar's: books, reservations, find, history, digital
+  String _tab = 'books';
+
   // the history's filters
   DateTime? _from;
   DateTime? _to;
@@ -279,9 +287,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   String _q = '';
   int _page = 1;
   final _search = TextEditingController();
-  final _historyFold = ExpansibleController();
-  final _figuresKey = GlobalKey();
-  final _historyKey = GlobalKey();
 
   Profile get _p => widget.profile;
   bool get _self => _p.kind == 'student';
@@ -296,7 +301,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   void dispose() {
     _search.dispose();
-    _historyFold.dispose();
     super.dispose();
   }
 
@@ -372,27 +376,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     _page = 1;
   });
 
-  /// "Read this session": the history opened and brought into view (built first if it is further down the list).
-  Future<void> _openHistory() async {
-    _historyFold.expand();
-    final at = _figuresKey.currentContext;
-    final pos = at == null ? null : Scrollable.maybeOf(at)?.position;
-    for (
-      var i = 0;
-      i < 40 &&
-          pos != null &&
-          _historyKey.currentContext == null &&
-          pos.pixels < pos.maxScrollExtent;
-      i++
-    ) {
-      pos.jumpTo(math.min(pos.pixels + pos.viewportDimension / 2, pos.maxScrollExtent));
-      await WidgetsBinding.instance.endOfFrame;
-    }
-    final fold = _historyKey.currentContext;
-    if (fold != null && fold.mounted) {
-      await Scrollable.ensureVisible(fold, duration: const Duration(milliseconds: 250));
-    }
-  }
+  /// "Read this session": the History tab.
+  void _openHistory() => setState(() => _tab = 'history');
 
   Future<void> _openLink(Uri u) async {
     final s = ref.read(stringsProvider);
@@ -419,13 +404,76 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         format: format,
       );
 
+  /// The child, the help line, a message, and the six figures: above every tab.
+  List<Widget> _head(S s, Color muted, Json? d) {
+    final borrower = asJson(asJson(d?['mine'])['borrower']);
+    final st = asJson(asJson(d?['history'])['stats']);
+    return [
+      Text(
+        _join([borrower['name'] ?? _p.name, borrower['place']]),
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+      ),
+      Text(s.libHelp, style: TextStyle(color: muted, fontSize: 14)),
+      const SizedBox(height: Tokens.sp3),
+      if (_message != null) ...[Notice(text: _message!), const SizedBox(height: Tokens.sp3)],
+      if (_error != null) ...[ErrorText(_error!), const SizedBox(height: Tokens.sp3)],
+      if (d != null) ..._figures(s, muted, st),
+      const SizedBox(height: Tokens.sp3),
+    ];
+  }
+
+  /// The Library's parts as tabs, as the Calendar's: books on loan, reservations, find a book, history, digital.
+  Widget _tabs(S s, Json? d) {
+    final open = asList(asJson(d?['mine'])['reservations'])
+        .where((r) => r['status'] == 'waiting' || r['status'] == 'ready')
+        .length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Tokens.sp3),
+      child: Semantics(
+        label: s.libScreenTitle,
+        container: true,
+        explicitChildNodes: true,
+        child: Wrap(
+          spacing: Tokens.sp2,
+          runSpacing: Tokens.sp2,
+          children: [
+            for (final (v, label) in [
+              ('books', s.libBooksNow),
+              ('reservations', open > 0 ? '${s.libReservations} ($open)' : s.libReservations),
+              ('find', s.libFindBook),
+              ('history', s.libHistoryTab),
+              ('digital', s.libDigital),
+            ])
+              ChoiceChip(
+                key: Key('libTab-$v'),
+                label: Text(label),
+                selected: _tab == v,
+                showCheckmark: false,
+                onSelected: (_) => setState(() => _tab = v),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
+    // Find a book is the catalogue itself, under the same figures and tabs
+    if (_tab == 'find') {
+      final d = ref.watch(libraryProvider(_p)).value?.data;
+      return LibraryCatalogueScreen(
+        key: const ValueKey('lib-find'),
+        profile: _p,
+        header: [..._head(s, muted, d), _tabs(s, d)],
+      );
+    }
     final history = _plain ? null : ref.watch(libraryHistoryProvider(_key));
     return LoadedList<Json?>(
+      key: ValueKey('lib-$_tab'),
       value: ref.watch(libraryProvider(_p)),
       refresh: () {
         if (!_plain) ref.invalidate(libraryHistoryProvider(_key));
@@ -435,7 +483,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         if (d == null) return [EmptyLine(s.libNotLinked)];
         final mine = asJson(d['mine']);
         final first = asJson(d['history']);
-        final borrower = asJson(mine['borrower']);
         final now = asList(mine['now']);
         final res = asList(mine['reservations']);
         final open = res.where((r) => r['status'] == 'waiting' || r['status'] == 'ready').toList();
@@ -449,110 +496,90 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         final months = asList(st['months']);
         final subjects = asList(st['subjects']);
         return [
-          Text(
-            _join([borrower['name'] ?? _p.name, borrower['place']]),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
-          ),
-          Text(s.libHelp, style: TextStyle(color: muted, fontSize: 14)),
-          const SizedBox(height: Tokens.sp3),
-          if (_message != null) ...[Notice(text: _message!), const SizedBox(height: Tokens.sp3)],
-          if (_error != null) ...[ErrorText(_error!), const SizedBox(height: Tokens.sp3)],
-          ..._figures(s, muted, st),
-          if (ready.isNotEmpty) ...[
-            const SizedBox(height: Tokens.sp3),
-            _Band(
-              key: const Key('libReady'),
-              icon: Icons.notifications_active_outlined,
-              text:
-                  '${s.libReadyToCollect}: ${ready.map((r) => '${r['title']}${_str(r['library']) != null ? ' (${r['library']})' : ''}, ${s.libKeptUntil(_day(s, r['readyUntil']))}').join('; ')}',
-            ),
-          ],
-          SectionTitle(s.libBooksNow),
-          if (now.isEmpty) EmptyLine(s.libNoBooks),
-          for (final b in now) _bookCard(s, muted, b),
-          if (atCounter > 0 || atLibrary > 0) ...[
-            const SizedBox(height: Tokens.sp2),
-            _Band(
-              key: const Key('libDues'),
-              icon: Icons.account_balance_wallet_outlined,
-              text: [
-                if (atCounter > 0) s.libDuesCounter(s.money(atCounter)),
-                if (atLibrary > 0) s.libDuesLibrary(s.money(atLibrary)),
-              ].join(' '),
-            ),
-          ],
-          SectionTitle(s.libReservations),
-          if (res.isEmpty)
-            EmptyLine(s.libNoReservations)
-          else if (open.isEmpty)
-            EmptyLine(s.libNoOpenReservations),
-          for (final r in open) Card(child: _reservation(s, muted, r)),
-          if (ended.isNotEmpty)
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: ExpansionTile(
-                key: const Key('libEarlierReservations'),
-                leading: const Icon(Icons.history_outlined),
-                title: Text(
-                  s.libEarlierReservations(ended.length),
-                  style: const TextStyle(fontWeight: Tokens.fwSemibold),
-                ),
-                shape: const Border(),
-                collapsedShape: const Border(),
-                expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [for (final r in ended) _reservation(s, muted, r)],
-              ),
-            ),
-          SectionTitle(s.libFindBook),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(Tokens.sp4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(s.libFindHelp, style: TextStyle(color: muted, fontSize: 14)),
-                  const SizedBox(height: Tokens.sp3),
-                  FilledButton.icon(
-                    key: const Key('libFind'),
-                    icon: const Icon(Icons.search),
-                    label: Text(s.libFindBook),
-                    onPressed: () =>
-                        pushPage(context, s.libFindBook, LibraryCatalogueScreen(profile: _p)),
+          ..._head(s, muted, d),
+          _tabs(s, d),
+          ...switch (_tab) {
+            'reservations' => [
+              if (res.isEmpty)
+                EmptyLine(s.libNoReservations)
+              else if (open.isEmpty)
+                EmptyLine(s.libNoOpenReservations),
+              for (final r in open) Card(child: _reservation(s, muted, r)),
+              if (ended.isNotEmpty)
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: ExpansionTile(
+                    key: const Key('libEarlierReservations'),
+                    leading: const Icon(Icons.history_outlined),
+                    title: Text(
+                      s.libEarlierReservations(ended.length),
+                      style: const TextStyle(fontWeight: Tokens.fwSemibold),
+                    ),
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [for (final r in ended) _reservation(s, muted, r)],
                   ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: Tokens.sp4),
-          _historyCard(s, muted, first, history),
-          if (months.isNotEmpty) ...[
-            SectionTitle(s.libSixMonths),
-            Card(
-              key: const Key('libMonths'),
-              child: Padding(
-                padding: const EdgeInsets.all(Tokens.sp4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _MonthBars(months: months, s: s),
-                    if (subjects.isNotEmpty) ...[
-                      const SizedBox(height: Tokens.sp3),
-                      Text(
-                        s.libReadMost(
-                          subjects.map((x) => '${x['subject']} (${_int(x['loans'])})').join(', '),
-                        ),
-                        style: TextStyle(color: muted, fontSize: 14),
-                      ),
-                    ],
-                  ],
                 ),
-              ),
-            ),
-          ],
-          if (digital.isNotEmpty) ...[
-            SectionTitle(s.libDigital),
-            for (final x in digital) _digitalRow(s, muted, x),
-          ],
+            ],
+            'history' => [
+              _historyCard(s, muted, first, history),
+              if (months.isNotEmpty) ...[
+                SectionTitle(s.libSixMonths),
+                Card(
+                  key: const Key('libMonths'),
+                  child: Padding(
+                    padding: const EdgeInsets.all(Tokens.sp4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _MonthBars(months: months, s: s),
+                        if (subjects.isNotEmpty) ...[
+                          const SizedBox(height: Tokens.sp3),
+                          Text(
+                            s.libReadMost(
+                              subjects
+                                  .map((x) => '${x['subject']} (${_int(x['loans'])})')
+                                  .join(', '),
+                            ),
+                            style: TextStyle(color: muted, fontSize: 14),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+            'digital' => [
+              if (digital.isEmpty) EmptyLine(s.libNoDigital),
+              for (final x in digital) _digitalRow(s, muted, x),
+            ],
+            _ => [
+              if (ready.isNotEmpty) ...[
+                _Band(
+                  key: const Key('libReady'),
+                  icon: Icons.notifications_active_outlined,
+                  text:
+                      '${s.libReadyToCollect}: ${ready.map((r) => '${r['title']}${_str(r['library']) != null ? ' (${r['library']})' : ''}, ${s.libKeptUntil(_day(s, r['readyUntil']))}').join('; ')}',
+                ),
+                const SizedBox(height: Tokens.sp3),
+              ],
+              if (now.isEmpty) EmptyLine(s.libNoBooks),
+              for (final b in now) _bookCard(s, muted, b),
+              if (atCounter > 0 || atLibrary > 0) ...[
+                const SizedBox(height: Tokens.sp2),
+                _Band(
+                  key: const Key('libDues'),
+                  icon: Icons.account_balance_wallet_outlined,
+                  text: [
+                    if (atCounter > 0) s.libDuesCounter(s.money(atCounter)),
+                    if (atLibrary > 0) s.libDuesLibrary(s.money(atLibrary)),
+                  ].join(' '),
+                ),
+              ],
+            ],
+          },
         ];
       },
     );
@@ -567,39 +594,36 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final fines = _num(st['finesSession']);
     final finesDue = math.max<num>(0, fines - _num(st['finesPaid']) - _num(st['finesWaived']));
     return [
-      KeyedSubtree(
-        key: _figuresKey,
-        child: FigureGrid(
-          key: const Key('libFigures'),
-          tiles: [
-            FigureTile(label: s.libOutNow, value: '$holding', icon: Icons.menu_book_outlined),
-            FigureTile(
-              label: s.libOverdue,
-              value: '$overdue',
-              icon: Icons.alarm,
-              tone: (overdue > 0 ? Tokens.statusDanger : null),
-            ),
-            FigureTile(
-              key: const Key('libFigRead'),
-              label: s.libReadSession,
-              value: '${_int(st['readSession'])}',
-              icon: Icons.auto_stories_outlined,
-              onTap: _openHistory,
-            ),
-            FigureTile(
-              label: s.libReadMonth,
-              value: '${_int(st['readMonth'])}',
-              icon: Icons.calendar_month_outlined,
-            ),
-            FigureTile(label: s.libOnTime, value: '$onTime/${onTime + late}', icon: Icons.task_alt),
-            FigureTile(
-              label: s.libLateFines,
-              value: s.money(fines),
-              icon: Icons.currency_rupee,
-              tone: (finesDue > 0 ? Tokens.statusWarning : null),
-            ),
-          ],
-        ),
+      FigureGrid(
+        key: const Key('libFigures'),
+        tiles: [
+          FigureTile(label: s.libOutNow, value: '$holding', icon: Icons.menu_book_outlined),
+          FigureTile(
+            label: s.libOverdue,
+            value: '$overdue',
+            icon: Icons.alarm,
+            tone: (overdue > 0 ? Tokens.statusDanger : null),
+          ),
+          FigureTile(
+            key: const Key('libFigRead'),
+            label: s.libReadSession,
+            value: '${_int(st['readSession'])}',
+            icon: Icons.auto_stories_outlined,
+            onTap: _openHistory,
+          ),
+          FigureTile(
+            label: s.libReadMonth,
+            value: '${_int(st['readMonth'])}',
+            icon: Icons.calendar_month_outlined,
+          ),
+          FigureTile(label: s.libOnTime, value: '$onTime/${onTime + late}', icon: Icons.task_alt),
+          FigureTile(
+            label: s.libLateFines,
+            value: s.money(fines),
+            icon: Icons.currency_rupee,
+            tone: (finesDue > 0 ? Tokens.statusWarning : null),
+          ),
+        ],
       ),
       const SizedBox(height: Tokens.sp2),
       Text(
@@ -781,112 +805,108 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
 
     return Card(
-      key: _historyKey,
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        key: const Key('libHistory'),
-        controller: _historyFold,
-        leading: const Icon(Icons.history_outlined),
-        title: Text(
-          s.libHistoryFold(_int(first['total'])),
-          style: const TextStyle(fontWeight: Tokens.fwSemibold),
-        ),
-        subtitle: Text(s.libHistoryHint, style: TextStyle(color: muted, fontSize: 13)),
-        shape: const Border(),
-        collapsedShape: const Border(),
-        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-        childrenPadding: const EdgeInsets.fromLTRB(Tokens.sp4, 0, Tokens.sp4, Tokens.sp4),
-        children: [
-          Wrap(
-            spacing: Tokens.sp2,
-            runSpacing: Tokens.sp2,
-            children: [
-              OutlinedButton.icon(
-                key: const Key('libHistFrom'),
-                icon: const Icon(Icons.event),
-                label: Text('${s.libTakenFrom}: ${_from == null ? '—' : s.date(_from!)}'),
-                onPressed: () => _pickDate(true),
-              ),
-              OutlinedButton.icon(
-                key: const Key('libHistTo'),
-                icon: const Icon(Icons.event),
-                label: Text('${s.givenTo}: ${_to == null ? '—' : s.date(_to!)}'),
-                onPressed: () => _pickDate(false),
-              ),
-            ],
-          ),
-          const SizedBox(height: Tokens.sp3),
-          DropdownMenu<String>(
-            key: const Key('libHistStatus'),
-            label: Text(s.libShow),
-            initialSelection: _status,
-            trailingIcon: dropArrow(s.libShow),
-            selectedTrailingIcon: dropArrow(s.libShow, open: true),
-            expandedInsets: EdgeInsets.zero,
-            enableFilter: true,
-            enableSearch: true,
-            requestFocusOnTap: true,
-            onSelected: (v) => setState(() {
-              _status = v ?? 'all';
-              _page = 1;
-            }),
-            dropdownMenuEntries: [
-              for (final v in _statuses) DropdownMenuEntry(value: v, label: s.libStatus(v)),
-            ],
-          ),
-          const SizedBox(height: Tokens.sp3),
-          TextField(
-            key: const Key('libHistSearch'),
-            controller: _search,
-            maxLength: 80,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              labelText: s.libBookOrAuthor,
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: IconButton(
-                key: const Key('libHistGo'),
-                tooltip: s.libSearch,
-                icon: const Icon(Icons.arrow_forward),
-                onPressed: () => _apply(_search.text),
-              ),
-              border: const OutlineInputBorder(),
-              counterText: '',
+      key: const Key('libHistory'),
+      child: Padding(
+        padding: const EdgeInsets.all(Tokens.sp4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              s.libHistoryFold(_int(first['total'])),
+              style: const TextStyle(fontWeight: Tokens.fwSemibold),
             ),
-            onSubmitted: _apply,
-          ),
-          if (_filtered)
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: TextButton(
-                key: const Key('libHistClear'),
-                onPressed: _clear,
-                child: Text(s.clearDates),
-              ),
+            const SizedBox(height: Tokens.sp3),
+            Wrap(
+              spacing: Tokens.sp2,
+              runSpacing: Tokens.sp2,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('libHistFrom'),
+                  icon: const Icon(Icons.event),
+                  label: Text('${s.libTakenFrom}: ${_from == null ? '—' : s.date(_from!)}'),
+                  onPressed: () => _pickDate(true),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('libHistTo'),
+                  icon: const Icon(Icons.event),
+                  label: Text('${s.givenTo}: ${_to == null ? '—' : s.date(_to!)}'),
+                  onPressed: () => _pickDate(false),
+                ),
+              ],
             ),
-          const SizedBox(height: Tokens.sp2),
-          ...switch (other) {
-            null => rows(first),
-            AsyncValue(:final value?) => rows(value.data),
-            AsyncValue(:final error?) => [
-              ErrorText(errorText(s, error)),
+            const SizedBox(height: Tokens.sp3),
+            DropdownMenu<String>(
+              key: const Key('libHistStatus'),
+              label: Text(s.libShow),
+              initialSelection: _status,
+              trailingIcon: dropArrow(s.libShow),
+              selectedTrailingIcon: dropArrow(s.libShow, open: true),
+              expandedInsets: EdgeInsets.zero,
+              enableFilter: true,
+              enableSearch: true,
+              requestFocusOnTap: true,
+              onSelected: (v) => setState(() {
+                _status = v ?? 'all';
+                _page = 1;
+              }),
+              dropdownMenuEntries: [
+                for (final v in _statuses) DropdownMenuEntry(value: v, label: s.libStatus(v)),
+              ],
+            ),
+            const SizedBox(height: Tokens.sp3),
+            TextField(
+              key: const Key('libHistSearch'),
+              controller: _search,
+              maxLength: 80,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                labelText: s.libBookOrAuthor,
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                  key: const Key('libHistGo'),
+                  tooltip: s.libSearch,
+                  icon: const Icon(Icons.arrow_forward),
+                  onPressed: () => _apply(_search.text),
+                ),
+                border: const OutlineInputBorder(),
+                counterText: '',
+              ),
+              onSubmitted: _apply,
+            ),
+            if (_filtered)
               Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: OutlinedButton(
-                  onPressed: () => ref.invalidate(libraryHistoryProvider(_key)),
-                  child: Text(s.retry),
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  key: const Key('libHistClear'),
+                  onPressed: _clear,
+                  child: Text(s.clearDates),
                 ),
               ),
-            ],
-            _ => [
-              Padding(
-                padding: const EdgeInsets.all(Tokens.sp4),
-                child: Center(
-                  child: Semantics(label: s.loading, child: const CircularProgressIndicator()),
+            const SizedBox(height: Tokens.sp2),
+            ...switch (other) {
+              null => rows(first),
+              AsyncValue(:final value?) => rows(value.data),
+              AsyncValue(:final error?) => [
+                ErrorText(errorText(s, error)),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: OutlinedButton(
+                    onPressed: () => ref.invalidate(libraryHistoryProvider(_key)),
+                    child: Text(s.retry),
+                  ),
                 ),
-              ),
-            ],
-          },
-        ],
+              ],
+              _ => [
+                Padding(
+                  padding: const EdgeInsets.all(Tokens.sp4),
+                  child: Center(
+                    child: Semantics(label: s.loading, child: const CircularProgressIndicator()),
+                  ),
+                ),
+              ],
+            },
+          ],
+        ),
       ),
     );
   }
@@ -1076,8 +1096,11 @@ class _MonthBars extends StatelessWidget {
 /// each book on the shelf (and where) or out (and when the first copy is due back, never who has it), and Reserve
 /// when every copy is out — not for a book the child has or has reserved already.
 class LibraryCatalogueScreen extends ConsumerStatefulWidget {
-  const LibraryCatalogueScreen({super.key, required this.profile});
+  const LibraryCatalogueScreen({super.key, required this.profile, this.header = const []});
   final Profile profile;
+
+  /// shown first: the Library's figures and tabs when Find a book is one of its tabs
+  final List<Widget> header;
 
   @override
   ConsumerState<LibraryCatalogueScreen> createState() => _LibraryCatalogueScreenState();
@@ -1155,6 +1178,7 @@ class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen>
         final page = math.max(1, _int(c['page']));
         final pages = math.max(1, _int(c['pages']));
         return [
+          ...widget.header,
           Text(s.libFindHelp, style: TextStyle(color: muted, fontSize: 14)),
           const SizedBox(height: Tokens.sp3),
           if (_message != null) ...[Notice(text: _message!), const SizedBox(height: Tokens.sp3)],
