@@ -839,3 +839,18 @@ are free, a free time, the purpose and the school's instructions (`appointments/
 (`AppointmentDetail`): the status, once confirmed the gate pass card PDF (View / Download; the QR and barcode are SVG
 drawings the app does not draw), the details, Cancel, and the history folded. Times are shown in India time whatever
 the phone's zone, as on the website.
+
+## As built — Consent forms as on the website (21 Nov 2026)
+
+**Consent forms in the app, with no web page** (`family/consents.dart`, menu `/consents`, parents only): four figures
+(To answer, Waiting for the school, Fee to pay, Answered); To answer / Answered / Closed with their counts; a card per
+form (closes today / tomorrow / on a day, red within two days; has a fee; the school approves; the school's text
+folded) with each answer's number and status, the school's note, the fee (to pay, paid, after approval), **Pay**
+(the school's gateways for misc fees, as Fees' other fees; or "Pay at the school office"), **Change** while allowed,
+and the PDF copy (View / Download); Answer now / again with how long it can be changed. **Answering**
+(`ConsentFillScreen`, a port of the website's ConsentFill): the school's questions in steps (a page break starts the
+next) — text, long text, number, e-mail, phone, date, time, radio, select (type to search), checkbox, yes/no, files
+(PDF or photos), a signature drawn with a finger (sent as a PNG data URL), agree, headings —, the show / hide /
+require rules, the required check per step, the fee worked out as answered, the signer's name; changing an answer
+keeps an earlier signature or file unless replaced. Calls: `engagement/mine/consent-forms` (list, `/:id`,
+`/:id/responses`, `responses/:rid` PUT, `responses/:rid/pdf`), `payments/mine/misc`.

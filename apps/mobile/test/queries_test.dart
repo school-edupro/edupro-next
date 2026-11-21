@@ -124,6 +124,8 @@ Future<FakeTransport> pump(
   final t = FakeTransport((desk ?? Desk()).answer);
   await tester.pumpWidget(
     ProviderScope(
+      // a fresh container each time (a second pump in one test would keep the old one)
+      key: UniqueKey(),
       overrides: [
         transportProvider.overrideWithValue(t),
         leaveFilePickerProvider.overrideWithValue(

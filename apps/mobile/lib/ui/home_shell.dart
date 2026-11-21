@@ -15,6 +15,7 @@ import '../family/library.dart';
 import '../family/transport.dart';
 import '../family/health.dart';
 import '../family/certificates.dart';
+import '../family/consents.dart';
 import '../family/academics.dart';
 import '../family/appointments.dart';
 import '../family/fees.dart';
@@ -117,6 +118,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/queries' => QueriesScreen(profile: p),
     // meeting the school: book with whom, the day and the time, follow, the gate pass card: no web page
     '/appointments' => AppointmentsScreen(profile: p),
+    // consent forms: answer (the school's questions, a signature, files, the fee), change, pay, the PDF copy
+    '/consents' => ConsentsScreen(profile: p),
     '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };

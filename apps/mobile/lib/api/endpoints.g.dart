@@ -679,6 +679,26 @@ class EduProApi {
   /// POST /engagement/change-requests
   Future<dynamic> engagementCreateChange({required CreateChangeRequestDto body}) =>
       _t.send('POST', '/engagement/change-requests', body: body.toJson());
+
+  /// GET /engagement/mine/consent-forms — The forms for my children and for me (staff)
+  Future<dynamic> consentFormsMine() =>
+      _t.send('GET', '/engagement/mine/consent-forms');
+
+  /// GET /engagement/mine/consent-forms/{id}
+  Future<dynamic> consentFormsMineForm({required String id, String? studentId, String? responseId}) =>
+      _t.send('GET', '/engagement/mine/consent-forms/${Uri.encodeComponent(id)}', query: {if (studentId != null) 'studentId': studentId, if (responseId != null) 'responseId': responseId});
+
+  /// POST /engagement/mine/consent-forms/{id}/responses — Answer a form for a child (family) or for myself (staff)
+  Future<dynamic> consentFormsRespond({required ConsentRespondDto body, required String id}) =>
+      _t.send('POST', '/engagement/mine/consent-forms/${Uri.encodeComponent(id)}/responses', body: body.toJson());
+
+  /// PUT /engagement/mine/consent-forms/responses/{rid} — Change my answer until the form’s edit date, while not yet decided
+  Future<dynamic> consentFormsEdit({required ConsentEditDto body, required String rid}) =>
+      _t.send('PUT', '/engagement/mine/consent-forms/responses/${Uri.encodeComponent(rid)}', body: body.toJson());
+
+  /// GET /engagement/mine/consent-forms/responses/{rid}/pdf
+  Future<ApiFile> consentFormsMinePdf({required String rid}) =>
+      _t.file('GET', '/engagement/mine/consent-forms/responses/${Uri.encodeComponent(rid)}/pdf');
 }
 
 /** The OtpStartDto the API takes. */
@@ -1415,5 +1435,31 @@ class CreateChangeRequestDto {
         if (entityId != null) 'entityId': entityId,
         'changes': changes,
         if (reason != null) 'reason': reason,
+      };
+}
+
+/** The ConsentRespondDto the API takes. */
+class ConsentRespondDto {
+  const ConsentRespondDto({this.studentId, this.employeeId, required this.answers, this.signedName});
+  final String? studentId;
+  final String? employeeId;
+  final Object? answers;
+  final String? signedName;
+  Map<String, Object?> toJson() => {
+        if (studentId != null) 'studentId': studentId,
+        if (employeeId != null) 'employeeId': employeeId,
+        'answers': answers,
+        if (signedName != null) 'signedName': signedName,
+      };
+}
+
+/** The ConsentEditDto the API takes. */
+class ConsentEditDto {
+  const ConsentEditDto({required this.answers, this.signedName});
+  final Object? answers;
+  final String? signedName;
+  Map<String, Object?> toJson() => {
+        'answers': answers,
+        if (signedName != null) 'signedName': signedName,
       };
 }

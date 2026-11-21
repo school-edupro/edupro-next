@@ -151,6 +151,8 @@ Future<FakeTransport> pump(
   final t = FakeTransport((school ?? School()).answer);
   await tester.pumpWidget(
     ProviderScope(
+      // a fresh container each time (a second pump in one test would keep the old one)
+      key: UniqueKey(),
       overrides: [transportProvider.overrideWithValue(t)],
       child: MaterialApp(
         theme: eduproTheme(brightness: Brightness.light, webFonts: false),
