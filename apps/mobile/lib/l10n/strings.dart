@@ -1831,6 +1831,121 @@ class S {
     'शीट में वर्ग के हर विद्यार्थी की टिप्पणी, जिसमें भाग लिया, अगली कक्षा और परीक्षा उपस्थिति (और लंबाई-वज़न, यदि आप देखते हैं) भरे हुए मानों सहित है। रखने के लिए सेल खाली छोड़ें; केवल जो बदलें वही सहेजा जाता है।',
   );
 
+  // ---- the registers for staff, as the admin's (docs/design/97) ----
+  String get rgFill => _t('Fill the register', 'रजिस्टर भरें');
+  String get rgRegisters => _t('Registers', 'रजिस्टर');
+  String rgKind(String k) => switch (k) {
+    'mark' => _t('Mark Register', 'अंक रजिस्टर'),
+    'grade' => _t('Grade Register', 'ग्रेड रजिस्टर'),
+    'remark' => _t('Remark Register', 'टिप्पणी रजिस्टर'),
+    'attendance' => _t('Attendance Register', 'उपस्थिति रजिस्टर'),
+    _ => _t('Height & Weight Register', 'लंबाई और वज़न रजिस्टर'),
+  };
+  String get rgNoMark =>
+      _t('No mark register of your classes yet.', 'आपकी कक्षाओं का अभी कोई अंक रजिस्टर नहीं।');
+  String get rgNoGrade =>
+      _t('No grade register of your classes yet.', 'आपकी कक्षाओं का अभी कोई ग्रेड रजिस्टर नहीं।');
+  String get rgListHelp => _t(
+    'The registers of the classes you teach: run one for your sections. The office builds and changes them.',
+    'आपकी कक्षाओं के रजिस्टर: अपने वर्गों के लिए चलाएँ। इन्हें कार्यालय बनाता और बदलता है।',
+  );
+  String get rgDraft => _t('Draft', 'प्रारूप');
+  String get rgResult => _t('Result', 'परिणाम');
+  String rgSubjectsN(int n) => _t('$n subjects', '$n विषय');
+  String get rgRun => _t('Run', 'चलाएँ');
+  String rgVersion(int v, bool draft) =>
+      _t('Version $v${draft ? ' (draft)' : ''}', 'संस्करण $v${draft ? ' (प्रारूप)' : ''}');
+  String get rgClass => _t('Class', 'कक्षा');
+  String get rgAllSections => _t('All sections', 'सभी वर्ग');
+  String get rgAllExams => _t('All exams', 'सभी परीक्षाएँ');
+  String get rgSubject => _t('Subject', 'विषय');
+  String get rgAllSubjects => _t('All subjects', 'सभी विषय');
+  String get rgReport => _t('Report', 'रिपोर्ट');
+  String get rgRegister => _t('Register', 'रजिस्टर');
+  String get rgMeritOrder => _t('Merit order', 'मेरिट क्रम');
+  String get rgRank => _t('Rank (1, 2, 3 …)', 'रैंक (1, 2, 3 …)');
+  String get rgDivision => _t('Division-wise', 'श्रेणीवार');
+  String get rgTop => _t('Top', 'शीर्ष');
+  String get rgPctFrom => _t('% from', '% से');
+  String get rgPctTo => _t('% to', '% तक');
+  String get rgOrder => _t('Order', 'क्रम');
+  String get rgHighest => _t('Highest first', 'सबसे ऊँचा पहले');
+  String get rgLowest => _t('Lowest first', 'सबसे नीचा पहले');
+  String get rgFailFrom => _t('Failed in from', 'अनुत्तीर्ण विषय से');
+  String get rgFailTo => _t('Failed in to', 'अनुत्तीर्ण विषय तक');
+  String get rgFinalFrom => _t('Final % from', 'अंतिम % से');
+  String get rgFinalTo => _t('Final % to', 'अंतिम % तक');
+  String get rgMargin => _t('Borderline margin', 'सीमा-रेखा अंतर');
+  String rgMarginN(int n) => _t('Pass % + $n', 'उत्तीर्ण % + $n');
+  String get rgShow => _t('Show', 'दिखाएँ');
+  String get rgNothing => _t('Nothing to show.', 'दिखाने को कुछ नहीं।');
+  String get rgNoStudents => _t(
+    'No students here, or nobody takes these subjects.',
+    'यहाँ कोई विद्यार्थी नहीं, या ये विषय कोई नहीं लेता।',
+  );
+  String get rgAllPdf => _t('All sections · PDF', 'सभी वर्ग · PDF');
+  String get rgAllExcel => _t('All sections · Excel', 'सभी वर्ग · Excel');
+  String get rgWorkedOut => _t('worked out', 'गणना');
+  String get rgFinal => _t('final', 'अंतिम');
+  String rgResultWord(String k) => switch (k) {
+    'pass' => _t('Pass', 'उत्तीर्ण'),
+    'compartment' => _t('Compartment', 'पूरक'),
+    'fail' => _t('Fail', 'अनुत्तीर्ण'),
+    'absent' => _t('Absent', 'अनुपस्थित'),
+    'incomplete' => _t('Incomplete', 'अधूरा'),
+    _ => k,
+  };
+  String get rgLayout => _t('Layout', 'रूप');
+  String get rgClassSheet => _t('Class sheet', 'कक्षा शीट');
+  String get rgStudentWise => _t('Student-wise', 'विद्यार्थीवार');
+  String rgGradeReport(String k) => switch (k) {
+    'summary' => _t('Grade summary', 'ग्रेड सारांश'),
+    'analysis' => _t('Analysis (this section)', 'विश्लेषण (यह वर्ग)'),
+    'analysis-all' => _t('Analysis (all sections)', 'विश्लेषण (सभी वर्ग)'),
+    _ => _t('Grade sheet', 'ग्रेड शीट'),
+  };
+  String get rgFilter => _t('Filter', 'फ़िल्टर');
+  String get rgAreas => _t('Areas (none ticked: every area)', 'क्षेत्र (कोई नहीं चुना: सभी)');
+  String get rgItems => _t('Indicators (none ticked: every one)', 'संकेतक (कोई नहीं चुना: सभी)');
+  String get rgClearFilter => _t('Clear the filter', 'फ़िल्टर हटाएँ');
+  String get rgExams => _t('Exams', 'परीक्षाएँ');
+  String get rgCutoff => _t('Cut-off %', 'न्यूनतम %');
+  String get rgBmi => _t('BMI', 'BMI');
+  String get rgHide => _t('Hide', 'छिपाएँ');
+  String get rgNoClass => _t(
+    'No class is open to you: the registers show the sections you teach this year (class teacher, subject teacher or coordinator).',
+    'आपके लिए कोई कक्षा खुली नहीं: रजिस्टर इस वर्ष आपके पढ़ाए वर्ग दिखाते हैं (कक्षा-अध्यापक, विषय-शिक्षक या समन्वयक)।',
+  );
+  String rgNoData(String type) => switch (type) {
+    'remark' => _t(
+      'No exam has remarks for this class yet.',
+      'इस कक्षा की किसी परीक्षा में अभी टिप्पणी नहीं।',
+    ),
+    'attendance' => _t(
+      'No exam has attendance for this class yet.',
+      'इस कक्षा की किसी परीक्षा में अभी उपस्थिति नहीं।',
+    ),
+    _ => _t(
+      'No exam has heights or weights for this class yet.',
+      'इस कक्षा की किसी परीक्षा में अभी लंबाई-वज़न नहीं।',
+    ),
+  };
+  String rgAbout(String type) => switch (type) {
+    'remark' => _t(
+      'The remarks written in the exams picked: the general remark, each remark category used and participation, a column each, with "Promoted to" when given.',
+      'चुनी परीक्षाओं की टिप्पणियाँ: सामान्य टिप्पणी, हर टिप्पणी-श्रेणी और भागीदारी, हर एक का कॉलम, और "अगली कक्षा" जब दी गई हो।',
+    ),
+    'attendance' => _t(
+      "Each exam's days present, days and %; with two or more exams the overall %. Students below the cut-off are marked and listed under the summary.",
+      'हर परीक्षा के उपस्थित दिन, कुल दिन और %; दो या अधिक परीक्षाओं में कुल %। न्यूनतम से कम वाले चिह्नित होकर सारांश के नीचे सूचीबद्ध।',
+    ),
+    _ => _t(
+      "Each exam's height, weight and BMI; with two or more exams the change from the first to the last; the class averages under the sheet.",
+      'हर परीक्षा की लंबाई, वज़न और BMI; दो या अधिक परीक्षाओं में पहली से अंतिम तक बदलाव; शीट के नीचे कक्षा के औसत।',
+    ),
+  };
+  String get rgOpenStudents => _t('Open the students', 'विद्यार्थी देखें');
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

@@ -408,6 +408,26 @@ class EduProApi {
   Future<dynamic> examEntryRegisterUpload({required SectionSheetUploadDto body, required String id}) =>
       _t.send('POST', '/exams/${Uri.encodeComponent(id)}/register/upload', body: body.toJson());
 
+  /// GET /exams/schemes — The registers the person may use, one row per register
+  Future<dynamic> markSchemesList() =>
+      _t.send('GET', '/exams/schemes');
+
+  /// GET /exams/schemes/{id}/register — Run: a section, a class ranked together, an exam or a subject; on screen, PDF or Excel
+  Future<dynamic> markSchemesRegister({required String id, String? classSectionId, String? classId, String? view, String? format, String? exam, String? subject, Object? all, String? report, Object? top, num? pctFrom, num? pctTo, Object? lowest, int? failFrom, int? failTo, String? from, String? to, int? margin, String? paper, String? orientation, Object? fit}) =>
+      _t.send('GET', '/exams/schemes/${Uri.encodeComponent(id)}/register', query: {if (classSectionId != null) 'classSectionId': classSectionId, if (classId != null) 'classId': classId, if (view != null) 'view': view, if (format != null) 'format': format, if (exam != null) 'exam': exam, if (subject != null) 'subject': subject, if (all != null) 'all': all, if (report != null) 'report': report, if (top != null) 'top': top, if (pctFrom != null) 'pctFrom': pctFrom, if (pctTo != null) 'pctTo': pctTo, if (lowest != null) 'lowest': lowest, if (failFrom != null) 'failFrom': failFrom, if (failTo != null) 'failTo': failTo, if (from != null) 'from': from, if (to != null) 'to': to, if (margin != null) 'margin': margin, if (paper != null) 'paper': paper, if (orientation != null) 'orientation': orientation, if (fit != null) 'fit': fit});
+
+  /// GET /exams/grade-registers — The grade registers I may see, with my rights on each
+  Future<dynamic> gradeRegistersList() =>
+      _t.send('GET', '/exams/grade-registers');
+
+  /// GET /exams/grade-registers/{id}/run — Run a grade register: class sheet or student-wise, summary, analysis; PDF / Excel
+  Future<dynamic> gradeRegistersRun({required String id, String? classSectionId, String? layout, String? report, String? areas, String? items, String? format, Object? all, String? paper, String? orientation, Object? fit}) =>
+      _t.send('GET', '/exams/grade-registers/${Uri.encodeComponent(id)}/run', query: {if (classSectionId != null) 'classSectionId': classSectionId, if (layout != null) 'layout': layout, if (report != null) 'report': report, if (areas != null) 'areas': areas, if (items != null) 'items': items, if (format != null) 'format': format, if (all != null) 'all': all, if (paper != null) 'paper': paper, if (orientation != null) 'orientation': orientation, if (fit != null) 'fit': fit});
+
+  /// GET /exams/registers/{type} — A Remark, Attendance or Height & Weight register of a class: a section or all, some exams
+  Future<dynamic> studentRegistersRun({required String type, String? classId, Object? section, String? exams, int? cutoff, Object? bmi, String? format, String? paper, String? orientation, Object? fit}) =>
+      _t.send('GET', '/exams/registers/${Uri.encodeComponent(type)}', query: {if (classId != null) 'classId': classId, if (section != null) 'section': section, if (exams != null) 'exams': exams, if (cutoff != null) 'cutoff': cutoff, if (bmi != null) 'bmi': bmi, if (format != null) 'format': format, if (paper != null) 'paper': paper, if (orientation != null) 'orientation': orientation, if (fit != null) 'fit': fit});
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');

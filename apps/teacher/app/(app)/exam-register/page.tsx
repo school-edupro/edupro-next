@@ -2,6 +2,7 @@ import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { SheetCard } from '@/components/SheetCard';
+import { RegisterTabs } from '@/components/RegisterTabs';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { attendanceFromDaily, saveAttendance, saveHealth, saveRemarks } from './actions';
@@ -67,7 +68,7 @@ export default async function ExamRegisterPage({
 }) {
   const sp = await searchParams;
   const only = sp.only === 'attendance';
-  const lang = await currentLang();
+  const [lang, me] = await Promise.all([currentLang(), bff.api.me()]);
   let exams: Exam[];
   try {
     // only the exams that take this (docs/design/66)
@@ -132,6 +133,8 @@ export default async function ExamRegisterPage({
           </a>
         }
       />
+      {/* the registers as the admin's, for the person's own classes (docs/design/97) */}
+      {!only ? <RegisterTabs current="fill" permissions={me.permissions} lang={lang} /> : null}
       {sp.ok ? (
         <div
           className="ep-alert ep-alert--success"

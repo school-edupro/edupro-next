@@ -5,6 +5,7 @@ import 'package:edupro/auth/session_store.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/staff/data.dart';
 import 'package:edupro/staff/indicators.dart';
+import 'package:edupro/staff/register_sheet.dart';
 import 'package:edupro/staff/sheet_excel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -87,6 +88,9 @@ class School {
   final attendancePuts = <Map<String, Object?>>[];
   final registerRemarkPuts = <Map<String, Object?>>[];
   int marksSheetChecks = 0;
+
+  /// the registers asked for (docs/design/97)
+  final registerCalls = <Map<String, Object?>>[];
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -1111,6 +1115,266 @@ class School {
         };
       case 'POST /exams/e2/attendance/from-daily':
         return {'from': '2026-04-01', 'to': '2026-10-20', 'filled': 1, 'kept': 1, 'noDays': 0};
+      case 'GET /exams/schemes':
+        return {
+          'data': [
+            {
+              'id': 'm1',
+              'name': 'Term I result',
+              'status': 'locked',
+              'purpose': 'result',
+              'classes': [
+                {'id': '60', 'code': 'VI', 'name': 'Class VI'},
+              ],
+              'exams': [
+                {'key': 'T1', 'code': 'T1'},
+              ],
+              'subjects': 6,
+              'rights': {'run': true, 'edit': false},
+            },
+            {
+              'id': 'm2',
+              'name': 'Not mine',
+              'status': 'draft',
+              'purpose': 'register',
+              'classes': <Object?>[],
+              'exams': <Object?>[],
+              'subjects': 0,
+              'rights': {'run': false},
+            },
+          ],
+        };
+      case 'GET /exams/schemes/m1/register':
+        registerCalls.add({...?c.query});
+        if (c.query?['format'] != null) {
+          return {
+            'filename': 'register.pdf',
+            'contentType': 'application/pdf',
+            'base64': 'JVBERg==',
+          };
+        }
+        final sheet = {
+          'place': 'VI-A',
+          'head': [
+            [
+              {'t': 'Sr', 'rows': 2},
+              {'t': 'Student', 'rows': 2, 'text': true},
+              {'t': 'English', 'span': 2},
+            ],
+            [
+              {'t': 'Term (80)'},
+              {'t': 'Total (100)'},
+            ],
+          ],
+          'body': [
+            {
+              'studentId': '41',
+              'cells': [
+                {'t': '1', 'center': true},
+                {'t': 'Kid Sample', 'text': true},
+                {'t': '66', 'tone': 'calc'},
+                {'t': '82', 'tone': 'final'},
+              ],
+            },
+          ],
+          'foot': [
+            {'t': 'Class average', 'span': 2, 'text': true},
+            {'t': '66'},
+            {'t': '82'},
+          ],
+          'frozen': 2,
+          'widths': [3, 10, 6, 6],
+        };
+        final summary = c.query?['report'] == 'summary';
+        return {
+          'scheme': {
+            'id': 'm1',
+            'name': 'Term I result',
+            'purpose': 'result',
+            'status': 'locked',
+            'version': 2,
+            'type': 'termwise',
+          },
+          'places': [
+            {'value': 's:300', 'label': 'VI-A', 'classId': '60'},
+          ],
+          'exams': <Object?>[],
+          'exam': null,
+          'examName': null,
+          'subjects': [
+            {'key': 'ENG', 'title': 'English'},
+          ],
+          'report': summary ? 'summary' : 'register',
+          'reports': [
+            {'kind': 'summary', 'label': 'Result summary', 'merit': false},
+            {'kind': 'toppers', 'label': 'Toppers', 'merit': false},
+            {'kind': 'compare', 'label': 'Compare sections', 'merit': true},
+          ],
+          'sheet': summary ? null : sheet,
+          'blocks': summary
+              ? [
+                  {
+                    'title': 'Result summary',
+                    'sheet': {
+                      'place': 'VI-A',
+                      'head': [
+                        [
+                          {'t': 'Section', 'text': true},
+                          {'t': 'Pass'},
+                        ],
+                      ],
+                      'body': [
+                        {
+                          'studentId': 'x',
+                          'cells': [
+                            {'t': 'VI-A', 'text': true},
+                            {
+                              't': '1',
+                              'drill': {
+                                'title': 'Passed',
+                                'cols': ['Name'],
+                                'rows': [
+                                  ['Kid Sample'],
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      ],
+                      'foot': null,
+                      'frozen': 1,
+                      'widths': [8, 4],
+                    },
+                  },
+                ]
+              : <Object?>[],
+          'rows': <Object?>[],
+          'notes': ['Nobody here takes Art.'],
+          'counts': {'pass': 1},
+        };
+      case 'GET /exams/grade-registers':
+        return {
+          'data': [
+            {
+              'id': 'g1',
+              'name': 'Grade Register 1',
+              'status': 'draft',
+              'classes': [
+                {'id': '60', 'code': 'VI', 'name': 'Class VI'},
+              ],
+              'assessments': ['T1'],
+              'rights': {'run': true},
+            },
+          ],
+        };
+      case 'GET /exams/grade-registers/g1/run':
+        registerCalls.add({...?c.query});
+        return {
+          'register': {
+            'id': 'g1',
+            'name': 'Grade Register 1',
+            'version': 1,
+            'status': 'draft',
+            'accessType': 'all',
+          },
+          'places': [
+            {'value': '300', 'label': 'VI-A'},
+          ],
+          'place': '300',
+          'layout': 'class',
+          'report': c.query?['report'] ?? 'sheet',
+          'exams': [
+            {'examId': 'e2', 'label': 'T1', 'name': 'Term 1'},
+          ],
+          'areas': [
+            {'key': 'Language', 'name': 'Language'},
+            {'key': 'Numeracy', 'name': 'Numeracy'},
+          ],
+          'items': [
+            {'key': 'i1', 'name': 'Speaks clearly', 'area': 'Language'},
+          ],
+          'chosen': {'areas': null, 'items': null},
+          'sheets': [
+            {
+              'place': 'VI-A',
+              'title': 'VI-A',
+              'head': [
+                [
+                  {'t': 'Student', 'text': true},
+                  {'t': 'Speaks clearly'},
+                ],
+              ],
+              'body': [
+                {
+                  'studentId': '41',
+                  'cells': [
+                    {'t': 'Kid Sample', 'text': true},
+                    {'t': 'P'},
+                  ],
+                },
+              ],
+              'foot': null,
+              'frozen': 1,
+              'widths': [10, 6],
+            },
+          ],
+          'notes': <Object?>[],
+          'mapped': false,
+        };
+      case 'GET /exams/registers/remark' ||
+          'GET /exams/registers/attendance' ||
+          'GET /exams/registers/health':
+        registerCalls.add({...?c.query, 'type': c.path.split('/').last});
+        return {
+          'type': c.path.split('/').last,
+          'title': 'Register',
+          'all': false,
+          'classes': [
+            {'id': '60', 'code': 'VI', 'name': 'Class VI'},
+          ],
+          'classId': '60',
+          'sections': [
+            {'id': '300', 'code': 'VI-A'},
+          ],
+          'section': '300',
+          'exams': [
+            {'id': 'e2', 'code': 'IND', 'name': 'Indicators'},
+            {'id': 'e1', 'code': 'T1', 'name': 'Term 1'},
+          ],
+          'picked': ['e2'],
+          'cutoff': 75,
+          'bmi': true,
+          'places': [
+            {
+              'id': '300',
+              'place': 'VI-A',
+              'notes': <Object?>[],
+              'sheets': [
+                {
+                  'place': 'VI-A',
+                  'head': [
+                    [
+                      {'t': 'Student', 'text': true},
+                      {'t': 'IND · Remark', 'text': true},
+                    ],
+                  ],
+                  'body': [
+                    {
+                      'studentId': '41',
+                      'cells': [
+                        {'t': 'Kid Sample', 'text': true},
+                        {'t': 'Neat work', 'text': true, 'wrap': true},
+                      ],
+                    },
+                  ],
+                  'foot': null,
+                  'frozen': 1,
+                  'widths': [10, 20],
+                },
+              ],
+            },
+          ],
+        };
       case 'GET /exams/entry-status/waiting':
         Map<String, Object?> waiting(String subject, String name) => {
           'examId': 'e1',
@@ -2958,6 +3222,185 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: k);
     }
+  });
+
+  test('a register sheet\'s columns: a group over its columns, cells spanning rows', () {
+    expect(
+      sheetColumns({
+        'head': [
+          [
+            {'t': 'Sr', 'rows': 2},
+            {'t': 'Student', 'rows': 2},
+            {'t': 'English', 'span': 2},
+          ],
+          [
+            {'t': 'Term (80)'},
+            {'t': 'Total (100)'},
+          ],
+        ],
+        'widths': [3, 10, 6, 6],
+      }),
+      ['Sr', 'Student', 'English · Term (80)', 'English · Total (100)'],
+    );
+  });
+
+  testWidgets(
+    'Registers in the app: mark register run and a report, grade register, the remark register',
+    (tester) async {
+      final (t, school) = await pumpStaff(tester, size: const Size(420, 2600));
+      final s = S(false);
+      await tester.tap(find.text('Classes').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Exam register'));
+      await tester.pumpAndSettle();
+      // Fill the register first, then the Registers tab
+      expect(find.byKey(const Key('erTabs')), findsOneWidget);
+      await tester.tap(
+        find.descendant(of: find.byKey(const Key('erTabs')), matching: find.text(s.rgRegisters)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rgList')), findsOneWidget);
+      // the mark registers the person may run (not one without Run)
+      expect(find.byKey(const Key('rgReg-m1')), findsOneWidget);
+      expect(find.byKey(const Key('rgReg-m2')), findsNothing);
+      expect(find.text('VI — T1 — ${s.rgSubjectsN(6)}'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('rgRun-m1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rgMarkRun')), findsOneWidget);
+      // the sheet: a column each, the group joined in; a row a student; the foot
+      expect(find.text('English · Term (80)'), findsOneWidget);
+      expect(find.text('Kid Sample'), findsOneWidget);
+      expect(find.text('Class average'), findsOneWidget);
+      expect(find.text('• Nobody here takes Art.'), findsOneWidget);
+      expect(find.text('Pass 1'), findsOneWidget);
+      // the class ranked together is not offered (Compare sections needs it)
+      await tester.tap(find.byKey(const Key('rgReport')));
+      await tester.pumpAndSettle();
+      expect(find.text('Compare sections'), findsNothing);
+      await tester.tap(find.text('Result summary').last);
+      await tester.pumpAndSettle();
+      expect(school.registerCalls.last['report'], 'summary');
+      // a count opens its students
+      await tester.tap(find.text('↗ 1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Name: Kid Sample'), findsOneWidget);
+      await tester.tap(find.text(s.close));
+      await tester.pumpAndSettle();
+      // PDF: the same answer as a file (the website's usual paper)
+      await tester.tap(find.byKey(const Key('rgPdf')));
+      await tester.pumpAndSettle();
+      expect(school.registerCalls.last, containsPair('format', 'pdf'));
+      expect(school.registerCalls.last, containsPair('paper', 'Legal'));
+      expect(school.registerCalls.last, containsPair('report', 'summary'));
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // a grade register: its run, a report, the filter
+      await tester.tap(find.byKey(const Key('rgKind-grade')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('rgRun-g1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rgGradeRun')), findsOneWidget);
+      expect(find.text('Speaks clearly'), findsWidgets);
+      await tester.tap(find.byKey(const Key('rgGradeReport-summary')));
+      await tester.pumpAndSettle();
+      expect(school.registerCalls.last['report'], 'summary');
+      await tester.tap(find.byKey(const Key('rgGradeFilter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Numeracy'));
+      await tester.tap(find.byKey(const Key('rgGradeFilterShow')));
+      await tester.pumpAndSettle();
+      expect(school.registerCalls.last['areas'], 'Numeracy');
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // the remark register: the class, the section, the exams
+      await tester.tap(find.byKey(const Key('rgKind-remark')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rgStudentView-remark')), findsOneWidget);
+      expect(find.text('Neat work'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('rgStudentExam-e1')));
+      await tester.pumpAndSettle();
+      expect(school.registerCalls.last['exams'], 'e2,e1');
+      expect(school.registerCalls.last['type'], 'remark');
+      expect(t.calls.any((c) => c.path == '/exams/registers/remark'), isTrue);
+    },
+  );
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets('Registers: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})', (
+      tester,
+    ) async {
+      tester.platformDispatcher.platformBrightnessTestValue = dark
+          ? Brightness.dark
+          : Brightness.light;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      final handle = tester.ensureSemantics();
+      await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600));
+      final s = S(hindi);
+      Future<void> check(String where) async {
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+        }
+      }
+
+      await tester.tap(find.text(s.classes).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(s.menu('Exam register')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: find.byKey(const Key('erTabs')), matching: find.text(s.rgRegisters)),
+      );
+      await check('Registers');
+      await tester.tap(find.byKey(const Key('rgRun-m1')));
+      await check('A mark register');
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('rgKind-remark')));
+      await check('The remark register');
+      handle.dispose();
+    });
+  }
+
+  testWidgets('Registers: large text (twice the size) lays out without overflow', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Exam register'));
+    await tester.tap(find.text('Exam register'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Registers'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Registers');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('rgRun-m1')),
+      200,
+      scrollable: find
+          .descendant(of: find.byKey(const Key('rgList')), matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.ensureVisible(find.byKey(const Key('rgRun-m1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rgRun-m1')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'A mark register');
+    await tester.scrollUntilVisible(
+      find.text('Class average'),
+      200,
+      scrollable: find
+          .descendant(of: find.byKey(const Key('rgMarkRun')), matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'A mark register, the sheet');
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

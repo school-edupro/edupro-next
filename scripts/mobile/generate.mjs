@@ -253,10 +253,13 @@ function api() {
     const pathParams = params.filter((p) => p.in === 'path');
     const query = params.filter((p) => p.in === 'query');
     for (const p of pathParams) args.push(`required String ${ident(p.name)}`);
-    for (const p of query)
+    for (const p of query) {
+      // a field of more than one type is already `Object?`: no second `?`
+      const type = dartType(p.schema, 'Q');
       args.push(
-        `${p.required ? 'required ' : ''}${dartType(p.schema, 'Q')}${p.required ? '' : '?'} ${ident(p.name)}`,
+        `${p.required ? 'required ' : ''}${type}${p.required || type.endsWith('?') ? '' : '?'} ${ident(p.name)}`,
       );
+    }
     const bodyRef = op.requestBody?.content?.['application/json']?.schema?.$ref;
     const bodyType = bodyRef ? classFor(bodyRef.split('/').pop()) : null;
     if (bodyType) args.unshift(`required ${bodyType} body`);

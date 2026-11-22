@@ -122,6 +122,13 @@ ExamEntryController_attendanceFromDaily
 ExamEntryController_putRemarks
 ExamEntryController_registerExcel !file
 ExamEntryController_registerUpload
+# the registers for staff as the admin's (docs/design/97): mark and grade registers, the Remark, Attendance and
+# Height & Weight registers (their PDF and Excel are the same answers with `format`, the file in base64)
+MarkSchemesController_list
+MarkSchemesController_register
+GradeRegistersController_list
+GradeRegistersController_run
+StudentRegistersController_run
 DailyWorkController_sheetOptions
 DailyWorkController_sheet
 DailyWorkController_saveSheet

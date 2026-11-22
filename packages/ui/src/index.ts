@@ -87,6 +87,10 @@ export {
 export * from './admission-engine';
 export * from './mark-register';
 export * from './grade-register';
+export * from './register-views';
+export { CountDrill } from './components/CountDrill';
+export { RegisterSheet } from './components/RegisterSheet';
+export { RegisterDownloads } from './components/RegisterDownloads';
 export {
   AdmissionFormFill,
   type AdmissionFormFillProps,

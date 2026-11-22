@@ -61,6 +61,12 @@ const PAGES = [
   '/tabs/classes',
   // holidays and the almanac for staff (docs/design/96, part 4)
   '/holidays',
+  // the registers in the Exam register (docs/design/97)
+  '/exam-register/mark',
+  '/exam-register/grade',
+  '/exam-register/remark',
+  '/exam-register/attendance',
+  '/exam-register/health',
 ];
 
 for (const sub of ['dev-teacher']) {

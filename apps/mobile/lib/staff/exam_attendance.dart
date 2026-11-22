@@ -11,6 +11,7 @@ import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'indicators.dart' show examsTakingProvider;
+import 'registers.dart';
 import 'sheet_excel.dart';
 
 const _blood = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -67,6 +68,37 @@ class _ExamAttendanceScreenState extends ConsumerState<ExamAttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.full) return _fill(context);
+    final s = ref.watch(stringsProvider);
+    // the whole register: Fill the register, and the registers as the admin's (docs/design/97)
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: TabBar(
+              key: const Key('erTabs'),
+              tabs: [
+                Tab(text: s.rgFill),
+                Tab(text: s.rgRegisters),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _fill(context),
+                StaffRegistersTab(profile: widget.profile),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fill(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     final examsAsync = ref.watch(examsTakingProvider((widget.profile, _areas)));

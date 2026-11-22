@@ -17641,3 +17641,32 @@ button.ep-shiftcal__cell:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* the staff website's register lists (docs/design/97): a card a register, its name, state, classes and exams, Run */
+.ep-reglist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+}
+.ep-reglist__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+}
+.ep-reglist__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ep-reglist__name {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  text-decoration: underline;
+}
