@@ -49,6 +49,79 @@ class School {
   int applies = 0;
   final decided = <String>[];
 
+  /// lesson plans (docs/design/96, part 7): what was uploaded, decided and deleted
+  Map<String, Object?>? lessonUploaded;
+  String? lessonDecision;
+  bool lessonDeleted = false;
+
+  Map<String, Object?> lessonRow(
+    String id,
+    String topic, {
+    bool mine = false,
+    bool myTurn = false,
+    String status = 'pending',
+    int files = 0,
+  }) => {
+    'id': id,
+    'date': '2026-11-20',
+    'classes': 'VI',
+    'topic': topic,
+    'employee': mine ? 'Asha Teacher' : 'Ravi Sample',
+    'employeeCode': mine ? 'E015' : 'E099',
+    'department': 'Science',
+    'status': status,
+    'currentLevel': 1,
+    'levels': 2,
+    'approver': 'Asha Teacher',
+    'requestedAt': '2026-11-20T05:00:00.000Z',
+    'files': files,
+    'mine': mine,
+    'myTurn': myTurn,
+    'deleted': false,
+  };
+
+  Map<String, Object?> lessonDetail(String id) {
+    final row = switch (id) {
+      '9' => lessonRow(
+        '9',
+        'Food chains',
+        myTurn: lessonDecision == null,
+        status: lessonDecision == 'acknowledge' ? 'pending' : (lessonDecision ?? 'pending'),
+      ),
+      '12' => lessonRow('12', 'Parts of a leaf', mine: true, files: 1),
+      _ => lessonRow(id, '${lessonUploaded?['topic'] ?? ''}', mine: true),
+    };
+    final decided = id == '9' && lessonDecision != null;
+    return {
+      ...row,
+      if (id == '9' && lessonDecision == 'acknowledge') 'currentLevel': 2,
+      if (id == '9' && lessonDecision == 'acknowledge') 'approver': 'Principal',
+      'description': id == '12' ? '<p>Read the chapter.</p><p>Draw a leaf.</p>' : null,
+      'fileIds': id == '12' ? ['91'] : <String>[],
+      'ruleScope': id == '9' ? 'class' : null,
+      'approvals': [
+        {
+          'level': 1,
+          'approver': 'Asha Teacher',
+          'byRole': false,
+          'state': decided ? 'acknowledged' : 'pending',
+          'remark': decided ? 'Fine' : null,
+          'actedBy': decided ? 'Asha Teacher' : null,
+          'actedAt': decided ? '2026-11-21T06:00:00.000Z' : null,
+        },
+        {
+          'level': 2,
+          'approver': 'Principal',
+          'byRole': true,
+          'state': 'pending',
+          'remark': null,
+          'actedBy': null,
+          'actedAt': null,
+        },
+      ],
+    };
+  }
+
   /// the person's own Home shortcuts (null: the school's)
   List<String>? own;
 
@@ -97,6 +170,7 @@ class School {
       by('/timetable'),
       entry('/my-payslips', 'My payslips', 'wallet'),
       entry('/documents', 'Session plan, curriculum, date sheet', 'file'),
+      entry('/lesson-plans', 'Lesson plans', 'book'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -594,6 +668,52 @@ class School {
         };
       case 'GET /academics/daily-work/report':
         return null;
+      // lesson plans (docs/design/96, part 7)
+      case 'GET /academics/lessons/options':
+        return {
+          'classes': [
+            {'value': '60', 'label': 'VI'},
+          ],
+          'sections': [
+            {'value': '300', 'label': 'VI-A'},
+            {'value': '301', 'label': 'VI-B'},
+          ],
+          'maxFiles': 2,
+        };
+      case 'POST /academics/lessons':
+        lessonUploaded = c.body;
+        return {'id': '15'};
+      case 'GET /academics/lessons':
+        if (c.query?['wrap'] == '1') {
+          return {
+            'filename': 'lesson-report.${c.query?['format']}',
+            'contentType': 'application/pdf',
+            'base64': 'JVBERg==',
+          };
+        }
+        final rows = [
+          lessonRow('9', 'Food chains', myTurn: true),
+          if (!lessonDeleted) lessonRow('12', 'Parts of a leaf', mine: true, files: 1),
+        ].where((r) => c.query?['status'] == null || r['status'] == c.query?['status']).toList();
+        return {
+          'data': rows,
+          'counts': {
+            'total': lessonDeleted ? 1 : 2,
+            'pending': lessonDeleted ? 1 : 2,
+            'acknowledged': 0,
+            'rejected': 0,
+          },
+          'page': {'number': 1, 'size': 50, 'total': rows.length},
+          'office': false,
+        };
+      case 'GET /academics/lessons/9' || 'GET /academics/lessons/12' || 'GET /academics/lessons/15':
+        return lessonDetail(c.path.split('/').last);
+      case 'POST /academics/lessons/9/decide':
+        lessonDecision = '${c.body!['action']}';
+        return lessonDetail('9');
+      case 'DELETE /academics/lessons/12':
+        lessonDeleted = true;
+        return {'ok': true};
       // session plan, curriculum, date sheet (docs/design/96, part 3)
       case 'GET /academics/documents':
         return {
@@ -1212,6 +1332,237 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'Lesson plans in the app: upload, the report and its filters, review and acknowledge, delete, PDF',
+    (tester) async {
+      final (t, school) = await pumpStaff(tester, size: const Size(420, 2400));
+      final s = S(false);
+      await tester.tap(find.text('Classes').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Lesson plans'));
+      await tester.pumpAndSettle();
+      // no web page: the app's own screen, Upload Lesson first
+      expect(find.byKey(const Key('lpUpload')), findsOneWidget);
+      expect(find.byKey(const Key('openWeb-lesson-plans')), findsNothing);
+      // nothing ticked: Submit waits, the hint says why
+      expect(tester.widget<FilledButton>(find.byKey(const Key('lpSubmit'))).onPressed, isNull);
+      expect(find.byKey(const Key('lpTickHint')), findsOneWidget);
+      // master class shows the classes; class section the sections (the ticks start again)
+      expect(find.byKey(const Key('lpPick-60')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('lpPick-60')));
+      await tester.tap(find.byKey(const Key('lpType-section')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lpPick-60')), findsNothing);
+      expect(tester.widget<FilledButton>(find.byKey(const Key('lpSubmit'))).onPressed, isNull);
+      await tester.tap(find.byKey(const Key('lpPick-301')));
+      await tester.pumpAndSettle();
+      // a topic is asked for
+      await tester.tap(find.byKey(const Key('lpSubmit')));
+      await tester.pumpAndSettle();
+      expect(find.text(s.lpNeedTopic), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('lpTopic')), 'Unit test lesson');
+      await tester.enterText(
+        find.byKey(const Key('lpDescription')),
+        'Read page 4\n\nDraw <one> cell',
+      );
+      await tester.tap(find.byKey(const Key('lpSubmit')));
+      await tester.pumpAndSettle();
+      final sent = school.lessonUploaded!;
+      expect(sent['targetType'], 'section');
+      expect(sent['sectionIds'], ['301']);
+      expect(sent['classIds'], isEmpty);
+      expect(sent['topic'], 'Unit test lesson');
+      expect(sent['date'], ymd(DateTime.now()));
+      expect(sent['description'], '<p>Read page 4</p><p>Draw &lt;one&gt; cell</p>');
+      // as the website: the lesson opens, saying it went for approval
+      expect(find.text(s.lpUploaded), findsOneWidget);
+      expect(find.text('Unit test lesson'), findsWidgets);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // the form is empty again
+      expect(find.text('Unit test lesson'), findsNothing);
+
+      // Lesson Report: the counts and the lessons with where each waits
+      await tester.tap(
+        find.descendant(of: find.byKey(const Key('lpTabs')), matching: find.text(s.lpReportTab)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lpRow-9')), findsOneWidget);
+      expect(find.byKey(const Key('lpRow-12')), findsOneWidget);
+      expect(find.text('Level 1 of 2 pending · Asha Teacher'), findsNWidgets(2));
+      expect(find.text('Class: VI · 20 Nov 2026 · 1 attachment'), findsOneWidget);
+      // the lesson waiting for me says Review; mine says View
+      expect(
+        find.descendant(of: find.byKey(const Key('lpOpen-9')), matching: find.text('Review')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byKey(const Key('lpOpen-12')), matching: find.text('View')),
+        findsOneWidget,
+      );
+      // a count shows its lessons
+      await tester.tap(find.byKey(const Key('lpTile-pending')));
+      await tester.pumpAndSettle();
+      expect(
+        t.calls.lastWhere((c) => c.path == '/academics/lessons').query,
+        containsPair('status', 'pending'),
+      );
+      // the filters: Search applies them, Reset clears them
+      await tester.tap(find.byKey(const Key('lpFilters')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('lpKeyword')), 'E015');
+      await tester.tap(find.byKey(const Key('lpSearch')));
+      await tester.pumpAndSettle();
+      final q = t.calls.lastWhere((c) => c.path == '/academics/lessons').query!;
+      expect(q['by'], 'employee_code');
+      expect(q['q'], 'E015');
+      expect(q['status'], 'pending');
+      expect(q['record'], 'active');
+      await tester.tap(find.byKey(const Key('lpReset')));
+      await tester.pumpAndSettle();
+      expect(
+        t.calls.lastWhere((c) => c.path == '/academics/lessons').query!.containsKey('q'),
+        isFalse,
+      );
+
+      // the lesson waiting for me: reject wants a remark; acknowledge moves it on
+      await tester.tap(find.byKey(const Key('lpOpen-9')));
+      await tester.pumpAndSettle();
+      expect(find.text(s.lpRule('class')), findsOneWidget);
+      expect(find.text('Principal (anyone with this role)'), findsOneWidget);
+      expect(find.text(s.lpWaiting), findsOneWidget);
+      expect(find.text(s.lpNotReached), findsOneWidget);
+      await tester.tap(find.byKey(const Key('lpReject')));
+      await tester.pumpAndSettle();
+      expect(find.text(s.lpNeedRemark), findsOneWidget);
+      expect(t.calls.where((c) => c.path == '/academics/lessons/9/decide'), isEmpty);
+      await tester.enterText(find.byKey(const Key('lpRemark')), 'Fine');
+      await tester.tap(find.byKey(const Key('lpAcknowledge')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/academics/lessons/9/decide').body, {
+        'action': 'acknowledge',
+        'remark': 'Fine',
+      });
+      expect(find.text(s.lpAcknowledgedDone), findsOneWidget);
+      // now level 2 waits; not for me
+      expect(find.text('Level 2 of 2 pending · Principal'), findsOneWidget);
+      expect(find.byKey(const Key('lpAcknowledge')), findsNothing);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      // my own lesson nobody acted on: its description and file, and Delete (asked first)
+      await tester.tap(find.byKey(const Key('lpOpen-12')));
+      await tester.pumpAndSettle();
+      expect(find.text('Read the chapter.\nDraw a leaf.'), findsOneWidget);
+      expect(find.text('Attachment 1'), findsOneWidget);
+      expect(find.byKey(const Key('lpAcknowledge')), findsNothing);
+      await tester.tap(find.byKey(const Key('lpDelete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lpDeleteYes')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.method == 'DELETE' && c.path == '/academics/lessons/12'), isTrue);
+      expect(find.text(s.lpDeletedDone), findsOneWidget);
+      expect(find.byKey(const Key('lpRow-12')), findsNothing);
+
+      // the report as a PDF: the list's own answer with the filters (format, wrap)
+      await tester.tap(find.byKey(const Key('lpPdf')));
+      await tester.pumpAndSettle();
+      final f = t.calls.lastWhere((c) => c.path == '/academics/lessons').query!;
+      expect(f['format'], 'pdf');
+      expect(f['wrap'], '1');
+      expect(find.text(s.lpReportFile), findsWidgets);
+    },
+  );
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Lesson plans: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2400));
+        final s = S(hindi);
+        Future<void> check(String where) async {
+          await tester.pumpAndSettle();
+          for (final g in [
+            androidTapTargetGuideline,
+            iOSTapTargetGuideline,
+            labeledTapTargetGuideline,
+            textContrastGuideline,
+          ]) {
+            await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+          }
+        }
+
+        await tester.tap(find.text(s.classes).last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.menu('Lesson plans')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('lpPick-60')));
+        await check('Upload Lesson');
+        await tester.tap(
+          find.descendant(of: find.byKey(const Key('lpTabs')), matching: find.text(s.lpReportTab)),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('lpFilters')));
+        await check('Lesson Report');
+        await tester.tap(find.byKey(const Key('lpOpen-9')));
+        await check('A lesson');
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Lesson plans: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    // down the screen's own list (the tab pages slide sideways)
+    Future<void> down(String list, Finder f) async {
+      if (f.evaluate().isEmpty) {
+        await tester.scrollUntilVisible(
+          f,
+          200,
+          scrollable: find
+              .descendant(of: find.byKey(Key(list)), matching: find.byType(Scrollable))
+              .first,
+        );
+      }
+      await tester.ensureVisible(f);
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Lesson plans'));
+    await tester.tap(find.text('Lesson plans'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Upload Lesson');
+    await tester.tap(find.byKey(const Key('lpType-section')));
+    await tester.pumpAndSettle();
+    await down('lpUpload', find.byKey(const Key('lpSubmit')));
+    expect(tester.takeException(), isNull, reason: 'Upload Lesson, scrolled');
+    await tester.tap(find.text('Lesson Report'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Lesson Report');
+    await tester.tap(find.byKey(const Key('lpFilters')));
+    await tester.pumpAndSettle();
+    await down('lpReport', find.byKey(const Key('lpSearch')));
+    expect(tester.takeException(), isNull, reason: 'the filters');
+    await down('lpReport', find.byKey(const Key('lpOpen-9')));
+    expect(tester.takeException(), isNull, reason: 'the lessons');
+    await tester.tap(find.byKey(const Key('lpOpen-9')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'A lesson');
+    await down('lpDetail', find.byKey(const Key('lpReject')));
+    expect(tester.takeException(), isNull, reason: 'A lesson, scrolled');
+  });
 
   testWidgets('list tabs: the school’s names and screens, its own list; Hindi names (part 3)', (
     tester,

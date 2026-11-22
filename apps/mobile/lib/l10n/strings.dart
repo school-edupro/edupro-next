@@ -1219,6 +1219,123 @@ class S {
   String someUnavailable(String kinds) =>
       _t('Could not be read just now: $kinds', 'अभी पढ़ा नहीं जा सका: $kinds');
 
+  // ---- Lesson plans as on the staff website (docs/design/96 part 7) ----
+  String get lpUploadTab => _t('Upload Lesson', 'पाठ अपलोड');
+  String get lpReportTab => _t('Lesson Report', 'पाठ रिपोर्ट');
+  String get lpSelectType => _t('Select type', 'प्रकार चुनें');
+  String get lpMasterClassEvery => _t('Master class (every section)', 'पूरी कक्षा (हर वर्ग)');
+  String get lpClassSection => _t('Class section', 'कक्षा वर्ग');
+  String get lpMasterClass => _t('Master class', 'पूरी कक्षा');
+  String get lpTopicName => _t('Topic name', 'विषय-वस्तु का नाम');
+  String get lpDescription => _t('Description', 'विवरण');
+  String lpAttachmentsUpTo(int n) =>
+      _t('Attachments (up to $n): PDF or photo', 'संलग्नक ($n तक): PDF या फ़ोटो');
+  String lpTooMany(int n) => _t('Up to $n attachments.', '$n संलग्नक तक।');
+  String get lpSubmit => _t('Submit', 'भेजें');
+  String get lpTickClass =>
+      _t('Tick at least one class to submit.', 'भेजने के लिए कम से कम एक कक्षा चुनें।');
+  String get lpNeedTopic => _t('Write the topic name.', 'विषय-वस्तु का नाम लिखें।');
+  String get lpNoClass => _t('No class is assigned to you.', 'आपको कोई कक्षा नहीं दी गई है।');
+  String get lpUploaded => _t(
+    'The lesson is uploaded and sent for approval.',
+    'पाठ अपलोड हो गया और स्वीकृति के लिए भेजा गया।',
+  );
+  String get lpTotal => _t('Total requests', 'कुल अनुरोध');
+  String lpStatus(String v) => switch (v) {
+    'pending' => _t('Pending', 'लंबित'),
+    'acknowledged' => _t('Acknowledged', 'स्वीकृत'),
+    'rejected' => _t('Rejected', 'अस्वीकृत'),
+    _ => v,
+  };
+  String get lpFilters => _t('Filters', 'फ़िल्टर');
+  String get lpFilterType => _t('Filter type', 'फ़िल्टर का प्रकार');
+  String lpBy(String v) => switch (v) {
+    'employee_code' => _t('Employee ID', 'कर्मचारी आईडी'),
+    'employee' => _t('Employee name', 'कर्मचारी का नाम'),
+    'class' => _t('Class', 'कक्षा'),
+    'topic' => _t('Topic', 'विषय-वस्तु'),
+    _ => _t('Any of these', 'इनमें से कोई'),
+  };
+  String get lpKeyword => _t('Search keyword', 'खोज शब्द');
+  String get lpDateFrom => _t('Date from', 'तारीख से');
+  String get lpDateTo => _t('Date to', 'तारीख तक');
+  String get lpStatusWord => _t('Status', 'स्थिति');
+  String get lpAllStatus => _t('All status', 'सभी स्थिति');
+  String get lpLevel => _t('Level', 'स्तर');
+  String get lpAllLevels => _t('All levels', 'सभी स्तर');
+  String lpLevelPending(int n) => _t('Level $n pending', 'स्तर $n लंबित');
+  String get lpRecord => _t('Record status', 'रिकॉर्ड की स्थिति');
+  String get lpActive => _t('Active', 'सक्रिय');
+  String get lpDeleted => _t('Deleted', 'हटाए गए');
+  String lpShow(String v, bool office) => switch (v) {
+    'approve' => _t('Waiting for me', 'मेरी प्रतीक्षा में'),
+    'own' => _t('Uploaded by me', 'मेरे अपलोड'),
+    _ =>
+      office
+          ? _t('All lessons', 'सभी पाठ')
+          : _t('Mine and those I approve', 'मेरे और जिन्हें मैं स्वीकृत करता/करती हूँ'),
+  };
+  String get lpSearch => _t('Search', 'खोजें');
+  String get lpReset => _t('Reset', 'रीसेट');
+  String get lpNone => _t('No lesson for these filters.', 'इन फ़िल्टर के लिए कोई पाठ नहीं।');
+  String get lpNotYourRole =>
+      _t('The lesson report is not part of your role.', 'पाठ रिपोर्ट आपकी भूमिका में नहीं है।');
+  String lpRequest(String id) => _t('Request #$id', 'अनुरोध #$id');
+  String lpLevelOf(int n, int m) => _t('Level $n of $m pending', 'स्तर $n / $m लंबित');
+  String lpFiles(int n) => _t('$n attachment${n == 1 ? '' : 's'}', '$n संलग्नक');
+  String get lpReview => _t('Review', 'जाँचें');
+  String get lpPrevious => _t('Previous', 'पिछला');
+  String get lpNext => _t('Next', 'अगला');
+  String get lpReportFile => _t('Lesson report', 'पाठ रिपोर्ट');
+  String get lpLesson => _t('Lesson', 'पाठ');
+  String get lpEmployee => _t('Employee', 'कर्मचारी');
+  String get lpLessonDate => _t('Lesson date', 'पाठ की तारीख');
+  String get lpRequested => _t('Requested', 'अनुरोध किया');
+  String get lpNoDescription => _t('No description was written.', 'कोई विवरण नहीं लिखा गया।');
+  String get lpAttachments => _t('Attachments', 'संलग्नक');
+  String get lpApproval => _t('Approval', 'स्वीकृति');
+  String lpRule(String? scope) => switch (scope) {
+    'employee' => _t(
+      'Approvers come from the rule for this employee.',
+      'स्वीकृतकर्ता इस कर्मचारी के नियम से हैं।',
+    ),
+    'class' => _t(
+      'Approvers come from the rule for the class.',
+      'स्वीकृतकर्ता कक्षा के नियम से हैं।',
+    ),
+    'department' => _t(
+      'Approvers come from the rule for the department.',
+      'स्वीकृतकर्ता विभाग के नियम से हैं।',
+    ),
+    'default' => _t(
+      'Approvers come from the school default.',
+      'स्वीकृतकर्ता विद्यालय के सामान्य नियम से हैं।',
+    ),
+    _ => _t(
+      'Approvers come from no rule (the principal / school admin).',
+      'कोई नियम नहीं: स्वीकृतकर्ता प्रधानाचार्य / विद्यालय व्यवस्थापक हैं।',
+    ),
+  };
+  String lpLevelN(int n) => _t('Level $n', 'स्तर $n');
+  String get lpAnyoneWithRole => _t('anyone with this role', 'इस भूमिका वाला कोई भी');
+  String get lpWaiting => _t('Waiting', 'प्रतीक्षा में');
+  String get lpNotReached => _t('Not reached', 'अभी नहीं पहुँचा');
+  String get lpRemarkReject =>
+      _t('Remark (needed to reject)', 'टिप्पणी (अस्वीकार करने के लिए ज़रूरी)');
+  String get lpNeedRemark =>
+      _t('Write why the lesson is rejected.', 'लिखें कि पाठ क्यों अस्वीकार किया गया।');
+  String get lpAcknowledge => _t('Acknowledge', 'स्वीकार करें');
+  String get lpReject => _t('Reject', 'अस्वीकार करें');
+  String get lpAcknowledgedDone => _t('Acknowledged.', 'स्वीकार किया गया।');
+  String get lpRejectedDone => _t('Rejected.', 'अस्वीकार किया गया।');
+  String get lpDelete => _t('Delete this lesson', 'यह पाठ हटाएँ');
+  String lpDeleteAsk(String topic) => _t(
+    'Delete the lesson "$topic"? It stays in the report under Deleted.',
+    'पाठ "$topic" हटाएँ? यह रिपोर्ट में "हटाए गए" में रहेगा।',
+  );
+  String get lpDeletedDone => _t('The lesson was deleted.', 'पाठ हटा दिया गया।');
+  String get lpWasDeleted => _t('This lesson was deleted.', 'यह पाठ हटा दिया गया था।');
+
   // ---- phase D
   String get phones => _t('Phones signed in', 'साइन-इन फ़ोन');
   String get thisPhone => _t('This phone', 'यह फ़ोन');

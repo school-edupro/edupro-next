@@ -33,6 +33,7 @@ import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
 import '../staff/daily_work.dart';
 import '../staff/documents.dart';
+import '../staff/lesson_plans.dart';
 import '../staff/marks.dart';
 import '../staff/my_attendance.dart';
 import '../staff/my_leave.dart';
@@ -92,6 +93,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/holidays' => CalendarScreen(profile: p),
       '/marks' => MarksHome(profile: p),
       '/timetable' => StaffTimetable(profile: p),
+      // upload a lesson for approval, the lesson report, a lesson in full (docs/design/96 part 7)
+      '/lesson-plans' => LessonPlansScreen(profile: p),
       '/messages' => MessagesScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
       '/assistant' => AssistantScreen(profile: p),

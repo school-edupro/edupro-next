@@ -82,6 +82,15 @@ DailyWorkController_sheet
 DailyWorkController_saveSheet
 DailyWorkController_reportFile !file
 DailyWorkController_create
+# lesson plans as on the staff website (docs/design/96 part 7): upload, the report (its Excel and PDF are the list's
+# answer with format and wrap=1), one lesson, acknowledge or reject, delete
+LessonUploadsController_options
+LessonUploadsController_create
+LessonUploadsController_list
+LessonUploadsController_get
+LessonUploadsController_file !file
+LessonUploadsController_decide
+LessonUploadsController_remove
 FilesController_create
 FilesController_complete
 StaffAttendanceController_mine

@@ -288,6 +288,34 @@ class EduProApi {
   Future<dynamic> dailyWorkCreate({required CreateDailyWorkDto body}) =>
       _t.send('POST', '/academics/daily-work', body: body.toJson());
 
+  /// GET /academics/lessons/options — The classes and sections I upload lessons for
+  Future<dynamic> lessonUploadsOptions() =>
+      _t.send('GET', '/academics/lessons/options');
+
+  /// POST /academics/lessons — Upload a lesson: it goes to the approvers set for me, my class or department
+  Future<dynamic> lessonUploadsCreate({required LessonUploadDto body}) =>
+      _t.send('POST', '/academics/lessons', body: body.toJson());
+
+  /// GET /academics/lessons — Lessons uploaded for approval: mine, those I approve, or all (the office)
+  Future<dynamic> lessonUploadsList({String? by, String? q, String? from, String? to, String? status, int? level, String? record, String? mine, String? format, String? wrap, int? page, int? size}) =>
+      _t.send('GET', '/academics/lessons', query: {if (by != null) 'by': by, if (q != null) 'q': q, if (from != null) 'from': from, if (to != null) 'to': to, if (status != null) 'status': status, if (level != null) 'level': level, if (record != null) 'record': record, if (mine != null) 'mine': mine, if (format != null) 'format': format, if (wrap != null) 'wrap': wrap, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// GET /academics/lessons/{id}
+  Future<dynamic> lessonUploadsGet({required String id}) =>
+      _t.send('GET', '/academics/lessons/${Uri.encodeComponent(id)}');
+
+  /// GET /academics/lessons/{id}/files/{fileId}
+  Future<ApiFile> lessonUploadsFile({required String id, required String fileId}) =>
+      _t.file('GET', '/academics/lessons/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
+  /// POST /academics/lessons/{id}/decide — Acknowledge the lesson at my level, or reject it with a remark
+  Future<dynamic> lessonUploadsDecide({required LessonDecideDto body, required String id}) =>
+      _t.send('POST', '/academics/lessons/${Uri.encodeComponent(id)}/decide', body: body.toJson());
+
+  /// DELETE /academics/lessons/{id}
+  Future<dynamic> lessonUploadsRemove({required String id}) =>
+      _t.send('DELETE', '/academics/lessons/${Uri.encodeComponent(id)}');
+
   /// POST /platform/files — Register a file and obtain a signed upload URL
   Future<dynamic> filesCreate({required CreateUploadDto body}) =>
       _t.send('POST', '/platform/files', body: body.toJson());
@@ -1123,6 +1151,38 @@ class CreateDailyWorkDto {
         if (fileIds != null) 'fileIds': fileIds,
         if (publishAt != null) 'publishAt': publishAt,
         if (ackRequired != null) 'ackRequired': ackRequired,
+      };
+}
+
+/** The LessonUploadDto the API takes. */
+class LessonUploadDto {
+  const LessonUploadDto({required this.date, required this.targetType, this.classIds, this.sectionIds, required this.topic, this.description, this.fileIds});
+  final String date;
+  final String targetType;
+  final List<String>? classIds;
+  final List<String>? sectionIds;
+  final String topic;
+  final String? description;
+  final List<String>? fileIds;
+  Map<String, Object?> toJson() => {
+        'date': date,
+        'targetType': targetType,
+        if (classIds != null) 'classIds': classIds,
+        if (sectionIds != null) 'sectionIds': sectionIds,
+        'topic': topic,
+        if (description != null) 'description': description,
+        if (fileIds != null) 'fileIds': fileIds,
+      };
+}
+
+/** The LessonDecideDto the API takes. */
+class LessonDecideDto {
+  const LessonDecideDto({required this.action, this.remark});
+  final String action;
+  final String? remark;
+  Map<String, Object?> toJson() => {
+        'action': action,
+        if (remark != null) 'remark': remark,
       };
 }
 

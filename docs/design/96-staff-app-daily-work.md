@@ -139,3 +139,42 @@ pupil's admission number and gate tap time, "On leave (approved)" and gate-pass 
 opens a box; one already there shows; sent with the marks). Tests: `staff_test.dart` (the saved line, the window
 note, the details, the gate pass, a remark changed and sent, the PDF register; a closed window read only); 224 app
 tests; the web preview rebuilt.
+
+## Part 7: Lesson plans, and the lesson report's filters (22 Nov 2026)
+
+"Staff app: the Lesson planner section the same as the staff website; the filters of the Lesson Report on the staff
+website (`/lesson-plans?tab=report`) and the admin app (`/academics/lesson-plans?tab=report`) to follow the Mobilise
+design."
+
+**The filters (both websites, the shared `LessonReport`).** The eight fields had a 200 px minimum inside 11 rem
+columns, so they touched, Status ran past the card and the date boxes stood taller than the drop-downs. Now
+(`.ep-lesson__filters`): a card with the Mobilise border, radius and card shadow; the fields in even columns (four on
+a desktop, three on a tablet, one on a phone; `minmax(min(100%, 13rem), 1fr)`, the fields' minimum width off); every
+box 2.5 rem high; under a rule, **Search** and **Reset**, with **Excel** and **PDF** at the far end
+(`.ep-lesson__downloads`). Checked on both sites at 1280, 768 and 375 wide; axe clean.
+
+**The app** — `lib/staff/lesson_plans.dart`, `LessonPlansScreen`, opened from Classes and More
+(`nativeScreen('/lesson-plans')`), no web page. Two tabs as the website's:
+
+- **Upload Lesson**: Date; Select type — Master class (every section) or Class section (the ticks start again);
+  the classes or sections the teacher has (`GET academics/lessons/options`); Topic name; Description (plain text sent
+  as paragraphs); attachments up to the school's number (PDF or photo, camera too); **Submit** waits until a class is
+  ticked ("Tick at least one class to submit."). Sent, the lesson opens saying it went for approval, as the website.
+- **Lesson Report**: the four counts (Total, Pending, Acknowledged, Rejected) — each shows its lessons, standing in
+  for the website's tiles and status tabs alike; **Filters** in a fold (Filter type, Search keyword, Date from, Date
+  to, Status, Level, Record status, Show; Search applies, Reset clears); Excel and PDF (the list's own answer with
+  `format` and `wrap=1`, opened in the file viewer); each lesson as a card — request number, status, topic, who
+  (name, ID, department), class, request date, attachments, "Level n of m pending · approver", **Review** when it
+  waits for the teacher, else **View**; pages when there are more than 50.
+- **A lesson**: the topic and where it stands; **Lesson** (employee, lesson date, class, requested, the description,
+  the attachments to view or save); **Approval** (where the approvers come from, each level — the approver or anyone
+  with a role, Waiting / Not reached / Acknowledged / Rejected, by whom and when, the remark); when it waits for the
+  teacher, a remark and **Acknowledge** / **Reject** (a remark is needed to reject); the teacher's own lesson nobody
+  has acted on can be deleted (asked first; it stays in the report under Deleted).
+
+Calls added (`api-operations.txt`): `LessonUploadsController_options`, `_create`, `_list`, `_get`, `_file !file`,
+`_decide`, `_remove`. No API change. Tests: `staff_test.dart` — the upload (the ticks, the topic asked for, the body
+sent: section, date, the description's paragraphs escaped), the report (Review and View, a count's lessons, Search and
+Reset with the query sent), acknowledge (a reject without a remark refused), the next level, delete, the PDF with
+`format` and `wrap`; light, dark, Hindi; twice the text. 229 app tests, analyze and the generated calls pass; the web
+preview rebuilt.

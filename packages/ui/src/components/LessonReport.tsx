@@ -171,12 +171,20 @@ export function LessonReport({
           >
             Reset
           </a>
-          <a className="ep-btn ep-btn--secondary" href={`${exportPath}?format=xlsx&${exportQuery}`}>
-            Excel
-          </a>
-          <a className="ep-btn ep-btn--secondary" href={`${exportPath}?format=pdf&${exportQuery}`}>
-            PDF
-          </a>
+          <span className="ep-lesson__downloads">
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`${exportPath}?format=xlsx&${exportQuery}`}
+            >
+              Excel
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`${exportPath}?format=pdf&${exportQuery}`}
+            >
+              PDF
+            </a>
+          </span>
         </span>
       </form>
       <nav className="ep-tabs-links" aria-label="Status">

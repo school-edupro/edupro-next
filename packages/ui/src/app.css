@@ -6928,25 +6928,41 @@ a.ep-tabs__tab {
   font-size: var(--fs-h3);
   font-weight: var(--fw-semibold);
 }
+/* the report's filters (Mobilise): a card, the fields in even columns (four on a wide screen, one on a phone), every
+   box the same height, then Search and Reset with the downloads at the far end under a rule */
 .ep-lesson__filters {
   display: grid;
-  gap: var(--sp-3);
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--sp-4) var(--sp-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
   align-items: end;
-  padding: var(--sp-3);
+  padding: var(--sp-4);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+}
+.ep-lesson__filters .ep-field {
+  min-width: 0;
 }
 .ep-lesson__filters .ep-input,
 .ep-lesson__filters .ep-select {
   width: 100%;
+  height: 2.5rem;
 }
 .ep-lesson__buttons {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--sp-2);
   grid-column: 1 / -1;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-default);
+}
+.ep-lesson__downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-left: auto;
 }
 .ep-lesson__status {
   display: inline-block;
