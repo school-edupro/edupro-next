@@ -283,7 +283,8 @@ export function checkStaffLayout(given: StaffLayout): string[] {
     if (!distinct(l.hidden)) problems.push('A screen is hidden twice.');
     for (const h of l.hidden) if (!screens.has(h)) problems.push(`${h} cannot be hidden here.`);
   }
-  return problems;
+  // each once (two lists of one name would say the same thing twice)
+  return [...new Set(problems)];
 }
 
 export interface StaffEntry {

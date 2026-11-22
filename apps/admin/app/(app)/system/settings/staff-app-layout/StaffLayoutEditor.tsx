@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { when } from '@/lib/family-layout';
 import {
   newListKey,
+  newListName,
   sameStaffLayout,
   staffHidden,
   staffLayoutProblems,
@@ -258,7 +259,7 @@ function ListTabs({
             onClick={() =>
               onChange([
                 ...lists,
-                { key: newListKey(lists), label: 'New list', labelHi: null, items: [] },
+                { key: newListKey(lists), label: newListName(lists), labelHi: null, items: [] },
               ])
             }
           >

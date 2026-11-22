@@ -189,3 +189,6 @@ Phases: **J** the model and the API · **K** admin's sections · **L** the app a
   (the Attendance list and the Attendance screen) raised React's duplicate-key error; they are keyed by tab and
   screen now. Two bottom tabs of one name are also refused (admin and API): "Two bottom tabs are both named
   Attendance: rename the list or choose another tab."
+- **Fix (22 Nov 2026).** Two new lists were both called "New list", so the same problem showed twice and React
+  warned of a duplicate key; a new list is now named New list, New list 2…, and every check (admin and API, staff
+  and families) gives each problem once.

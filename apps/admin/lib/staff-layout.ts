@@ -91,6 +91,14 @@ export function staffHidden(l: StaffLayout): Set<string> {
 /** The longest name a menu group takes (STAFF_LAYOUT_LIMITS.groupName in @edupro/menus). */
 export const STAFF_GROUP_NAME_MAX = 40;
 
+/** A name for a new list tab: New list, New list 2… the first no list has. */
+export function newListName(lists: StaffListTab[]): string {
+  const taken = new Set(lists.map((x) => x.label.trim().toLowerCase()));
+  let n = 1;
+  while (taken.has((n === 1 ? 'New list' : `New list ${String(n)}`).toLowerCase())) n += 1;
+  return n === 1 ? 'New list' : `New list ${String(n)}`;
+}
+
 /** A key for a new list tab the school makes: `list-1`, `list-2`… the first not taken. */
 export function newListKey(lists: StaffListTab[]): string {
   const taken = new Set(lists.map((x) => x.key));
@@ -173,5 +181,6 @@ export function staffLayoutProblems(l: StaffLayout, c: StaffLayoutSetup['catalog
         problems.push(
           `A menu group's ${name} takes at most ${String(STAFF_GROUP_NAME_MAX)} letters.`,
         );
-  return problems;
+  // each once (two lists of one name would say the same thing twice)
+  return [...new Set(problems)];
 }
