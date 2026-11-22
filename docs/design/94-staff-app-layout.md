@@ -121,3 +121,9 @@ the Classes page, Home tiles) and the app's More · **I** close.
   website). App: More already follows `/me/menu` (order, names, Hindi names); tests added in `staff_test.dart`.
   Checked in a browser on a test school with a published layout (desktop, phone, the Menu panel, Classes, Hindi; axe
   clean) and on Alpha (as built).
+- **I (22 Nov 2026).** Closed: the four type-checks, lint and formatting of every part-2 file, the API's staff
+  layout, staff menu, family layout and mobile suites (39), the database security and permission-coverage tests, the
+  app (215 tests, analyze), the staff website's accessibility pages (desktop and phone, now with `/classes`) and the
+  local secret scan pass. The test school used for the browser check is switched off again; Alpha has no published
+  staff layout, so its staff see the menus as before until the office publishes one (System → Settings → App layouts
+  → Arrange the staff app).
