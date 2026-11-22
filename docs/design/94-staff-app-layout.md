@@ -1,6 +1,6 @@
 # 94 — The staff app: the menu as on the website, and a Home like the students'
 
-Status: planned 22 Nov 2026 · builds on docs 89 (the app) and 90 (the family app layout) · owner: Platform
+Status: built 22 Nov 2026 (phases A–E) · builds on docs 89 (the app) and 90 (the family app layout) · owner: Platform
 
 ## The ask
 
@@ -77,3 +77,7 @@ each person gets); the staff website's own Home and side menu stay as they are.
   shortcuts serves staff too (`me/staff-layout/shortcuts`); the layout is read again when the app comes back. The
   fixed staff tabs (`tabsFor`) are gone. Tests: `apps/mobile/test/staff_test.dart` (the tabs, the Home, Edit
   shortcuts, a web-only tab; light, dark, Hindi and 2× text), `app_flow_test.dart`; 213 app tests pass.
+- **E (22 Nov 2026).** Closed: the four type-checks, lint and formatting, the API's layout, menu, mobile and chatbot
+  suites (32), the database security and permission-coverage tests, the app (213 tests, analyze, the generated calls)
+  and the local secret scan pass. The staff website's own Home and side menu are unchanged (its menu now counts work
+  with the same route as the app).
