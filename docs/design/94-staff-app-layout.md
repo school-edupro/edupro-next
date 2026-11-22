@@ -180,3 +180,8 @@ Phases: **J** the model and the API · **K** admin's sections · **L** the app a
   website: the Academics tab and page carry the school's name. Tests: `staff_test.dart` (list tabs, Hindi names),
   `family_test.dart` (the Academics name). Checked in a browser on a test school with published lists (phone bar,
   the Office list page, Hindi, an unknown list; axe clean) and the parent website on Alpha (Academics unchanged).
+- **M (22 Nov 2026).** Closed: the four type-checks, lint and formatting of every part-3 file, the API's staff
+  layout, staff menu, family layout, mobile and permission suites (42), the database security tests, the app (218
+  tests, analyze; the web preview rebuilt) and the staff website's accessibility pages (desktop and phone, now with
+  `/tabs/classes`) pass; the local secret scan is clean. The test school is switched off again. Alpha has no
+  published staff layout, so its staff keep the two standard lists until the office publishes one.
