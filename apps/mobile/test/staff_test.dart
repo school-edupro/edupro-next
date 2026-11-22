@@ -63,6 +63,7 @@ class School {
   String? lessonDecision;
   bool lessonDeleted = false;
   Map<String, Object?>? ruleSaved;
+  final topicsMarked = <Map<String, Object?>>[];
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -207,6 +208,7 @@ class School {
       entry('/my-payslips', 'My payslips', 'wallet'),
       entry('/documents', 'Session plan, curriculum, date sheet', 'file'),
       entry('/lesson-plans', 'Lesson plans', 'book'),
+      entry('/syllabus', 'My syllabus', 'book'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -742,6 +744,79 @@ class School {
           'page': {'number': 1, 'size': 50, 'total': rows.length},
           'office': false,
         };
+      // my syllabus (docs/design/96, part 9)
+      case 'GET /academics/syllabus/mine':
+        return {
+          'data': [
+            {
+              'classSectionId': '300',
+              'section': 'VI-A',
+              'classId': '60',
+              'subjectId': '5',
+              'subject': 'Science',
+              'topics': 4,
+              'done': 1 + topicsMarked.where((m) => m['status'] == 'done').length,
+              'partial': 1,
+              'percent': 25,
+              'behind': 2,
+            },
+            {
+              'classSectionId': '301',
+              'section': 'VI-B',
+              'classId': '60',
+              'subjectId': '5',
+              'subject': 'Science',
+              'topics': 4,
+              'done': 4,
+              'partial': 0,
+              'percent': 100,
+              'behind': 0,
+            },
+          ],
+        };
+      case 'GET /academics/syllabus/tree':
+        return {
+          'chapters': [
+            {
+              'id': 'c1',
+              'number': 1,
+              'name': 'Food',
+              'term': 'Term 1',
+              'plannedMonth': 7,
+              'topics': [
+                {
+                  'id': 't1',
+                  'number': 1,
+                  'name': 'Sources of food',
+                  'plannedPeriods': 2,
+                  'status': 'done',
+                  'doneOn': '2026-07-10',
+                  'reason': null,
+                },
+                {
+                  'id': 't2',
+                  'number': 2,
+                  'name': 'Plant parts we eat',
+                  'plannedPeriods': 1,
+                  'status': topicsMarked.isEmpty ? null : topicsMarked.last['status'],
+                  'doneOn': null,
+                  'reason': null,
+                },
+              ],
+            },
+            {
+              'id': 'c2',
+              'number': 2,
+              'name': 'Fibre',
+              'term': null,
+              'plannedMonth': null,
+              'topics': [],
+            },
+          ],
+        };
+      case 'POST /academics/syllabus/mark':
+        topicsMarked.add(c.body!);
+        return {'saved': true};
       case 'GET /academics/lessons/approvers':
         if (!lessonSetup) throw const ApiException(403, 'forbidden', 'Not allowed');
         return {
@@ -1760,6 +1835,130 @@ void main() {
     );
     expect(find.text(s.lpRuleRemoved), findsOneWidget);
     expect(find.byKey(const Key('lpRule-r1')), findsNothing);
+  });
+
+  testWidgets('My syllabus in the app: my classes and subjects, a subject’s topics, marking', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2600));
+    final s = S(false);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My syllabus'));
+    await tester.pumpAndSettle();
+    // no web page: the app's own list
+    expect(find.byKey(const Key('syList')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-syllabus')), findsNothing);
+    final a = find.byKey(const Key('syRow-300-5'));
+    Finder inA(String text) => find.descendant(of: a, matching: find.text(text));
+    expect(inA('Science'), findsOneWidget);
+    expect(inA('2 behind'), findsOneWidget);
+    expect(inA('1 of 4 topics done (+1 partly) · 25% covered'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byKey(const Key('syRow-301-5')), matching: find.text('On track')),
+      findsOneWidget,
+    );
+    // a subject opens in the app, not a web page
+    await tester.tap(find.byKey(const Key('syOpen-300-5')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sySubject')), findsOneWidget);
+    expect(find.text('VI-A · Science'), findsWidgets);
+    expect(find.text('25% covered: 1 of 4 topics done · 2 behind the plan'), findsOneWidget);
+    expect(t.calls.lastWhere((c) => c.path == '/academics/syllabus/tree').query, {
+      'classId': '60',
+      'subjectId': '5',
+      'classSectionId': '300',
+    });
+    expect(find.text('Chapter 1: Food'), findsOneWidget);
+    expect(find.text('Term 1 · planned Jul'), findsOneWidget);
+    expect(find.text('1.1 Sources of food'), findsOneWidget);
+    expect(find.text('Done · 10 Jul 2026'), findsOneWidget);
+    expect(find.text('Pending'), findsOneWidget);
+    expect(find.text(s.syNoTopic), findsOneWidget);
+    // Not done needs a remark
+    await tester.tap(find.byKey(const Key('syMark-not_done-t2')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('syError-t2')), findsOneWidget);
+    expect(school.topicsMarked, isEmpty);
+    // partly done today, with a remark
+    await tester.enterText(find.byKey(const Key('syRemark-t2')), 'Half the class did it');
+    await tester.tap(find.byKey(const Key('syMark-partial-t2')));
+    await tester.pumpAndSettle();
+    expect(school.topicsMarked.single, {
+      'classSectionId': '300',
+      'topicId': 't2',
+      'status': 'partial',
+      'doneOn': ymd(schoolToday()),
+      'reason': 'Half the class did it',
+    });
+    expect(find.text(s.saved), findsOneWidget);
+    // the topic and the coverage read again
+    expect(find.text('Partly done'), findsOneWidget);
+    expect(t.calls.where((c) => c.path == '/academics/syllabus/tree').length, greaterThan(1));
+    // done: the day it was taught goes with it
+    await tester.tap(find.byKey(const Key('syMark-done-t2')));
+    await tester.pumpAndSettle();
+    expect(school.topicsMarked.last['status'], 'done');
+    expect(find.text('25% covered: 2 of 4 topics done · 2 behind the plan'), findsOneWidget);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'My syllabus: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600));
+        final s = S(hindi);
+        Future<void> check(String where) async {
+          await tester.pumpAndSettle();
+          for (final g in [
+            androidTapTargetGuideline,
+            iOSTapTargetGuideline,
+            labeledTapTargetGuideline,
+            textContrastGuideline,
+          ]) {
+            await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+          }
+        }
+
+        await tester.tap(find.text(s.classes).last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.menu('My syllabus')));
+        await check('My syllabus');
+        await tester.tap(find.byKey(const Key('syOpen-300-5')));
+        await check('A subject');
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('My syllabus: large text (twice the size) lays out without overflow', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('My syllabus'));
+    await tester.tap(find.text('My syllabus'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'My syllabus');
+    await scrollTo(tester, find.byKey(const Key('syOpen-300-5')));
+    await tester.tap(find.byKey(const Key('syOpen-300-5')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'A subject');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('syMark-not_done-t2')),
+      200,
+      scrollable: find
+          .descendant(of: find.byKey(const Key('sySubject')), matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'A subject, scrolled');
   });
 
   testWidgets('list tabs: the school’s names and screens, its own list; Hindi names (part 3)', (

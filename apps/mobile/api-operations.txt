@@ -95,6 +95,11 @@ LessonUploadsController_remove
 LessonUploadsController_rules
 LessonUploadsController_saveRule
 LessonUploadsController_removeRule
+# my syllabus as on the staff website (docs/design/96 part 9): my classes and subjects, a subject's chapters and
+# topics, marking a topic
+SyllabusController_mine
+SyllabusController_tree
+SyllabusController_mark
 FilesController_create
 FilesController_complete
 StaffAttendanceController_mine

@@ -328,6 +328,18 @@ class EduProApi {
   Future<dynamic> lessonUploadsRemoveRule({required String id}) =>
       _t.send('DELETE', '/academics/lessons/approvers/${Uri.encodeComponent(id)}');
 
+  /// GET /academics/syllabus/mine — The classes and subjects I teach, with their coverage
+  Future<dynamic> syllabusMine() =>
+      _t.send('GET', '/academics/syllabus/mine');
+
+  /// GET /academics/syllabus/tree — Chapters and topics of a class and subject; with a section, what is done
+  Future<dynamic> syllabusTree({required String classId, required String subjectId, String? classSectionId}) =>
+      _t.send('GET', '/academics/syllabus/tree', query: {'classId': classId, 'subjectId': subjectId, if (classSectionId != null) 'classSectionId': classSectionId});
+
+  /// POST /academics/syllabus/mark — Mark a topic done, partly done or not done for a section
+  Future<dynamic> syllabusMark({required MarkTopicDto body}) =>
+      _t.send('POST', '/academics/syllabus/mark', body: body.toJson());
+
   /// POST /platform/files — Register a file and obtain a signed upload URL
   Future<dynamic> filesCreate({required CreateUploadDto body}) =>
       _t.send('POST', '/platform/files', body: body.toJson());
@@ -1225,6 +1237,23 @@ class LessonRuleDtoLevelsItem {
         'kind': kind,
         if (employeeId != null) 'employeeId': employeeId,
         if (roleCode != null) 'roleCode': roleCode,
+      };
+}
+
+/** The MarkTopicDto the API takes. */
+class MarkTopicDto {
+  const MarkTopicDto({required this.classSectionId, required this.topicId, required this.status, this.doneOn, this.reason});
+  final String classSectionId;
+  final String topicId;
+  final String status;
+  final String? doneOn;
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'topicId': topicId,
+        'status': status,
+        if (doneOn != null) 'doneOn': doneOn,
+        if (reason != null) 'reason': reason,
       };
 }
 

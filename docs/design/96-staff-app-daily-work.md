@@ -199,3 +199,20 @@ Calls added: `LessonUploadsController_rules`, `_saveRule`, `_removeRule`. No API
 teacher has no Approvers tab; the rules shown, level 1 and the class asked for, a class rule with a role and a person
 found by typing (the body sent), remove; light, dark, Hindi, twice the text. 230 app tests, analyze and the generated
 calls pass; the web preview rebuilt.
+
+## Part 9: My syllabus (22 Nov 2026)
+
+"Staff app: My syllabus opens a web page; do not open a web page, and a subject should not open a web page either."
+
+As built: `lib/staff/syllabus.dart` — `MySyllabusScreen` (`nativeScreen('/syllabus')`, from Classes and More) as the
+staff website's My syllabus: each class and subject the teacher teaches (`GET academics/syllabus/mine`) — the
+section, the subject, **n behind** or **On track**, a coverage bar, "d of t topics done (+p partly) · x% covered" —
+and Lesson plans; with none, the website's line (the coordinator enters the syllabus under Academics → Syllabus). A
+subject opens `SyllabusSubjectScreen` in the app (`GET academics/syllabus/tree` with the class, subject and section):
+"x% covered: d of t topics done · n behind the plan"; each chapter (number, name, term, the month planned) and its
+topics — number, name, periods, Done / Partly done / Not done with the day, or Pending, the remark — each with
+**Taught on** (today or earlier), a remark (needed for Not done) and **Done**, **Partly**, **Not done**
+(`POST academics/syllabus/mark`); saved, the topic and the coverage read again. Calls added: `SyllabusController_mine`,
+`_tree`, `_mark`. No API change. Tests: `staff_test.dart` (the list, behind and on track, the subject's chapters and
+topics, Not done refused without a remark, Partly with the day and remark sent, Done; light, dark, Hindi, twice the
+text); 235 app tests, analyze and the generated calls pass; the web preview rebuilt.

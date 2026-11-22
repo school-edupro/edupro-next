@@ -1382,6 +1382,45 @@ class S {
       _t('Remove the rule for $label?', '$label का नियम हटाएँ?');
   String get lpRuleRemoved => _t('The rule is removed.', 'नियम हटा दिया गया।');
 
+  // ---- My syllabus as on the staff website (docs/design/96 part 9) ----
+  String get sySubtitle => _t(
+    'The classes and subjects you teach. Open one to mark what you have taught.',
+    'आपकी कक्षाएँ और विषय। जो पढ़ाया है उसे चिह्नित करने के लिए कोई एक खोलें।',
+  );
+  String get syNone => _t(
+    'No syllabus is entered yet for a class and subject assigned to you. The coordinator enters it under Academics → Syllabus.',
+    'आपको दी गई कक्षा और विषय का पाठ्यक्रम अभी दर्ज नहीं है। समन्वयक इसे शैक्षणिक → पाठ्यक्रम में दर्ज करते हैं।',
+  );
+  String syDoneOf(int done, int topics, int partial) => _t(
+    '$done of $topics topics done${partial > 0 ? ' (+$partial partly)' : ''}',
+    '$topics में से $done विषय-बिंदु पूरे${partial > 0 ? ' (+$partial आंशिक)' : ''}',
+  );
+  String syCovered(int percent) => _t('$percent% covered', '$percent% पूरा');
+  String syBehind(int n) => _t('$n behind', '$n पीछे');
+  String get syOnTrack => _t('On track', 'समय पर');
+  String syHeader(int percent, int done, int topics, int behind) => _t(
+    '$percent% covered: $done of $topics topics done${behind > 0 ? ' · $behind behind the plan' : ''}',
+    '$percent% पूरा: $topics में से $done विषय-बिंदु पूरे${behind > 0 ? ' · योजना से $behind पीछे' : ''}',
+  );
+  String syChapter(int n, String name) => _t('Chapter $n: $name', 'अध्याय $n: $name');
+  String syPlanned(String month) => _t('planned $month', 'योजना: $month');
+  String get syNoTopic =>
+      _t('No topic in this chapter yet.', 'इस अध्याय में अभी कोई विषय-बिंदु नहीं।');
+  String syPeriods(int n) => _t('$n period${n == 1 ? '' : 's'}', '$n कालांश');
+  String syStatus(String? v) => switch (v) {
+    'done' => _t('Done', 'पूरा'),
+    'partial' => _t('Partly done', 'आंशिक'),
+    'not_done' => _t('Not done', 'नहीं हुआ'),
+    _ => _t('Pending', 'बाकी'),
+  };
+  String get syTaughtOn => _t('Taught on', 'पढ़ाया');
+  String get syRemark => _t('Remark (needed for Not done)', 'टिप्पणी (नहीं हुआ के लिए ज़रूरी)');
+  String get syDone => _t('Done', 'पूरा');
+  String get syPartly => _t('Partly', 'आंशिक');
+  String get syNotDone => _t('Not done', 'नहीं हुआ');
+  String get syNeedReason =>
+      _t('Write why the topic was not done.', 'लिखें कि यह विषय-बिंदु क्यों नहीं हुआ।');
+
   // ---- phase D
   String get phones => _t('Phones signed in', 'साइन-इन फ़ोन');
   String get thisPhone => _t('This phone', 'यह फ़ोन');
