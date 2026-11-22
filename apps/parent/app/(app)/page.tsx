@@ -23,7 +23,7 @@ const SERVICES: Array<{
   {
     href: '/homework',
     icon: 'book',
-    title: 'Homework',
+    title: 'Daily work',
     parent: 'Homework, classwork and assignments',
     student: 'My homework, classwork and assignments',
   },
@@ -202,7 +202,7 @@ export default async function HomePage({
             {(audience === 'student'
               ? ([
                   ['/attendance', 'Attendance', 'Daily attendance and leave requests.'],
-                  ['/homework', 'Homework', 'Work given by the teachers.'],
+                  ['/homework', 'Daily work', 'Work given by the teachers.'],
                   ['/results', 'Results', 'Marks and report cards.'],
                 ] as const)
               : ([

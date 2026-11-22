@@ -114,7 +114,7 @@ class TodayScreen extends ConsumerWidget {
                       label: s.homeworkDue,
                       value: fig(work, (_) => '${due!.length}'),
                       icon: Icons.menu_book_outlined,
-                      onTap: () => open(s.homework, HomeworkScreen(profile: p)),
+                      onTap: () => open(s.dailyWork, HomeworkScreen(profile: p)),
                     ),
                   if (fees != null && !layout.hidden.contains('/fees'))
                     FigureTile(
@@ -240,7 +240,7 @@ class TodayScreen extends ConsumerWidget {
                         SectionTitle(
                           s.homeworkDue,
                           action: TextButton(
-                            onPressed: () => open(s.homework, HomeworkScreen(profile: p)),
+                            onPressed: () => open(s.dailyWork, HomeworkScreen(profile: p)),
                             child: Text(s.seeAll),
                           ),
                         ),

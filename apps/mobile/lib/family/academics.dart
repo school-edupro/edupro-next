@@ -48,7 +48,7 @@ class AcademicsScreen extends ConsumerWidget {
     }
     final items = <(String, IconData, Widget)>[
       (s.attendance, Icons.fact_check_outlined, AttendanceScreen(profile: profile)),
-      (s.homework, Icons.menu_book_outlined, HomeworkScreen(profile: profile)),
+      (s.dailyWork, Icons.menu_book_outlined, HomeworkScreen(profile: profile)),
       (s.timetable, Icons.view_week_outlined, TimetableScreen(profile: profile)),
       (s.dateSheet, Icons.edit_calendar_outlined, DateSheetScreen(profile: profile)),
       (s.results, Icons.insert_chart_outlined, ResultsScreen(profile: profile)),

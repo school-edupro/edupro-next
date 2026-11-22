@@ -11,7 +11,7 @@ import { canOpen } from '@/lib/portal-menu';
 /** The school day's screens as built (when the school has no Academics list of its own). */
 const STANDARD = [
   { href: '/attendance', label: 'Attendance', icon: 'check' },
-  { href: '/homework', label: 'Homework', icon: 'book' },
+  { href: '/homework', label: 'Daily work', icon: 'book' },
   { href: '/timetable', label: 'Timetable', icon: 'calendar' },
   { href: '/date-sheet', label: 'Exam date sheet', icon: 'calendar' },
   { href: '/results', label: 'Results', icon: 'chart' },

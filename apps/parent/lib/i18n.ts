@@ -604,6 +604,8 @@ const DICT: Record<string, string> = {
   Home: 'होम',
   'Sign out': 'साइन आउट',
   Homework: 'गृहकार्य',
+  'Daily work': 'दैनिक कार्य',
+  'Nothing for today or tomorrow': 'आज या कल के लिए कुछ नहीं',
   'Homework, classwork and assignments': 'गृहकार्य, कक्षाकार्य और असाइनमेंट',
   Notices: 'सूचनाएँ',
   'School notices and circulars': 'विद्यालय की सूचनाएँ और परिपत्र',

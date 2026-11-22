@@ -64,7 +64,8 @@ export const FAMILY_CARDS: readonly FamilyCard[] = [
     needs: '/attendance',
   },
   { key: 'classes_today', label: "Today's classes", labelHi: 'आज की कक्षाएँ', needs: '/timetable' },
-  { key: 'homework_due', label: 'Homework due', labelHi: 'बाकी गृहकार्य', needs: '/homework' },
+  // homework for today or tomorrow and assignments due then (docs/design/96: "Homework" is now Daily work)
+  { key: 'homework_due', label: 'Daily work', labelHi: 'दैनिक कार्य', needs: '/homework' },
   { key: 'next_exam', label: 'Next exam', labelHi: 'अगली परीक्षा', needs: '/date-sheet' },
   { key: 'notices', label: 'Latest notices', labelHi: 'नवीनतम सूचनाएँ', needs: '/notices' },
   {

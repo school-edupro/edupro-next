@@ -146,9 +146,9 @@ class S {
   String get thisMonth => _t('This month', 'इस माह');
   String presentOf(int present, int days) =>
       _t('$present of $days days present', '$days में से $present दिन उपस्थित');
-  String get homeworkDue => _t('Homework due', 'बाकी गृहकार्य');
-  String get noHomeworkDue =>
-      _t('No homework due today or tomorrow.', 'आज या कल कोई गृहकार्य बाकी नहीं।');
+  // Home's Daily work card (docs/design/96): homework for today or tomorrow and assignments due then
+  String get homeworkDue => _t('Daily work', 'दैनिक कार्य');
+  String get noHomeworkDue => _t('Nothing for today or tomorrow.', 'आज या कल के लिए कुछ नहीं।');
   String get feesPayable => _t('Fees to pay', 'देय फ़ीस');
   String get nothingDue => _t('Nothing due', 'कुछ बकाया नहीं');
   String get nextExam => _t('Next exam', 'अगली परीक्षा');

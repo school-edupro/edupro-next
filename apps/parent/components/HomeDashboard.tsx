@@ -29,7 +29,15 @@ interface Work {
   subjectName: string | null;
   title: string;
   dueOn: string | null;
+  assignedOn: string;
 }
+
+/**
+ * The day a piece of work is for: an assignment's due date; homework's due date, else the day it was set (the
+ * teachers' day sheet sets none); classwork is what was done in class (none).
+ */
+const workDay = (w: Work): string | null =>
+  w.kind === 'classwork' ? null : w.kind === 'homework' ? (w.dueOn ?? w.assignedOn) : w.dueOn;
 interface Notice {
   id: string;
   title: string;
@@ -256,7 +264,13 @@ export async function HomeDashboard({
     a && a.summary.days > 0 ? Math.round((a.summary.present / a.summary.days) * 100) : null;
   const f = fees?.children.find((c) => c.student.id === childId);
   const nextDue = f?.instalments.find((i) => i.status !== 'paid' && Number(i.balance) > 0);
-  const dueTomorrow = work.filter((w) => w.dueOn === tomorrow);
+  // Daily work for today and tomorrow (homework by its day, assignments by their due date), the nearest first
+  const soon = work
+    .filter((w) => {
+      const d = workDay(w);
+      return d === today || d === tomorrow;
+    })
+    .sort((x, y) => (workDay(x) ?? '').localeCompare(workDay(y) ?? ''));
   const upcomingHoliday = cal?.holidays
     .filter((h) => h.endsOn >= today)
     .sort((x, y) => x.startsOn.localeCompare(y.startsOn))[0];
@@ -382,15 +396,15 @@ export async function HomeDashboard({
     homework_due: (
       <Glance
         icon="book"
-        label={t(lang, 'Homework due tomorrow')}
-        value={dueTomorrow.length}
+        label={t(lang, 'Daily work')}
+        value={soon.length}
         note={
-          dueTomorrow.length
-            ? dueTomorrow
+          soon.length
+            ? soon
                 .slice(0, 2)
                 .map((w) => w.subjectName ?? w.title)
                 .join(', ')
-            : t(lang, 'Nothing due tomorrow')
+            : t(lang, 'Nothing for today or tomorrow')
         }
         href={`/homework?child=${childId}`}
       />

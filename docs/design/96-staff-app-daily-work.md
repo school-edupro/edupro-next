@@ -46,3 +46,24 @@ academics/daily-work/report` (Excel or PDF, opened in the app's file viewer). Fi
   a section left out reloads, assignments with due dates, the report and its PDF; light, dark, Hindi, 2× text);
   218 app tests and analyze pass; the web preview is rebuilt. Not checked in the web preview on Alpha (a sign-in
   there sends a live code).
+
+## Part 2: families (22 Nov 2026)
+
+"Student app: rename Homework to Daily work, and Homework due does not show."
+
+Decided (asked): **Daily work** on the app and the parent website alike; the Home card becomes **Daily work** —
+homework for today or tomorrow and assignments due then.
+
+The cause: the day sheet (staff website and app) posts homework for a day with no due date, and both Homes counted
+only items with a due date (the app: due today or tomorrow, loading up to today; the website: due tomorrow). Now the
+day a piece of work is for is an assignment's due date, homework's due date else the day it was set, and classwork
+none (`workDay` in the app's `homework.dart` and the parent website's `HomeDashboard.tsx`); the app's Home loads
+tomorrow too.
+
+As built: `packages/menus` — the family screen `/homework` is named **Daily work** (menu, tabs, shortcuts,
+Academics list) and the card `homework_due` **Daily work** / दैनिक कार्य; the app — the tab and shortcut name, the
+Academics list, the screen's title, Home's figure and card ("Nothing for today or tomorrow."); the parent website —
+the Home tiles and start-up tour, the Academics page, the Daily work page's title, Home's card. Tests:
+`family_test.dart` (a day-sheet homework with no due date now counts on Home: 2), 218 app tests; the API's
+family-layout and mobile-family suites. Checked on the parent website with the demo parent (Home: Daily work 2 —
+VI-A's homework for today and tomorrow; menu and page say Daily work; axe clean). The web preview is rebuilt.

@@ -12,18 +12,30 @@ import 'data.dart';
 /// The two weeks of daily work Home looks at for what is due: given from 14 days ago up to today.
 (Profile, String, String) workRange(Profile p) {
   final today = DateTime.now();
-  return (p, ymd(today.subtract(const Duration(days: 14))), ymd(today));
+  // tomorrow too: the teachers post the next day's homework on the day before
+  return (
+    p,
+    ymd(today.subtract(const Duration(days: 14))),
+    ymd(today.add(const Duration(days: 1))),
+  );
 }
 
-/// Work still to hand in, the nearest first.
+/// The day a piece of work is for: an assignment's due date; homework's due date, else the day it was set (the day
+/// sheet's homework has none); classwork is what was done in class (none).
+String? workDay(Json w) => switch (w['kind']) {
+  'classwork' => null,
+  'homework' => (w['dueOn'] ?? w['assignedOn']) as String?,
+  _ => w['dueOn'] as String?,
+};
+
+/// Work to do soon (today and the next [days]), the nearest first.
 List<Json> dueSoon(List<Json> work, {int days = 1000}) {
   final today = ymd(DateTime.now());
   final until = ymd(DateTime.now().add(Duration(days: days)));
-  return work
-      .where((w) => w['dueOn'] != null && '${w['dueOn']}'.compareTo(today) >= 0)
-      .where((w) => '${w['dueOn']}'.compareTo(until) <= 0)
-      .toList()
-    ..sort((a, b) => '${a['dueOn']}'.compareTo('${b['dueOn']}'));
+  return work.where((w) {
+    final d = workDay(w);
+    return d != null && d.compareTo(today) >= 0 && d.compareTo(until) <= 0;
+  }).toList()..sort((a, b) => workDay(a)!.compareTo(workDay(b)!));
 }
 
 /// Homework as the website shows it (apps/parent/app/(app)/homework), on the phone's own screens.
@@ -88,7 +100,7 @@ class _HomeworkScreenState extends ConsumerState<HomeworkScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: Tokens.sp3),
       child: Semantics(
-        label: s.homework,
+        label: s.dailyWork,
         container: true,
         explicitChildNodes: true,
         child: Wrap(

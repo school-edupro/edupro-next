@@ -144,7 +144,7 @@ export default async function HomeworkPage({
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title={t(lang, 'Homework')} />
+          <PageHeader kicker="EduPro" title={t(lang, 'Daily work')} />
           <Card>
             {t(
               lang,
@@ -198,8 +198,8 @@ export default async function HomeworkPage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
-        kicker={t(lang, 'Homework')}
-        title={child ? `${child.name} · ${child.section}` : t(lang, 'Homework')}
+        kicker={t(lang, 'Daily work')}
+        title={child ? `${child.name} · ${child.section}` : t(lang, 'Daily work')}
         description={
           !child
             ? t(lang, 'No enrolled child found')
@@ -234,7 +234,7 @@ export default async function HomeworkPage({
       <ChildSwitch lang={lang} back={back} current={child?.id} />
       <nav
         className="ep-tabs-links"
-        aria-label={t(lang, 'Homework')}
+        aria-label={t(lang, 'Daily work')}
         style={{ marginBottom: 'var(--sp-3)' }}
       >
         {tab('day', 'Homework and classwork')}

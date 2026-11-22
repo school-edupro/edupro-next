@@ -136,7 +136,7 @@ class FamilyLayoutView {
     final student = p.kind == 'student';
     const academics = [
       FamilyEntry('/attendance', 'Attendance', 'check'),
-      FamilyEntry('/homework', 'Homework', 'book'),
+      FamilyEntry('/homework', 'Daily work', 'book'),
       FamilyEntry('/timetable', 'Timetable', 'calendar'),
       FamilyEntry('/date-sheet', 'Exam date sheet', 'calendar'),
       FamilyEntry('/results', 'Results', 'chart'),
@@ -144,7 +144,7 @@ class FamilyLayoutView {
     ];
     final shortcuts = [
       const FamilyEntry('/attendance', 'Attendance', 'check'),
-      const FamilyEntry('/homework', 'Homework', 'book'),
+      const FamilyEntry('/homework', 'Daily work', 'book'),
       const FamilyEntry('/timetable', 'Timetable', 'calendar'),
       student
           ? const FamilyEntry('/fees', 'Dues and receipts', 'wallet')
@@ -161,7 +161,7 @@ class FamilyLayoutView {
         const FamilyEntry('/', 'Home', 'home'),
         ...(student
             ? const [
-                FamilyEntry('/homework', 'Homework', 'book'),
+                FamilyEntry('/homework', 'Daily work', 'book'),
                 FamilyEntry('/timetable', 'Timetable', 'calendar'),
                 FamilyEntry('/results', 'Results', 'chart'),
               ]
@@ -177,7 +177,7 @@ class FamilyLayoutView {
       cards: const [
         FamilyCardEntry('attendance_today', 'Attendance today', 'आज की उपस्थिति'),
         FamilyCardEntry('classes_today', "Today's classes", 'आज की कक्षाएँ'),
-        FamilyCardEntry('homework_due', 'Homework due', 'बाकी गृहकार्य'),
+        FamilyCardEntry('homework_due', 'Daily work', 'दैनिक कार्य'),
         FamilyCardEntry('next_exam', 'Next exam', 'अगली परीक्षा'),
         FamilyCardEntry('notices', 'Latest notices', 'नवीनतम सूचनाएँ'),
       ],
@@ -277,7 +277,7 @@ IconData screenIcon(String href, [String icon = '']) => switch (href) {
 String shortLabel(S s, FamilyEntry e) => switch (e.href) {
   '/fees' => s.fees,
   '/messages' => s.messages,
-  '/homework' => s.homework,
+  '/homework' => s.dailyWork,
   '/timetable' => s.timetable,
   '/results' => s.results,
   '/attendance' => s.attendance,

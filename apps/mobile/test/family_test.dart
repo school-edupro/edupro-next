@@ -372,6 +372,23 @@ class School {
               'ackRequired': true,
               'ackedFor': [],
             },
+            // posted on the teachers' day sheet: for today, no due date (docs/design/96)
+            {
+              'id': '503',
+              'kind': 'homework',
+              'classSectionId': '300',
+              'section': 'VI-A',
+              'subjectName': 'Maths',
+              'title': 'Homework',
+              'body': 'Exercise 4.1',
+              'assignedOn': day(0),
+              'dueOn': null,
+              'postedBy': 'Asha Teacher',
+              'files': [],
+              'publishAt': day(0),
+              'ackRequired': false,
+              'ackedFor': [],
+            },
             {
               'id': '502',
               'kind': 'classwork',
@@ -1399,7 +1416,7 @@ const _layoutLabels = {
   'more': 'More',
   'academics': 'Academics',
   '/attendance': 'Attendance',
-  '/homework': 'Homework',
+  '/homework': 'Daily work',
   '/timetable': 'Timetable',
   '/results': 'Results',
   '/library': 'Library',
@@ -1564,7 +1581,7 @@ void main() {
       for (final label in ['Home', 'Academics', 'Library', 'Results', 'More']) {
         expect(tab(label), findsOneWidget, reason: label);
       }
-      expect(tab('Homework'), findsNothing);
+      expect(tab('Daily work'), findsNothing);
       for (final k in ['library', 'health', 'certificates', 'help', 'all']) {
         expect(find.byKey(Key('shortcut-$k')), findsOneWidget, reason: k);
       }
@@ -2013,7 +2030,8 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: find.byKey(const Key('figHomework')), matching: find.text('1')),
+        // Daily work: the day sheet's homework for today (no due date) and the homework due tomorrow
+        find.descendant(of: find.byKey(const Key('figHomework')), matching: find.text('2')),
         findsOneWidget,
       );
       expect(
@@ -2556,7 +2574,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final (t, _) = await pumpFamily(tester, kind: 'student');
       await tester.tap(
-        find.descendant(of: find.byType(NavigationBar), matching: find.text('Homework')),
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('Daily work')),
       );
       await tester.pumpAndSettle();
       // today: each subject with its work; the assignment is on its own tab
@@ -2615,7 +2633,7 @@ void main() {
     final (t, _) = await pumpFamily(tester);
     await tester.tap(find.text('Academics'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Homework'));
+    await tester.tap(find.text('Daily work'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('hwView-assignments')));
     await tester.pumpAndSettle();
@@ -2712,10 +2730,10 @@ void main() {
   });
 
   testWidgets(
-    'a student: Home, Homework, Timetable, Results tabs; no fee figure; today\'s periods',
+    'a student: Home, Daily work, Timetable, Results tabs; no fee figure; today\'s periods',
     (tester) async {
       final (t, _) = await pumpFamily(tester, kind: 'student');
-      for (final tab in ['Home', 'Homework', 'Timetable', 'Results', 'More']) {
+      for (final tab in ['Home', 'Daily work', 'Timetable', 'Results', 'More']) {
         expect(
           find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)),
           findsOneWidget,
@@ -2961,7 +2979,7 @@ void main() {
         await check('Academics');
         for (final screen in [
           s.attendance,
-          s.homework,
+          s.dailyWork,
           s.timetable,
           s.dateSheet,
           s.results,
@@ -2979,7 +2997,7 @@ void main() {
             await tester.tap(find.byKey(const Key('ttView-day')));
             await check('$screen, day');
           }
-          if (screen == s.homework) {
+          if (screen == s.dailyWork) {
             await tester.tap(find.byKey(const Key('hwView-assignments')));
             await check('$screen, assignments');
           }
@@ -3057,7 +3075,7 @@ void main() {
     await tester.pumpAndSettle();
     for (final screen in [
       'Attendance',
-      'Homework',
+      'Daily work',
       'Timetable',
       'Date sheet',
       'Results',
@@ -3071,8 +3089,8 @@ void main() {
       await tester.pumpAndSettle();
     }
     // the detail pages and the leave form
-    await scrollTo(tester, find.text('Homework'));
-    await tester.tap(find.text('Homework').last);
+    await scrollTo(tester, find.text('Daily work'));
+    await tester.tap(find.text('Daily work').last);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'homework, a day');
     await tester.tap(find.byKey(Key('workDay-${day(-2)}')));
