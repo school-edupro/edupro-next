@@ -87,6 +87,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/daily-work' => DailyWorkScreen(profile: p),
       // session plan, curriculum, date sheet: upload and the list, as on the staff website (docs/design/96 part 3)
       '/documents' => StaffDocumentsScreen(profile: p),
+      // the session's holidays and almanac for staff, as the families' calendar shows them (docs/design/96 part 4)
+      '/holidays' => CalendarScreen(profile: p),
       '/marks' => MarksHome(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       '/messages' => MessagesScreen(profile: p),

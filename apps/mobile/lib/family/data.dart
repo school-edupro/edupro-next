@@ -314,7 +314,11 @@ final sessionCalendarProvider = FutureProvider.autoDispose.family<Loaded<Json>, 
   ref,
   p,
 ) async {
-  final r = await cached('calSession:${p.schoolId}', () => _api(ref).calendarRead());
+  // staff read the staff calendar (every staff member: for everyone and for staff — docs/design/96, part 4)
+  final r = await cached(
+    'calSession:${p.schoolId}:${p.isStaff ? 'staff' : 'family'}',
+    () => p.isStaff ? _api(ref).calendarStaffRead() : _api(ref).calendarRead(),
+  );
   return Loaded(asJson(r.data), r.at, stale: r.stale);
 });
 

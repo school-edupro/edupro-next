@@ -188,6 +188,12 @@ class School {
               'icon': 'calendar',
               'items': [
                 {'href': '/my-leave', 'label': 'My leave', 'help': null, 'icon': 'calendar'},
+                {
+                  'href': '/holidays',
+                  'label': 'Holidays and almanac',
+                  'help': null,
+                  'icon': 'calendar',
+                },
               ],
             },
           ],
@@ -551,6 +557,35 @@ class School {
         return {'ok': true};
       case 'GET /academics/documents/report':
         return null;
+      // the staff calendar (docs/design/96, part 4)
+      case 'GET /academics/calendar/staff':
+        return {
+          'from': '2026-04-01',
+          'to': '2027-03-31',
+          'holidays': [
+            {
+              'id': '1',
+              'name': 'Founders day',
+              'kind': 'holiday',
+              'startsOn': '2026-12-02',
+              'endsOn': '2026-12-02',
+              'appliesTo': 'everyone',
+              'campusId': null,
+            },
+          ],
+          'events': [
+            {
+              'id': '2',
+              'title': 'Staff workshop',
+              'kind': 'meeting',
+              'startsOn': '2026-12-10',
+              'endsOn': '2026-12-10',
+              'startsAt': '10:00',
+              'description': null,
+              'audience': 'employees',
+            },
+          ],
+        };
       case 'GET /academics/acks':
         return {
           'title': 'Session plan for term 2',
@@ -1141,6 +1176,25 @@ void main() {
     expect(tab('कक्षाएँ'), findsOneWidget);
     // no Hindi name given: the name as the school wrote it
     expect(tab('Office'), findsOneWidget);
+  });
+
+  testWidgets('Holidays and almanac: the staff calendar in the app, not a web page', (
+    tester,
+  ) async {
+    final (t, _) = await pumpStaff(tester, size: const Size(420, 2400));
+    await tester.tap(find.text('More').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Holidays and almanac'));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/academics/calendar/staff'), isTrue);
+    expect(t.calls.any((c) => c.path == '/academics/calendar'), isFalse);
+    // the lists of the session: the holiday and the staff meeting
+    await tester.tap(find.byKey(const Key('calView-holidays')));
+    await tester.pumpAndSettle();
+    expect(find.text('Founders day'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('calView-events')));
+    await tester.pumpAndSettle();
+    expect(find.text('Staff workshop'), findsOneWidget);
   });
 
   testWidgets('More in Hindi: the school’s Hindi group name', (tester) async {

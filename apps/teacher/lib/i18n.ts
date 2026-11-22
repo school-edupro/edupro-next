@@ -423,6 +423,28 @@ const DICT: Record<string, string> = {
   Resolution: 'समाधान',
   // Home
   'My classes': 'मेरी कक्षाएँ',
+  // holidays and the almanac for staff (docs/design/96, part 4)
+  'Holidays and almanac': 'अवकाश और पंचांग',
+  'The session’s holidays and the almanac: exams, meetings, activities and events':
+    'सत्र के अवकाश और पंचांग: परीक्षाएँ, बैठकें, गतिविधियाँ और कार्यक्रम',
+  Holidays: 'अवकाश',
+  Almanac: 'पंचांग',
+  'For everyone': 'सभी के लिए',
+  'For staff': 'कर्मचारियों के लिए',
+  'Nothing in this session yet.': 'इस सत्र में अभी कुछ नहीं।',
+  'Coming up': 'आगामी',
+  Holiday: 'अवकाश दिवस',
+  Vacation: 'छुट्टियाँ',
+  'Working day': 'कार्य दिवस',
+  Event: 'कार्यक्रम',
+  Examination: 'परीक्षा',
+  Meeting: 'बैठक',
+  Activity: 'गतिविधि',
+  Deadline: 'अंतिम तिथि',
+  'Students and parents': 'विद्यार्थी और अभिभावक',
+  Title: 'शीर्षक',
+  Name: 'नाम',
+  'Applies to': 'किसके लिए',
   // the school's staff layout on the website (docs/design/94, part 2)
   Menu: 'मेनू',
   'Close the menu': 'मेनू बंद करें',

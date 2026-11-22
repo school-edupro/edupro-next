@@ -52,6 +52,44 @@ export class CalendarService {
       : v.kind === 'family'
         ? ['everyone', 'students']
         : ['everyone', 'employees'];
+    return this.read(tenant, yearId, q, audiences);
+  }
+
+  /**
+   * Holidays and the almanac for the school's staff (docs/design/96, part 4): every staff member, whatever their role,
+   * reads what is for everyone and for staff — the days off matter to all who plan their leave. Families: refused.
+   */
+  async staffCalendar(
+    ctx: RequestContext,
+    q: CalendarQueryDto,
+  ): Promise<{ holidays: HolidayRow[]; events: AlmanacRow[]; from: string; to: string }> {
+    const tenant = requireTenant(ctx);
+    const yearId = this.viewer.requireYear(tenant);
+    const staff = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query(
+        `SELECT 1 FROM user_school_memberships
+          WHERE user_id = app.current_user_id() AND school_id = app.current_school_id()
+            AND person_type IN ('employee', 'external') AND status = 'active' AND deleted_at IS NULL
+         UNION ALL
+         SELECT 1 FROM employees WHERE user_id = app.current_user_id() AND deleted_at IS NULL
+         LIMIT 1`,
+      );
+      return (r.rowCount ?? 0) > 0;
+    });
+    if (!staff)
+      throw new DomainError('forbidden', 'The staff calendar is for the school’s staff', {
+        status: 403,
+      });
+    return this.read(tenant, yearId, q, ['everyone', 'employees']);
+  }
+
+  /** The working year's holidays and almanac events between two dates, for the given audiences. */
+  private read(
+    tenant: ReturnType<typeof requireTenant>,
+    yearId: string,
+    q: CalendarQueryDto,
+    audiences: string[],
+  ): Promise<{ holidays: HolidayRow[]; events: AlmanacRow[]; from: string; to: string }> {
     return this.db.tenant(tenant, async (c) => {
       const year = await c.query<{ start_date: string; end_date: string }>(
         `SELECT start_date::text, end_date::text FROM academic_years WHERE id = $1`,

@@ -327,6 +327,16 @@ export class CalendarController {
     return this.calendar.calendar(ctx, q);
   }
 
+  @Get('staff')
+  @ApiOperation({
+    summary:
+      'Holidays and the almanac for staff: every staff member, items for everyone and for staff',
+  })
+  @AuthenticatedOnly()
+  staffRead(@ReqCtx() ctx: RequestContext, @Query() q: CalendarQueryDto) {
+    return this.calendar.staffCalendar(ctx, q);
+  }
+
   @Post('holidays')
   @RequirePermission(DAILY.calendarManage, { description: 'Maintain holidays and the almanac' })
   createHoliday(@ReqCtx() ctx: RequestContext, @Body() body: CreateHolidayDto) {

@@ -226,6 +226,13 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (can) => can('leave.own.apply'),
       },
       {
+        // every staff member: the days off matter to all who plan leave (docs/design/96, part 4)
+        href: '/holidays',
+        label: 'Holidays and almanac',
+        help: 'The session’s holidays and the almanac: exams, meetings, activities and events',
+        allowed: always,
+      },
+      {
         href: '/attendance-corrections',
         label: 'Attendance corrections to approve',
         help: 'Days colleagues say are wrong (a forgotten punch, a device that missed them), at your level',
@@ -460,6 +467,7 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/my-certificates', 'file'],
   ['/my-board-results', 'chart'],
   ['/my-leave', 'calendar'],
+  ['/holidays', 'calendar'],
   ['/leave-approvals', 'check'],
   ['/my-attendance', 'clock'],
   ['/attendance-corrections', 'check'],

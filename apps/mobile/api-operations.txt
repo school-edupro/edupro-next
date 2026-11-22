@@ -52,6 +52,7 @@ CommsInboxController_read
 TimetableController_periods
 TimetableController_slots
 CalendarController_read
+CalendarController_staffRead
 ExamDateSheetsController_family
 FamilyResultsController_mine
 FamilyResultsController_view

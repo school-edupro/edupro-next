@@ -84,3 +84,23 @@ added: `DocumentsController_create`, `_remove`, `_documentsReport !file`, `_ackS
 (the upload's checks, the list, who acknowledged, remove, the PDF; light, dark, Hindi, 2× text); 219 app tests,
 analyze, the generated calls; the web preview rebuilt. (The website's Upload on this page used the Daily work file
 upload, fixed in fd7a216d.)
+
+## Part 4: Holidays and almanac for staff (22 Nov 2026)
+
+"Admin's Academics → Calendar (Holidays and almanac): show it in the staff website and app."
+
+Decided (asked): **all staff** see it (not only roles with the calendar right); it sits in **Leave & attendance**;
+**view only** (adding and removing stays in the admin app).
+
+As built: API `GET academics/calendar/staff` (`CalendarService.staffCalendar`, signed-in only): any staff member of
+the school (an employee or external membership, or an employee record) reads the working year's holidays and almanac
+for everyone and for staff — not those for students and parents; families get 403; `from` / `to` narrow it as the
+calendar's read does (the shared `read`). `packages/menus`: **Holidays and almanac** (`/holidays`, every staff
+member) in Leave & attendance, its icon. Staff website `/holidays`: Coming up (the next three), then Holidays and
+Almanac (from, name or title with its note, what, applies to) — Hindi words added. App: `nativeScreen('/holidays')`
+opens the families' Calendar screen (month, holidays, events) reading the staff calendar
+(`sessionCalendarProvider` by profile kind); `CalendarController_staffRead` added. Tests:
+`staff-calendar.e2e-spec.ts` (3: a staff member without the right reads it, dates narrow it, a parent is refused),
+the calendar's existing suites, permission coverage; `staff_test.dart` (More → the calendar, the staff read, the
+lists); 221 app tests; the staff website checked in a browser on Alpha as a teacher and an accounts user (desktop,
+phone; axe clean); the staff accessibility list gains `/holidays`; the web preview rebuilt.

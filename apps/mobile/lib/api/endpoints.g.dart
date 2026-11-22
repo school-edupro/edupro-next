@@ -180,6 +180,10 @@ class EduProApi {
   Future<dynamic> calendarRead({String? from, String? to}) =>
       _t.send('GET', '/academics/calendar', query: {if (from != null) 'from': from, if (to != null) 'to': to});
 
+  /// GET /academics/calendar/staff — Holidays and the almanac for staff: every staff member, items for everyone and for staff
+  Future<dynamic> calendarStaffRead({String? from, String? to}) =>
+      _t.send('GET', '/academics/calendar/staff', query: {if (from != null) 'from': from, if (to != null) 'to': to});
+
   /// GET /exams/mine/date-sheets — My children's date sheets: their papers of the exams on the portal
   Future<dynamic> examDateSheetsFamily() =>
       _t.send('GET', '/exams/mine/date-sheets');

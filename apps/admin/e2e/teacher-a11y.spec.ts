@@ -59,6 +59,8 @@ const PAGES = [
   '/my-board-results',
   // the Classes tab's page (docs/design/94, part 2)
   '/tabs/classes',
+  // holidays and the almanac for staff (docs/design/96, part 4)
+  '/holidays',
 ];
 
 for (const sub of ['dev-teacher']) {
