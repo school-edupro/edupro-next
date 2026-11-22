@@ -31,10 +31,63 @@ const staffProfile = {
 };
 
 class School {
+  School({this.webTab = false});
+
+  /// the school chose a tab that has only a web page (docs/design/94)
+  final bool webTab;
   bool offline = false;
   bool marked = false;
   int applies = 0;
   final decided = <String>[];
+
+  /// the person's own Home shortcuts (null: the school's)
+  List<String>? own;
+
+  Map<String, Object?> entry(String href, String label, String icon) => {
+    'href': href,
+    'label': label,
+    'icon': icon,
+  };
+
+  /// `GET me/staff-layout` (docs/design/94): the school's tabs, shortcuts and cards, or the person's own shortcuts.
+  Map<String, Object?> layout() {
+    final screens = [
+      entry('/attendance', 'Attendance', 'check'),
+      entry('/daily-work', 'Daily work', 'book'),
+      entry('/timetable', 'Timetable', 'calendar'),
+      entry('/my-leave', 'My leave', 'calendar'),
+      entry('/my-attendance', 'My attendance', 'clock'),
+      entry('/leave-approvals', 'Leave to approve', 'check'),
+      entry('/messages', 'Messages', 'message'),
+      entry('/help', 'Help', 'search'),
+    ];
+    Map<String, Object?> by(String h) => screens.firstWhere((x) => x['href'] == h);
+    final school = ['/attendance', '/daily-work', '/timetable', '/my-leave', '/leave-approvals'];
+    return {
+      'tabs': [
+        entry('/', 'Home', 'home'),
+        if (webTab) by('/leave-approvals') else by('/attendance'),
+        entry('classes', 'Classes', 'book'),
+        by('/messages'),
+        entry('more', 'More', 'grid'),
+      ],
+      'shortcuts': [for (final h in own ?? school) by(h)],
+      'ownShortcuts': own != null,
+      'cards': [
+        for (final (k, l) in [
+          ('approvals', 'Approvals waiting'),
+          ('to_mark', 'Classes to mark'),
+          ('periods_today', "Today's periods"),
+          ('marks_to_enter', 'Marks to enter'),
+          ('my_leave', 'My leave'),
+          ('notices', 'Latest messages'),
+        ])
+          {'key': k, 'label': l, 'labelHi': l, 'href': null},
+      ],
+      'screens': screens,
+      'published': true,
+    };
+  }
 
   dynamic answer(Call c) {
     if (offline) throw const ApiException(0, 'offline', 'No connection');
@@ -43,6 +96,22 @@ class School {
       case 'GET /me/profiles':
         return {
           'data': [staffProfile],
+        };
+      case 'GET /me/staff-layout':
+        return layout();
+      case 'PUT /me/staff-layout/shortcuts':
+        own = [for (final x in c.body!['shortcuts'] as List) '$x'];
+        return layout();
+      case 'DELETE /me/staff-layout/shortcuts':
+        own = null;
+        return layout();
+      case 'GET /comms/inbox':
+        return {
+          'data': [
+            {'id': 'm1', 'title': 'Staff meeting at 3', 'unread': true},
+            {'id': 'm2', 'title': 'Sports day duties', 'unread': false},
+          ],
+          'page': {'more': false},
         };
       case 'GET /me/menu':
         return {
@@ -306,11 +375,12 @@ Future<(FakeTransport, School)> pumpStaff(
   WidgetTester tester, {
   bool hindi = false,
   Size size = const Size(420, 1600),
+  School? with_,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   SharedPreferences.setMockInitialValues({'profile': 'staff:7', 'hindi': hindi});
-  final school = School();
+  final school = with_ ?? School();
   final t = FakeTransport(school.answer);
   final mem = MemorySecureStore();
   final s = SessionStore(mem);
@@ -365,10 +435,11 @@ void main() {
   testWidgets('My day: the figures, today\'s period, the class still to mark; the tabs', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(420, 1500));
+    await tester.binding.setSurfaceSize(const Size(420, 2200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final (t, _) = await pumpStaff(tester);
-    for (final tab in ['My day', 'Attendance', 'Classes', 'Messages', 'More']) {
+    final (t, _) = await pumpStaff(tester, size: const Size(420, 2200));
+    // the school's layout (docs/design/94): Home + Attendance, Classes, Messages + More
+    for (final tab in ['Home', 'Attendance', 'Classes', 'Messages', 'More']) {
       expect(
         find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)),
         findsOneWidget,
@@ -607,6 +678,85 @@ void main() {
     await tester.pumpAndSettle();
     // the native screen, not a web page
     expect(find.byKey(const Key('applyStaffLeave')), findsOneWidget);
+  });
+
+  testWidgets(
+    'Home like the students’: the greeting, the shortcuts with All, the cards in the school’s order',
+    (tester) async {
+      final (t, _) = await pumpStaff(tester, size: const Size(420, 2400));
+      expect(t.calls.where((c) => c.path == '/me/staff-layout'), isNotEmpty);
+      expect(find.textContaining(', Asha'), findsOneWidget);
+      expect(find.text('Shortcuts'), findsOneWidget);
+      for (final k in [
+        'attendance',
+        'dailyWork',
+        'timetable',
+        'myLeave',
+        'leaveApprovals',
+        'all',
+      ]) {
+        expect(find.byKey(Key('shortcut-$k')), findsOneWidget, reason: k);
+      }
+      // the cards in the school's order: approvals first, then classes to mark …
+      final approvalsY = tester.getTopLeft(find.text('Approvals').last).dy;
+      final toMarkY = tester.getTopLeft(find.byKey(const Key('toMark-300'))).dy;
+      expect(approvalsY < toMarkY, isTrue);
+      expect(find.byKey(const Key('homeApproval-leave-701')), findsOneWidget);
+      expect(find.text('Casual leave: 6 available'), findsOneWidget);
+      expect(find.text('Latest messages'), findsOneWidget);
+      expect(find.byKey(const Key('homeMessage-m1')), findsOneWidget);
+      // a native screen opens in the app
+      await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('applyStaffLeave')), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // All: every screen (More)
+      await tester.tap(find.byKey(const Key('shortcut-all')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('moreList')), findsOneWidget);
+    },
+  );
+
+  testWidgets('Edit shortcuts: a staff member keeps their own, then back to the school’s', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2400));
+    await tester.tap(find.byKey(const Key('editShortcuts')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('remove-dailyWork')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-help')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('saveShortcuts')));
+    await tester.pumpAndSettle();
+    final put = t.calls.lastWhere((c) => c.method == 'PUT');
+    expect(put.path, '/me/staff-layout/shortcuts');
+    expect(put.body, {
+      'shortcuts': ['/attendance', '/timetable', '/my-leave', '/leave-approvals', '/help'],
+    });
+    expect(school.own, isNotNull);
+    expect(find.text('Your own shortcuts'), findsOneWidget);
+    expect(find.byKey(const Key('shortcut-help')), findsOneWidget);
+    expect(find.byKey(const Key('shortcut-dailyWork')), findsNothing);
+    await tester.tap(find.byKey(const Key('editShortcuts')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('resetShortcuts')));
+    await tester.pumpAndSettle();
+    expect(
+      t.calls.where((c) => c.method == 'DELETE' && c.path == '/me/staff-layout/shortcuts'),
+      hasLength(1),
+    );
+    expect(find.byKey(const Key('shortcut-dailyWork')), findsOneWidget);
+  });
+
+  testWidgets('a tab the school chose with only a web page opens it from the tab', (tester) async {
+    await pumpStaff(tester, with_: School(webTab: true));
+    await tester.tap(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('Leave to approve')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('openWeb-leaveApprovals')), findsOneWidget);
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

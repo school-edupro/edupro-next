@@ -9,6 +9,7 @@ import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
 import '../ui/home_shell.dart' show nativeScreen;
 import 'assistant.dart' show openAssistant;
+import '../staff/layout.dart' show staffLayoutProvider;
 import '../ui/widgets.dart';
 import 'common.dart';
 import 'data.dart';
@@ -47,6 +48,7 @@ extension LayoutWords on S {
   String get layLibrary => _l('Library books', 'पुस्तकालय की पुस्तकें');
   String get layNoBooks => _l('No books out now.', 'अभी कोई पुस्तक नहीं ली गई।');
   String get layAcademics => _l('Academics', 'शिक्षा');
+  String layOpenScreen(String x) => _l('Open $x', '$x खोलें');
 }
 
 /// A screen of the layout: its path, name (English, put in Hindi by `s.menu`) and the web apps' icon name.
@@ -222,6 +224,16 @@ IconData screenIcon(String href, [String icon = '']) => switch (href) {
   '/consents' => Icons.fact_check_outlined,
   '/assistant' => Icons.smart_toy_outlined,
   '/help' => Icons.help_center_outlined,
+  // staff screens (docs/design/94)
+  'classes' => Icons.class_outlined,
+  '/daily-work' => Icons.edit_note,
+  '/marks' => Icons.grading_outlined,
+  '/my-leave' => Icons.event_busy_outlined,
+  '/my-attendance' => Icons.access_time,
+  '/my-payslips' => Icons.receipt_long_outlined,
+  '/leave-approvals' => Icons.fact_check_outlined,
+  '/my-team' => Icons.groups_outlined,
+  '/office-orders' => Icons.description_outlined,
   _ => menuIcon(icon),
 };
 
@@ -236,6 +248,7 @@ String shortLabel(S s, FamilyEntry e) => switch (e.href) {
   '/calendar' => s.calendar,
   '/notices' => s.notices,
   '/date-sheet' => s.dateSheet,
+  'classes' => s.classes,
   _ => s.menu(e.label),
 };
 
@@ -303,13 +316,20 @@ class _EditShortcutsScreenState extends ConsumerState<EditShortcutsScreen> {
       _error = null;
     });
     try {
-      await ref
-          .read(apiProvider)
-          .familyLayoutSaveMine(
-            kind: _kind,
-            body: FamilyShortcutsDto(shortcuts: [for (final e in _chosen) e.href]),
-          );
-      ref.invalidate(familyLayoutProvider(widget.profile));
+      final hrefs = [for (final e in _chosen) e.href];
+      if (widget.profile.isStaff) {
+        // the staff app's own shortcuts (docs/design/94)
+        await ref.read(apiProvider).staffLayoutSaveMine(body: StaffShortcutsDto(shortcuts: hrefs));
+        ref.invalidate(staffLayoutProvider(widget.profile));
+      } else {
+        await ref
+            .read(apiProvider)
+            .familyLayoutSaveMine(
+              kind: _kind,
+              body: FamilyShortcutsDto(shortcuts: hrefs),
+            );
+        ref.invalidate(familyLayoutProvider(widget.profile));
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
@@ -328,8 +348,13 @@ class _EditShortcutsScreenState extends ConsumerState<EditShortcutsScreen> {
       _error = null;
     });
     try {
-      await ref.read(apiProvider).familyLayoutResetMine(kind: _kind);
-      ref.invalidate(familyLayoutProvider(widget.profile));
+      if (widget.profile.isStaff) {
+        await ref.read(apiProvider).staffLayoutResetMine();
+        ref.invalidate(staffLayoutProvider(widget.profile));
+      } else {
+        await ref.read(apiProvider).familyLayoutResetMine(kind: _kind);
+        ref.invalidate(familyLayoutProvider(widget.profile));
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {

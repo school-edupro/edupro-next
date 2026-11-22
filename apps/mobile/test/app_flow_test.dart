@@ -177,7 +177,9 @@ void main() {
     await enterPin(tester, '1357');
     expect(find.text('The two PINs are not the same.'), findsOneWidget);
     await enterPin(tester, '2468');
-    expect(find.text('My day'), findsWidgets);
+    // the staff Home (docs/design/94): the greeting and the Home tab, as the students'
+    expect(find.textContaining(', Asha'), findsWidgets);
+    expect(find.text('Home'), findsWidgets);
     expect(find.text('Asha Teacher'), findsOneWidget);
     expect(find.textContaining('Staff · Sample School'), findsOneWidget);
   });

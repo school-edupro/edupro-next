@@ -739,6 +739,18 @@ class EduProApi {
   /// GET /insights/assistant/start — The chat's start screen: on for me, my consent, starter and recent questions
   Future<dynamic> insightsStart() =>
       _t.send('GET', '/insights/assistant/start');
+
+  /// GET /me/staff-layout — My staff app layout: tabs, Home shortcuts (mine or the school’s), Home cards
+  Future<dynamic> staffLayoutMine() =>
+      _t.send('GET', '/me/staff-layout');
+
+  /// PUT /me/staff-layout/shortcuts — My own staff Home shortcuts (4 to 12 screens I can open)
+  Future<dynamic> staffLayoutSaveMine({required StaffShortcutsDto body}) =>
+      _t.send('PUT', '/me/staff-layout/shortcuts', body: body.toJson());
+
+  /// DELETE /me/staff-layout/shortcuts — Back to the school’s staff Home shortcuts
+  Future<dynamic> staffLayoutResetMine() =>
+      _t.send('DELETE', '/me/staff-layout/shortcuts');
 }
 
 /** The OtpStartDto the API takes. */
@@ -1531,6 +1543,15 @@ class FamilyHelpVoteDto {
 /** The FamilyShortcutsDto the API takes. */
 class FamilyShortcutsDto {
   const FamilyShortcutsDto({required this.shortcuts});
+  final List<String> shortcuts;
+  Map<String, Object?> toJson() => {
+        'shortcuts': shortcuts,
+      };
+}
+
+/** The StaffShortcutsDto the API takes. */
+class StaffShortcutsDto {
+  const StaffShortcutsDto({required this.shortcuts});
   final List<String> shortcuts;
   Map<String, Object?> toJson() => {
         'shortcuts': shortcuts,

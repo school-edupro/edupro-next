@@ -67,3 +67,13 @@ each person gets); the staff website's own Home and side menu stay as they are.
   Classes offered), Home shortcuts (4–12) and Home work cards (in order), reusing the family editor's ordered list;
   a preview of the staff Home (greeting, the four figures, the tiles with All, the cards, the tab bar). Checked in a
   browser on Alpha (Save caught, nothing saved) with axe; added to the admin accessibility list.
+- **D (22 Nov 2026).** The app (`apps/mobile/lib/staff/layout.dart`): `staffLayoutProvider` (`me/staff-layout`, kept
+  for offline use; the app as it was when none has come), `staffTabs` (Home, the three, More: Attendance opens the
+  Attendance tab, Classes the Classes tab, a screen with only a web page a tab with an Open button), `openStaffScreen`
+  (the app's own screen, else the staff website's page in the app). The staff Home (`my_day.dart`) is the students':
+  "Good morning, <first name>", the four figures, Shortcuts (the school's or the person's own) with All and Edit,
+  then the work cards in the school's order — classes to mark, today's periods, marks to enter, approvals waiting (the
+  first three, See all), my leave (the balances, Open My leave), latest messages (the newest three, See all). Edit
+  shortcuts serves staff too (`me/staff-layout/shortcuts`); the layout is read again when the app comes back. The
+  fixed staff tabs (`tabsFor`) are gone. Tests: `apps/mobile/test/staff_test.dart` (the tabs, the Home, Edit
+  shortcuts, a web-only tab; light, dark, Hindi and 2× text), `app_flow_test.dart`; 213 app tests pass.

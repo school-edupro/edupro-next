@@ -33,8 +33,8 @@ import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
 import '../staff/marks.dart';
 import '../staff/my_attendance.dart';
-import '../staff/my_day.dart';
 import '../staff/my_leave.dart';
+import '../staff/layout.dart' show staffFallback, staffLayoutProvider, staffTabs;
 import 'brand.dart';
 import 'widgets.dart';
 
@@ -70,32 +70,6 @@ List<AppTab> familyTabs(Profile p, S s, FamilyLayoutView layout) => [
       ),
     },
 ];
-
-/// The tabs of a profile (docs/design/89 §5.2): a parent's Home, Academics, Fees, Messages, More; a student's Home,
-/// Homework, Timetable, Results, More; staff (phase C) Home and More.
-List<AppTab> tabsFor(Profile p, S s) => switch (p.kind) {
-  'parent' => [
-    AppTab(Icons.home_outlined, s.home, (p) => TodayScreen(profile: p)),
-    AppTab(Icons.menu_book_outlined, s.academics, (p) => AcademicsScreen(profile: p)),
-    AppTab(Icons.account_balance_wallet_outlined, s.fees, (p) => FeesScreen(profile: p)),
-    AppTab(Icons.chat_bubble_outline, s.messages, (p) => MessagesScreen(profile: p)),
-    AppTab(Icons.apps, s.more, (p) => MoreList(profile: p)),
-  ],
-  'student' => [
-    AppTab(Icons.home_outlined, s.home, (p) => TodayScreen(profile: p)),
-    AppTab(Icons.menu_book_outlined, s.homework, (p) => HomeworkScreen(profile: p)),
-    AppTab(Icons.calendar_month_outlined, s.timetable, (p) => TimetableScreen(profile: p)),
-    AppTab(Icons.insert_chart_outlined, s.results, (p) => ResultsScreen(profile: p)),
-    AppTab(Icons.apps, s.more, (p) => MoreList(profile: p)),
-  ],
-  _ => [
-    AppTab(Icons.today_outlined, s.myDay, (p) => MyDayScreen(profile: p)),
-    AppTab(Icons.fact_check_outlined, s.attendance, (p) => StaffAttendanceTab(profile: p)),
-    AppTab(Icons.class_outlined, s.classes, (p) => ClassesTab(profile: p)),
-    AppTab(Icons.chat_bubble_outline, s.messages, (p) => MessagesScreen(profile: p)),
-    AppTab(Icons.apps, s.more, (p) => MoreList(profile: p)),
-  ],
-};
 
 /// A web page of the menu that has a screen in the app: More opens that instead (docs/design/89 §5.5).
 Widget? nativeScreen(Profile p, String href, S s) {
@@ -193,6 +167,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     final p = ref.read(profilesProvider).value?.current;
+    if (p != null && p.isStaff) {
+      // the school may have published a new staff layout meanwhile (docs/design/94)
+      ref.invalidate(staffLayoutProvider(p));
+      ref.invalidate(menuProvider(p.id));
+    }
     if (p != null && !p.isStaff) {
       ref.invalidate(familyLayoutProvider(p));
       // the side menu's order and names (More) may have been published too
@@ -216,7 +195,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
           );
         }
         final tabs = p.isStaff
-            ? tabsFor(p, s)
+            // the school's staff layout (docs/design/94): Home, three chosen, More
+            ? staffTabs(p, s, ref.watch(staffLayoutProvider(p)).value ?? staffFallback())
             : familyTabs(
                 p,
                 s,

@@ -2,10 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../family/common.dart';
+import '../family/data.dart' show Loaded, inboxProvider;
+import '../family/layout.dart';
+import '../family/messages.dart' show MessagesScreen;
 import '../family/today.dart' show ClassesCard;
+import 'layout.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
+import '../ui/home_shell.dart' show MoreList;
 import '../ui/outbox_view.dart';
 import 'approvals.dart';
 import 'class_attendance.dart';
@@ -41,10 +46,22 @@ List<Json> periodsToday(Json week, DateTime today) {
   return rows..sort((a, b) => order(a).compareTo(order(b)));
 }
 
-/// A staff member's Home (docs/design/89 §5.2; look B): the navy band goes on with the date and "My day", the
-/// figures card sits half over it — periods today, classes to mark, marks to enter, approvals waiting — then the
-/// classes still to mark (Mark now), today's periods (now marked) and the marks waiting. Each part loads on its
-/// own. Today's rolls are fetched here too, so they can be marked later with no network.
+/// The words of the staff Home's cards (docs/design/94), in English and Hindi.
+extension StaffHomeWords on S {
+  String _h(String en, String hi) => hindi ? hi : en;
+
+  String get nothingWaitingForYou =>
+      _h('Nothing is waiting for your decision.', 'आपके निर्णय के लिए कुछ प्रतीक्षा में नहीं है।');
+  String get latestMessages => _h('Latest messages', 'नवीनतम संदेश');
+  String get noMessages => _h('No messages yet.', 'अभी कोई संदेश नहीं।');
+  String get openMyLeave => _h('Open My leave', 'मेरा अवकाश खोलें');
+}
+
+/// A staff member's Home (docs/design/94, look B as the students'): the navy band with the date and "Good morning"
+/// with the first name, the figures card half over it — periods today, classes to mark, marks to enter, approvals waiting —
+/// then the Shortcuts (the school's or the person's own, with All and Edit) and the work cards in the school's order:
+/// classes to mark (Mark now), today's periods, marks to enter, approvals waiting, my leave, latest messages. Each
+/// part loads on its own. Today's rolls are fetched here too, so they can be marked later with no network.
 class MyDayScreen extends ConsumerStatefulWidget {
   const MyDayScreen({super.key, required this.profile});
   final Profile profile;
@@ -94,6 +111,13 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
     String fig(Object? v) => v == null ? '…' : '$v';
 
     final now = DateTime.now();
+    // the school's staff layout (docs/design/94): the shortcuts (or the person's own) and the cards in its order
+    final layout = ref.watch(staffLayoutProvider(p)).value ?? staffFallback();
+    final cardKeys = [for (final c in layout.cards) c.key];
+    final first = p.name.split(RegExp(r'\s+')).first;
+    final leave = cardKeys.contains('my_leave') ? ref.watch(myLeaveProvider(p)) : null;
+    final inbox = cardKeys.contains('notices') ? ref.watch(inboxProvider((p, 1))) : null;
+    void open(String title, Widget screen) => pushPage(context, title, screen);
     final rows = [
       for (final x in periods ?? const <Json>[])
         {
@@ -117,6 +141,9 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
         ref.invalidate(assignmentsProvider(p));
         ref.invalidate(toEnterProvider(p));
         ref.invalidate(approvalsProvider(p));
+        ref.invalidate(staffLayoutProvider(p));
+        if (leave != null) ref.invalidate(myLeaveProvider(p));
+        if (inbox != null) ref.invalidate(inboxProvider((p, 1)));
         _warmed = false;
         return ref.refresh(daySummaryProvider((p, day)).future);
       },
@@ -129,7 +156,7 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
           children: [
             HomeBand(
               date: s.dayLong(now),
-              heading: s.myDay,
+              heading: '${s.greeting(now)}, $first',
               detail: p.detail,
               figures: FigureGrid(
                 raised: true,
@@ -165,55 +192,103 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: Tokens.sp3),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Tokens.sp4, 0, Tokens.sp2, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        layout.ownShortcuts ? s.layOwn : s.shortcuts,
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: Tokens.fwSemibold),
+                      ),
+                    ),
+                  ),
+                  if (layout.screens.isNotEmpty)
+                    TextButton.icon(
+                      key: const Key('editShortcuts'),
+                      icon: const Icon(Icons.tune, size: 18),
+                      label: Text(s.layEdit),
+                      onPressed: () =>
+                          open(s.layEditTitle, EditShortcutsScreen(profile: p, layout: layout)),
+                    ),
+                ],
+              ),
+            ),
+            ShortcutGrid(
+              label: s.shortcuts,
+              items: [
+                for (final e in layout.shortcuts)
+                  (
+                    screenKey(e.href),
+                    shortLabel(s, e),
+                    screenIcon(e.href, e.icon),
+                    () => openStaffScreen(context, s, p, e),
+                  ),
+                // every screen: the More list
+                ('all', s.layAll, Icons.apps, () => open(s.more, MoreList(profile: p))),
+              ],
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Tokens.sp4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: Tokens.sp3),
+                  const SizedBox(height: Tokens.sp2),
                   const OutboxBanner(),
                   if (stale.isNotEmpty) ...[
                     const SizedBox(height: Tokens.sp3),
                     StaleLine(at: stale.first.at),
                   ],
-                  if (toMark == null && !(assignments.hasError || summary.hasError)) ...[
-                    const SizedBox(height: Tokens.sp4),
-                    const LinearProgressIndicator(),
-                  ],
-                  for (final x in toMark ?? const <Json>[]) ...[
-                    const SizedBox(height: Tokens.sp3),
-                    _ToMarkCard(
-                      key: Key('toMark-${x['classSectionId']}'),
-                      section: '${x['section']}',
-                      onOpen: () => pushPage(
-                        context,
-                        s.markClass,
-                        MarkClassScreen(profile: p, sectionId: '${x['classSectionId']}'),
-                      ),
-                    ),
-                  ],
-                  SectionTitle(s.todaysPeriods),
-                  if (periods == null && !week.hasError) const LinearProgressIndicator(),
-                  if (periods != null && periods.isEmpty) EmptyLine(s.noPeriods),
-                  if (rows.isNotEmpty) ClassesCard(rows: rows, now: now),
-                  if (toMark != null && toMark.isEmpty) ...[
-                    SectionTitle(s.toMark),
-                    EmptyLine(s.allMarked),
-                  ],
-                  SectionTitle(s.toEnter),
-                  if (marks != null && marks.isEmpty) EmptyLine(s.nothingToEnter),
-                  for (final x in marks?.take(5) ?? const <Json>[])
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.edit_note),
-                        title: Text('${x['exam']} · ${x['section']}'),
-                        subtitle: Text(
-                          '${x['what']} · ${s.enteredOf((x['done'] as num? ?? 0).toInt(), (x['total'] as num? ?? 0).toInt())}',
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => pushPage(context, s.marksEntry, MarksHome(profile: p)),
-                      ),
-                    ),
+                  for (final k in cardKeys)
+                    ...switch (k) {
+                      'to_mark' => [
+                        SectionTitle(s.toMark),
+                        if (toMark == null && !(assignments.hasError || summary.hasError))
+                          const LinearProgressIndicator(),
+                        if (toMark != null && toMark.isEmpty) EmptyLine(s.allMarked),
+                        for (final x in toMark ?? const <Json>[]) ...[
+                          _ToMarkCard(
+                            key: Key('toMark-${x['classSectionId']}'),
+                            section: '${x['section']}',
+                            onOpen: () => open(
+                              s.markClass,
+                              MarkClassScreen(profile: p, sectionId: '${x['classSectionId']}'),
+                            ),
+                          ),
+                          const SizedBox(height: Tokens.sp3),
+                        ],
+                      ],
+                      'periods_today' => [
+                        SectionTitle(s.todaysPeriods),
+                        if (periods == null && !week.hasError) const LinearProgressIndicator(),
+                        if (periods != null && periods.isEmpty) EmptyLine(s.noPeriods),
+                        if (rows.isNotEmpty) ClassesCard(rows: rows, now: now),
+                      ],
+                      'marks_to_enter' => [
+                        SectionTitle(s.toEnter),
+                        if (marks != null && marks.isEmpty) EmptyLine(s.nothingToEnter),
+                        for (final x in marks?.take(5) ?? const <Json>[])
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.edit_note),
+                              title: Text('${x['exam']} · ${x['section']}'),
+                              subtitle: Text(
+                                '${x['what']} · ${s.enteredOf((x['done'] as num? ?? 0).toInt(), (x['total'] as num? ?? 0).toInt())}',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => open(s.marksEntry, MarksHome(profile: p)),
+                            ),
+                          ),
+                      ],
+                      'approvals' => _approvalsCard(context, s, approvals),
+                      'my_leave' => _leaveCard(context, s, leave),
+                      'notices' => _messagesCard(context, s, inbox),
+                      _ => const <Widget>[],
+                    },
                 ],
               ),
             ),
@@ -221,6 +296,109 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
         ),
       ),
     );
+  }
+}
+
+extension on _MyDayScreenState {
+  void _open(BuildContext context, String title, Widget screen) => pushPage(context, title, screen);
+
+  /// Approvals waiting: the first three, and See all (the approvals inbox).
+  List<Widget> _approvalsCard(BuildContext context, S s, AsyncValue<Loaded<Json>> v) {
+    final p = widget.profile;
+    final box = v.value?.data;
+    final items = asList(box?['items']);
+    return [
+      SectionTitle(s.approvals),
+      if (box == null && !v.hasError) const LinearProgressIndicator(),
+      if (box != null && items.isEmpty) EmptyLine(s.nothingWaitingForYou),
+      for (final i in items.take(3))
+        Card(
+          child: ListTile(
+            key: Key('homeApproval-${i['kind']}-${i['id']}'),
+            leading: const Icon(Icons.fact_check_outlined),
+            title: Text('${i['title']}', maxLines: 2, overflow: TextOverflow.ellipsis),
+            subtitle: i['detail'] == null ? null : Text('${i['detail']}', maxLines: 2),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _open(context, s.approvals, ApprovalsScreen(profile: p)),
+          ),
+        ),
+      if (items.length > 3)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: const Key('homeApprovalsAll'),
+            onPressed: () => _open(context, s.approvals, ApprovalsScreen(profile: p)),
+            child: Text(s.seeAll),
+          ),
+        ),
+    ];
+  }
+
+  /// My leave: the balances, and Open My leave.
+  List<Widget> _leaveCard(BuildContext context, S s, AsyncValue<Loaded<Json>>? v) {
+    final p = widget.profile;
+    final m = v?.value?.data;
+    final balances = asList(m?['balances']);
+    return [
+      SectionTitle(s.myLeave),
+      if (m == null && !(v?.hasError ?? false)) const LinearProgressIndicator(),
+      if (m != null && balances.isEmpty) EmptyLine(s.nothingYet),
+      if (balances.isNotEmpty)
+        Wrap(
+          spacing: Tokens.sp2,
+          runSpacing: Tokens.sp2,
+          children: [
+            for (final b in balances)
+              Chip(label: Text('${b['name']}: ${s.available('${b['available']}')}')),
+          ],
+        ),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          key: const Key('homeOpenLeave'),
+          onPressed: () => _open(context, s.myLeave, MyLeaveScreen(profile: p)),
+          child: Text(s.openMyLeave),
+        ),
+      ),
+    ];
+  }
+
+  /// Latest messages: the newest three, and See all.
+  List<Widget> _messagesCard(BuildContext context, S s, AsyncValue<Loaded<Json>>? v) {
+    final p = widget.profile;
+    final inbox = v?.value?.data;
+    final items = asList(inbox?['data']);
+    return [
+      SectionTitle(s.latestMessages),
+      if (inbox == null && !(v?.hasError ?? false)) const LinearProgressIndicator(),
+      if (inbox != null && items.isEmpty) EmptyLine(s.noMessages),
+      for (final m in items.take(3))
+        Card(
+          child: ListTile(
+            key: Key('homeMessage-${m['id']}'),
+            leading: Icon(
+              m['unread'] == true ? Icons.mark_email_unread_outlined : Icons.mail_outline,
+            ),
+            title: Text(
+              '${m['title'] ?? m['subject'] ?? ''}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: m['unread'] == true ? const TextStyle(fontWeight: Tokens.fwBold) : null,
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _open(context, s.messages, MessagesScreen(profile: p)),
+          ),
+        ),
+      if (items.isNotEmpty)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: const Key('homeMessagesAll'),
+            onPressed: () => _open(context, s.messages, MessagesScreen(profile: p)),
+            child: Text(s.seeAll),
+          ),
+        ),
+    ];
   }
 }
 

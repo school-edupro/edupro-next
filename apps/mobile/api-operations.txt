@@ -220,3 +220,8 @@ FamilyLayoutController_resetMine
 
 # the chatbot's start screen (docs/design/91 phase D): on for me, consent, starter and recent questions
 InsightsController_start
+
+# the staff app's layout kept by the school (docs/design/94 phase D): tabs, Home shortcuts and cards; my own shortcuts
+StaffLayoutController_mine
+StaffLayoutController_saveMine
+StaffLayoutController_resetMine
