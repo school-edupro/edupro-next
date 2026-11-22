@@ -8,6 +8,7 @@ import {
   checkStaffLayout,
   myStaffLayout,
   staffLayoutScreens,
+  staffLayoutOf,
   type StaffLayout,
 } from '@edupro/menus';
 import type { PoolClient } from '@edupro/db';
@@ -36,14 +37,24 @@ const AUDIENCE = 'staff';
 const PREF = 'staff.shortcuts';
 
 /** The lists in a fixed order (so two layouts compare by their JSON). */
-const tidy = (l: StaffLayout): StaffLayout => ({
-  tabs: [...l.tabs],
-  shortcuts: [...l.shortcuts],
-  cards: [...l.cards],
-  // a layout kept before the menu was arranged has none: the menu as built
-  menu: staffMenuOf(l),
-  hidden: [...(l.hidden ?? [])],
-});
+const tidy = (given: StaffLayout): StaffLayout => {
+  // a layout kept before the list tabs (part 3) has the two standard ones; its tab /attendance becomes that list
+  const l = staffLayoutOf(given);
+  return {
+    tabs: [...l.tabs],
+    shortcuts: [...l.shortcuts],
+    cards: [...l.cards],
+    // a layout kept before the menu was arranged has none: the menu as built
+    menu: staffMenuOf(l),
+    hidden: [...(l.hidden ?? [])],
+    lists: l.lists.map((x) => ({
+      key: x.key,
+      label: x.label.trim(),
+      labelHi: x.labelHi?.trim() || null,
+      items: [...x.items],
+    })),
+  };
+};
 const same = (x: StaffLayout, y: StaffLayout) =>
   JSON.stringify(tidy(x)) === JSON.stringify(tidy(y));
 

@@ -18,7 +18,14 @@ import {
 } from './helpers';
 
 interface Mine {
-  tabs: Array<{ href: string; label: string }>;
+  tabs: Array<{ href: string; label: string; labelHi?: string | null; icon?: string }>;
+  lists: Array<{
+    key: string;
+    label: string;
+    labelHi: string | null;
+    icon: string;
+    items: Array<{ href: string }>;
+  }>;
   shortcuts: Array<{ href: string }>;
   ownShortcuts: boolean;
   cards: Array<{ key: string; href: string | null }>;
@@ -69,7 +76,13 @@ describe('the staff app layout (e2e, docs/design/94 phase B)', () => {
   it('the standard layout until the school publishes: the app’s tabs as they were', async () => {
     const t = await mine(teacher);
     expect(t.published).toBe(false);
-    expect(hrefs(t.tabs)).toEqual(['/', '/attendance', 'classes', '/messages', 'more']);
+    expect(hrefs(t.tabs)).toEqual(['/', 'attendance', 'classes', '/messages', 'more']);
+    // the two standard list tabs (part 3), as the app had them
+    expect(t.lists.map((x) => [x.key, x.label, x.labelHi])).toEqual([
+      ['attendance', 'Attendance', 'उपस्थिति'],
+      ['classes', 'Classes', 'कक्षाएँ'],
+    ]);
+    expect(hrefs(t.lists[0]!.items)).toEqual(['/attendance', '/my-attendance', '/my-leave']);
     expect(hrefs(t.shortcuts)).toEqual(
       expect.arrayContaining(['/attendance', '/daily-work', '/marks']),
     );
@@ -133,7 +146,7 @@ describe('the staff app layout (e2e, docs/design/94 phase B)', () => {
     // not yet for staff
     expect(hrefs((await mine(teacher)).tabs)).toEqual([
       '/',
-      '/attendance',
+      'attendance',
       'classes',
       '/messages',
       'more',
@@ -315,6 +328,93 @@ describe('the staff app layout (e2e, docs/design/94 phase B)', () => {
       (await inject({ method: 'GET', url: '/academics/timetable/mine', headers: h(teacher) }))
         .statusCode,
     ).not.toBe(404);
+  });
+
+  it('tab lists: renamed, given screens, the school’s own; who gets each (part 3)', async () => {
+    const setup = (
+      await inject({ method: 'GET', url: '/platform/staff-app-layout', headers: h(admin) })
+    ).json() as {
+      draft: Record<string, unknown> & {
+        lists: Array<{ key: string; label: string; labelHi: string | null; items: string[] }>;
+      };
+    };
+    expect(setup.draft.lists.map((x) => x.key)).toEqual(['attendance', 'classes']);
+    const put = (json: unknown) =>
+      inject({ method: 'PUT', url: '/platform/staff-app-layout', headers: h(admin), json });
+    // checked: a bad key, a long name, an empty list, a screen it cannot have, a tab naming no list
+    const bad = await put({
+      ...setup.draft,
+      tabs: ['attendance', 'nowhere', '/messages'],
+      lists: [
+        { key: 'Bad Key', label: 'Fine', labelHi: null, items: ['/messages'] },
+        { key: 'attendance', label: 'A name far too long here', labelHi: null, items: [] },
+        { key: 'classes', label: 'Classes', labelHi: null, items: ['/nowhere'] },
+      ],
+    });
+    expect(bad.statusCode).toBe(400);
+    const errors = bad.json().errors as string[];
+    expect(errors).toContain("Bad Key cannot be a tab list's key.");
+    expect(errors).toContain("A tab list's name takes 1 to 20 letters.");
+    expect(errors).toContain('The tab list A name far too long here takes 1 to 12 screens.');
+    expect(errors).toContain('/nowhere cannot be in the tab list Classes.');
+    expect(errors).toContain('nowhere cannot be a tab here.');
+
+    // Attendance renamed and given Leave to approve; Classes without payslips; the school's own Office list
+    const lists = [
+      {
+        key: 'attendance',
+        label: 'Attendance & leave',
+        labelHi: 'उपस्थिति और अवकाश',
+        items: ['/attendance', '/my-attendance', '/my-leave', '/leave-approvals'],
+      },
+      { key: 'classes', label: 'Classes', labelHi: null, items: ['/daily-work', '/marks'] },
+      {
+        key: 'list-office',
+        label: 'Office',
+        labelHi: null,
+        items: ['/office-orders', '/messages', '/help'],
+      },
+    ];
+    expect(
+      (await put({ ...setup.draft, tabs: ['attendance', 'list-office', 'classes'], lists }))
+        .statusCode,
+    ).toBe(200);
+    await inject({ method: 'POST', url: '/platform/staff-app-layout/publish', headers: h(admin) });
+
+    const t = await mine(teacher);
+    expect(hrefs(t.tabs)).toEqual(['/', 'attendance', 'list-office', 'classes', 'more']);
+    expect(t.tabs[1]).toMatchObject({ label: 'Attendance & leave', labelHi: 'उपस्थिति और अवकाश' });
+    expect(t.lists.map((x) => x.key)).toEqual(['attendance', 'list-office', 'classes']);
+    const office = t.lists.find((x) => x.key === 'list-office')!;
+    // the help desk is hidden (part 2): left out of the list too
+    expect(hrefs(office.items)).not.toContain('/help');
+    expect(hrefs(t.lists.find((x) => x.key === 'classes')!.items)).toEqual([
+      '/daily-work',
+      '/marks',
+    ]);
+
+    // the clerk cannot mark a class or post daily work: no Attendance or Classes tab, the places go on
+    const c = await mine(clerk);
+    expect(hrefs(c.tabs)).not.toContain('attendance');
+    expect(hrefs(c.tabs)).not.toContain('classes');
+    expect(c.tabs).toHaveLength(5);
+    for (const x of c.lists) for (const i of x.items) expect(hrefs(c.screens)).toContain(i.href);
+
+    // a layout kept before the lists: its /attendance tab is the Attendance list
+    expect(
+      (
+        await put({
+          tabs: ['/attendance', 'classes', '/messages'],
+          shortcuts: ['/attendance', '/messages', '/my-leave', '/help'],
+          cards: ['approvals'],
+        })
+      ).statusCode,
+    ).toBe(200);
+    const kept = (
+      await inject({ method: 'GET', url: '/platform/staff-app-layout', headers: h(admin) })
+    ).json() as { draft: { tabs: string[]; lists: Array<{ key: string }> } };
+    expect(kept.draft.tabs).toEqual(['attendance', 'classes', '/messages']);
+    expect(kept.draft.lists.map((x) => x.key)).toEqual(['attendance', 'classes']);
   });
 
   it('only the settings rights change the layout', async () => {

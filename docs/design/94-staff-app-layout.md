@@ -127,3 +127,39 @@ the Classes page, Home tiles) and the app's More · **I** close.
   local secret scan pass. The test school used for the browser check is switched off again; Alpha has no published
   staff layout, so its staff see the menus as before until the office publishes one (System → Settings → App layouts
   → Arrange the staff app).
+
+## Part 3: tab lists (asked 22 Nov 2026)
+
+"Staff app layout: the Attendance and Classes tabs cannot be given screens, as the student app's Academics tab can;
+and the admin should rename them."
+
+| Question                   | Answer                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| The Attendance and Classes | List tabs the school edits: its screens in order and the tab's name; it may add its own    |
+| The families' Academics    | Gets a name the school can change too (English and Hindi); its list works as before         |
+
+Decided without asking:
+
+- **Lists.** A list tab has a name (1–20 letters; a Hindi name optional), 1–12 staff screens in order and the icon of
+  its first screen. A school keeps up to five lists; the bottom tabs choose among screens and lists. A layout starts
+  with the app's two: **Attendance** (Mark a class, My attendance, My leave) and **Classes** (Daily work, Marks,
+  Timetable, My payslips) — as the app is today.
+- **Who gets a list tab.** A person who can open its **first** screen (as today: Attendance for those who mark a
+  class, Classes for those who post daily work); its place otherwise goes to the next shortcut. Inside, each person
+  sees only the screens they can open; hidden screens are left out.
+- **Layouts kept before.** A layout with no lists gets the two standard ones, and its tab `/attendance` becomes the
+  Attendance list (what the app showed).
+- **Where it shows.** The app's tabs (the Attendance list keeps the "waiting to send" banner of offline marks), the
+  staff website's phone bar (a list opens `/tabs/<key>`, which replaces the `/classes` page) and the preview. The
+  families' Academics name shows on the app's tab, the parent website's phone bar and its Academics page.
+
+Phases: **J** the model and the API · **K** admin's sections · **L** the app and the two websites · **M** close.
+
+- **J (22 Nov 2026).** `staff-layout.ts`: `StaffListTab`, `StaffLayout.lists`, `defaultStaffLists` (Attendance,
+  Classes), `staffLayoutOf` (a layout kept before: the two lists, `/attendance` → the Attendance list), the checks (at
+  most five lists, keys `a-z0-9-`, names 1–20 letters, 1–12 known screens each, tabs naming a screen or a list);
+  `myStaffLayout` gives a list tab to those who can open its first shown screen (its icon) and returns `lists` with
+  the screens each person can open; tab entries carry `labelHi`. `family-layout.ts`: `academicsLabel` /
+  `academicsLabelHi` (1–20 letters), the Academics tab and `MyFamilyLayout` carry the name. The API's bodies and
+  tidy steps take them (no migration: layouts are JSON). Tests: `staff-layout.e2e-spec.ts` (7),
+  `family-layout.e2e-spec.ts` (9); the mobile and permission suites pass.

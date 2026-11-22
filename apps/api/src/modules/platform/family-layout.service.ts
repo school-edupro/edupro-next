@@ -39,6 +39,9 @@ const tidy = (a: Audience, l: FamilyLayout): FamilyLayout => ({
   // a layout kept before the side menu was arranged has none: the menu as built
   menu: familyMenuOf(a, l),
   hidden: [...(l.hidden ?? [])],
+  // the Academics tab's name (docs/design/94, part 3): none kept before, the standard one
+  academicsLabel: l.academicsLabel?.trim() || null,
+  academicsLabelHi: l.academicsLabelHi?.trim() || null,
 });
 const same = (a: Audience, x: FamilyLayout, y: FamilyLayout) =>
   JSON.stringify(tidy(a, x)) === JSON.stringify(tidy(a, y));

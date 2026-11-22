@@ -31,10 +31,14 @@ interface Layout {
   academics: string[];
   menu?: Group[];
   hidden?: string[];
+  academicsLabel?: string | null;
+  academicsLabelHi?: string | null;
 }
 interface Mine {
   audience: string;
-  tabs: Array<{ href: string; label: string; icon: string }>;
+  tabs: Array<{ href: string; label: string; icon: string; labelHi?: string | null }>;
+  academicsLabel: string;
+  academicsLabelHi: string | null;
   shortcuts: Array<{ href: string; label: string; icon: string }>;
   ownShortcuts: boolean;
   cards: Array<{ key: string; label: string; labelHi: string; href: string }>;
@@ -288,6 +292,36 @@ describe('family app layout (e2e)', () => {
     expect((await act('student', 'discard')).statusCode).toBe(200);
     const s = await setup();
     expect(s.layouts.student).toMatchObject({ draft: live, changed: false });
+  });
+
+  it('the Academics tab keeps the name the school gives it (docs/design/94, part 3)', async () => {
+    const live = (await setup()).layouts.parent.published;
+    const layout = { ...live, tabs: ['academics', '/fees', '/messages'] };
+    const bad = await save('parent', { ...layout, academicsLabel: 'A name far too long here' });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().errors).toContain("The Academics tab's name takes 1 to 20 letters.");
+    expect(
+      (await save('parent', { ...layout, academicsLabel: 'Studies', academicsLabelHi: 'पढ़ाई' }))
+        .statusCode,
+    ).toBe(200);
+    // not before it is published
+    expect((await mine(parent, 'parent')).academicsLabel).toBe('Academics');
+    expect((await act('parent', 'publish')).statusCode).toBe(200);
+    const pa = await mine(parent, 'parent');
+    expect(pa).toMatchObject({ academicsLabel: 'Studies', academicsLabelHi: 'पढ़ाई' });
+    expect(pa.tabs.find((x) => x.href === 'academics')).toMatchObject({
+      label: 'Studies',
+      labelHi: 'पढ़ाई',
+    });
+    // emptied: the standard name again
+    expect(
+      (await save('parent', { ...layout, academicsLabel: '', academicsLabelHi: null })).statusCode,
+    ).toBe(200);
+    expect((await act('parent', 'publish')).statusCode).toBe(200);
+    expect(await mine(parent, 'parent')).toMatchObject({
+      academicsLabel: 'Academics',
+      academicsLabelHi: null,
+    });
   });
 
   it('a person keeps their own Home shortcuts, and can go back to the school’s', async () => {

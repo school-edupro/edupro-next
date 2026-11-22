@@ -18,6 +18,10 @@ export interface FamilyLayout {
   cards: string[];
   /** The screens the Academics tab lists, in order. */
   academics: string[];
+  /** The Academics tab's name the school gave (docs/design/94, part 3); null or none: Academics. */
+  academicsLabel?: string | null;
+  /** Its Hindi name (null or none: the dictionary's). */
+  academicsLabelHi?: string | null;
   /**
    * The website's side menu and the app's More list: the groups in order, each with the school's name for it (null:
    * the standard one) and its screens in order — every screen of the audience in exactly one group. None: as built.
@@ -191,6 +195,7 @@ export const LAYOUT_LIMITS = {
   cards: { min: 1, max: FAMILY_CARDS.length },
   academics: { min: 2, max: 12 },
   groupName: 40,
+  tabName: 20,
 } as const;
 
 /** What is wrong with a layout for an audience (empty: it may be saved). */
@@ -226,6 +231,14 @@ export function checkFamilyLayout(audience: Audience, l: FamilyLayout): string[]
     if (!screens.has(a)) problems.push(`${a} cannot be in the Academics list here.`);
   if (l.tabs.includes(ACADEMICS_TAB) && l.academics.length < LAYOUT_LIMITS.academics.min)
     problems.push('With an Academics tab, its list needs at least two screens.');
+  for (const [what, v] of [
+    ['name', l.academicsLabel],
+    ['Hindi name', l.academicsLabelHi],
+  ] as const)
+    if (v != null && (v.trim().length < 1 || v.trim().length > LAYOUT_LIMITS.tabName))
+      problems.push(
+        `The Academics tab's ${what} takes 1 to ${String(LAYOUT_LIMITS.tabName)} letters.`,
+      );
   if (l.menu) {
     const keys = new Set(MENU_GROUPS.map((g) => g.section));
     const given = l.menu.map((g) => g.key);
@@ -257,6 +270,8 @@ export interface FamilyEntry {
   href: string;
   label: string;
   icon: string;
+  /** The Academics tab's Hindi name the school gave (null or absent: through the dictionary). */
+  labelHi?: string | null;
 }
 export interface MyFamilyLayout {
   audience: Audience;
@@ -267,6 +282,9 @@ export interface MyFamilyLayout {
   ownShortcuts: boolean;
   cards: Array<{ key: string; label: string; labelHi: string; href: string }>;
   academics: FamilyEntry[];
+  /** The Academics tab's name (the school's, else Academics) and its Hindi name (null: the dictionary's). */
+  academicsLabel: string;
+  academicsLabelHi: string | null;
   /** Every screen the person may open (the choices of "Edit shortcuts"). */
   screens: FamilyEntry[];
   /** The screens the school hides from families (their web address says the school does not offer them). */
@@ -306,8 +324,12 @@ export function myFamilyLayout(
   const entry = (h: string) => byHref.get(h);
   const pick = (hrefs: string[]) => hrefs.map(entry).filter((e): e is FamilyEntry => !!e);
   const academics = pick(layout.academics);
+  const academicsLabel = layout.academicsLabel?.trim() || 'Academics';
+  const academicsLabelHi = layout.academicsLabelHi?.trim() || null;
   const academicsTab: FamilyEntry | null =
-    academics.length > 0 ? { href: ACADEMICS_TAB, label: 'Academics', icon: 'book' } : null;
+    academics.length > 0
+      ? { href: ACADEMICS_TAB, label: academicsLabel, labelHi: academicsLabelHi, icon: 'book' }
+      : null;
   const tabs: FamilyEntry[] = [];
   for (const t of layout.tabs) {
     const e = t === ACADEMICS_TAB ? academicsTab : entry(t);
@@ -336,6 +358,8 @@ export function myFamilyLayout(
       )
       .map((c) => ({ key: c.key, label: c.label, labelHi: c.labelHi, href: c.needs })),
     academics,
+    academicsLabel,
+    academicsLabelHi,
     screens: open,
     hidden: [...hidden],
     menu: familyMenuOf(audience, layout)

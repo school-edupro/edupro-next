@@ -32,6 +32,18 @@ export const StaffLayoutSchema = z.object({
     .optional(),
   // screens hidden from staff (left out of every menu; their pages still open from a link)
   hidden: z.array(Path).max(80).optional(),
+  // the list tabs (docs/design/94, part 3): a key, a name, a Hindi name, the screens in order
+  lists: z
+    .array(
+      z.object({
+        key: z.string().trim().min(1).max(40),
+        label: z.string().trim().max(80),
+        labelHi: GroupName,
+        items: z.array(Path).max(30),
+      }),
+    )
+    .max(10)
+    .optional(),
 });
 export class StaffLayoutDto extends createZodDto(StaffLayoutSchema) {}
 

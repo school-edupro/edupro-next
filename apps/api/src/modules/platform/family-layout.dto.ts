@@ -35,6 +35,9 @@ export const FamilyLayoutSchema = z.object({
     .optional(),
   // screens hidden from families (app and website)
   hidden: z.array(Path).max(40).optional(),
+  // the Academics tab's name and Hindi name the school gave (docs/design/94, part 3); empty: the standard name
+  academicsLabel: GroupName,
+  academicsLabelHi: GroupName,
 });
 export class FamilyLayoutDto extends createZodDto(FamilyLayoutSchema) {}
 

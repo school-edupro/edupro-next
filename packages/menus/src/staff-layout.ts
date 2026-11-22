@@ -6,11 +6,26 @@
  */
 import { STAFF_MENU, screenIcon, staffScreens, type StaffWaiting } from './staff';
 
-/** The app's Classes tab (my sections: homework, marks), which is not a menu screen of its own. */
+/** The standard list tabs (docs/design/94, part 3): the app's Attendance and Classes tabs as they were. */
+export const ATTENDANCE_LIST = 'attendance';
 export const CLASSES_TAB = 'classes';
 
+/**
+ * A tab that lists screens the school chose (docs/design/94, part 3), as the families' Academics tab: its name (and
+ * Hindi name), its screens in order; its icon is its first screen's. A person gets the tab when they can open its
+ * first screen the school has not hidden; inside, only the screens they can open.
+ */
+export interface StaffListTab {
+  /** What the tabs name it by: lower-case letters, digits and dashes (e.g. `attendance`, `list-3`). */
+  key: string;
+  label: string;
+  /** null: the name goes through the apps' dictionary. */
+  labelHi: string | null;
+  items: string[];
+}
+
 export interface StaffLayout {
-  /** The three tabs between Home and More: staff screens or `classes`. */
+  /** The three tabs between Home and More: staff screens or list keys (`lists`). */
   tabs: string[];
   /** The Home shortcut tiles, in order (4 to 12). */
   shortcuts: string[];
@@ -28,6 +43,8 @@ export interface StaffLayout {
    * (Access → Roles) still decide what a person may do.
    */
   hidden?: string[];
+  /** The list tabs the school keeps (up to five; the tabs choose among them). None: the two standard ones. */
+  lists?: StaffListTab[];
 }
 
 export interface StaffMenuGroupLayout {
@@ -124,9 +141,42 @@ export function staffHiddenScreens(l: StaffLayout): Set<string> {
   return hidden;
 }
 
+/** The list tabs every layout starts with: the app's Attendance and Classes tabs as they were. */
+export function defaultStaffLists(): StaffListTab[] {
+  return [
+    {
+      key: ATTENDANCE_LIST,
+      label: 'Attendance',
+      labelHi: 'उपस्थिति',
+      items: ['/attendance', '/my-attendance', '/my-leave'],
+    },
+    {
+      key: CLASSES_TAB,
+      label: 'Classes',
+      labelHi: 'कक्षाएँ',
+      items: ['/daily-work', '/marks', '/timetable', '/my-payslips'],
+    },
+  ];
+}
+
+const LIST_KEY = /^[a-z][a-z0-9-]{1,23}$/;
+
+/**
+ * A layout's list tabs and tabs as they are read: a layout kept before lists has the two standard ones, and its tab
+ * `/attendance` (which the app showed as the Attendance list) becomes that list.
+ */
+export function staffLayoutOf(l: StaffLayout): StaffLayout & { lists: StaffListTab[] } {
+  if (l.lists) return { ...l, lists: l.lists };
+  return {
+    ...l,
+    tabs: l.tabs.map((x) => (x === '/attendance' ? ATTENDANCE_LIST : x)),
+    lists: defaultStaffLists(),
+  };
+}
+
 /** The layout every school starts with: the app's tabs as they were, its work cards first, the common screens. */
 export const DEFAULT_STAFF_LAYOUT: StaffLayout = {
-  tabs: ['/attendance', CLASSES_TAB, '/messages'],
+  tabs: [ATTENDANCE_LIST, CLASSES_TAB, '/messages'],
   shortcuts: [
     '/attendance',
     '/daily-work',
@@ -144,6 +194,7 @@ export const DEFAULT_STAFF_LAYOUT: StaffLayout = {
   cards: ['to_mark', 'periods_today', 'marks_to_enter', 'approvals', 'my_leave', 'notices'],
   menu: defaultStaffMenu(),
   hidden: [],
+  lists: defaultStaffLists(),
 };
 
 export const STAFF_LAYOUT_LIMITS = {
@@ -151,18 +202,42 @@ export const STAFF_LAYOUT_LIMITS = {
   shortcuts: { min: 4, max: 12 },
   cards: { min: 1, max: STAFF_CARDS.length },
   groupName: 40,
+  lists: { max: 5, items: { min: 1, max: 12 }, name: 20 },
 } as const;
 
 /** What is wrong with a staff layout (empty: it may be saved). */
-export function checkStaffLayout(l: StaffLayout): string[] {
+export function checkStaffLayout(given: StaffLayout): string[] {
+  const l = staffLayoutOf(given);
   const screens = new Set(staffLayoutScreens().map((s) => s.href));
   const problems: string[] = [];
   const distinct = (xs: string[]) => new Set(xs).size === xs.length;
+  const listKeys = new Set(l.lists.map((x) => x.key));
   if (l.tabs.length !== STAFF_LAYOUT_LIMITS.tabs)
     problems.push('Choose three tabs between Home and More.');
   if (!distinct(l.tabs)) problems.push('A tab is chosen twice.');
   for (const t of l.tabs)
-    if (t !== CLASSES_TAB && !screens.has(t)) problems.push(`${t} cannot be a tab here.`);
+    if (!listKeys.has(t) && !screens.has(t)) problems.push(`${t} cannot be a tab here.`);
+  // the list tabs (part 3)
+  const { lists: LL } = STAFF_LAYOUT_LIMITS;
+  if (l.lists.length > LL.max) problems.push(`Keep at most ${String(LL.max)} tab lists.`);
+  if (!distinct(l.lists.map((x) => x.key))) problems.push('Two tab lists have the same key.');
+  if (!distinct(l.lists.map((x) => x.label.trim().toLowerCase())))
+    problems.push('Two tab lists have the same name.');
+  for (const x of l.lists) {
+    const name = x.label.trim() || x.key;
+    if (!LIST_KEY.test(x.key)) problems.push(`${x.key} cannot be a tab list's key.`);
+    for (const [what, v] of [
+      ['name', x.label],
+      ['Hindi name', x.labelHi],
+    ] as const)
+      if (v !== null && (v.trim().length < 1 || v.trim().length > LL.name))
+        problems.push(`A tab list's ${what} takes 1 to ${String(LL.name)} letters.`);
+    if (x.items.length < LL.items.min || x.items.length > LL.items.max)
+      problems.push(`The tab list ${name} takes 1 to ${String(LL.items.max)} screens.`);
+    if (!distinct(x.items)) problems.push(`A screen is in the tab list ${name} twice.`);
+    for (const h of x.items)
+      if (!screens.has(h)) problems.push(`${h} cannot be in the tab list ${name}.`);
+  }
   if (
     l.shortcuts.length < STAFF_LAYOUT_LIMITS.shortcuts.min ||
     l.shortcuts.length > STAFF_LAYOUT_LIMITS.shortcuts.max
@@ -207,6 +282,8 @@ export interface StaffEntry {
   href: string;
   label: string;
   icon: string;
+  /** A list tab's Hindi name the school gave (null or absent: through the dictionary). */
+  labelHi?: string | null;
 }
 export interface MyStaffLayout {
   /** Home, the three, More — each with its name and icon. */
@@ -230,10 +307,15 @@ export interface MyStaffLayout {
     icon: string;
     items: StaffEntry[];
   }>;
+  /** The list tabs the person got (in tab order): each with the screens they can open, in the school's order. */
+  lists: Array<{
+    key: string;
+    label: string;
+    labelHi: string | null;
+    icon: string;
+    items: StaffEntry[];
+  }>;
 }
-
-/** Can a person use the Classes tab (their sections' homework and marks)? */
-const classesOpen = (open: Set<string>) => open.has('/daily-work') || open.has('/marks');
 
 /**
  * The layout a person gets: only what they can open (their rights and the work waiting on them); a tab they cannot
@@ -243,9 +325,10 @@ const classesOpen = (open: Set<string>) => open.has('/daily-work') || open.has('
 export function myStaffLayout(
   permissions: readonly string[],
   waiting: StaffWaiting,
-  layout: StaffLayout,
+  given: StaffLayout,
   own: string[] | null,
 ): MyStaffLayout {
+  const layout = staffLayoutOf(given);
   // a screen the school hides is as one the person cannot open (its page still opens from a link)
   const hidden = staffHiddenScreens(layout);
   const open = staffScreens(permissions, waiting).flatMap((g) =>
@@ -256,12 +339,25 @@ export function myStaffLayout(
   const byHref = new Map(open.map((e) => [e.href, e]));
   const pick = (hrefs: string[]) =>
     hrefs.map((h) => byHref.get(h)).filter((e): e is StaffEntry => !!e);
-  const classes: StaffEntry | null = classesOpen(new Set(byHref.keys()))
-    ? { href: CLASSES_TAB, label: 'Classes', icon: 'book' }
-    : null;
+  // a list tab: for those who can open its first screen the school shows; the screens they can open inside
+  const lists: MyStaffLayout['lists'] = [];
+  const listTab = (key: string): StaffEntry | null => {
+    const x = layout.lists.find((y) => y.key === key);
+    const lead = x?.items.find((h) => !hidden.has(h));
+    const first = lead ? byHref.get(lead) : undefined;
+    if (!x || !first) return null;
+    lists.push({
+      key: x.key,
+      label: x.label,
+      labelHi: x.labelHi,
+      icon: first.icon,
+      items: pick(x.items),
+    });
+    return { href: x.key, label: x.label, labelHi: x.labelHi, icon: first.icon };
+  };
   const tabs: StaffEntry[] = [];
   for (const t of layout.tabs) {
-    const e = t === CLASSES_TAB ? classes : byHref.get(t);
+    const e = t.startsWith('/') ? byHref.get(t) : listTab(t);
     if (e && !tabs.some((x) => x.href === e.href)) tabs.push(e);
   }
   for (const e of [...pick(layout.shortcuts), ...open]) {
@@ -293,5 +389,6 @@ export function myStaffLayout(
         items: pick(g.items),
       }))
       .filter((g) => g.items.length > 0),
+    lists,
   };
 }
