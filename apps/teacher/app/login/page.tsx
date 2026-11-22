@@ -14,6 +14,9 @@ export default async function LoginPage({
   const params = await searchParams;
   const returnTo = params.returnTo && params.returnTo.startsWith('/') ? params.returnTo : '/';
   const codeOffered = await bff.otp.offered();
+  // a code asked for in this browser and not yet given (the code page was missed, e.g. a reload)
+  const pending = codeOffered ? await bff.otp.pending.read() : null;
+  const waiting = pending?.purpose === 'login' ? { sentTo: pending.sentTo } : null;
   return (
     <main
       style={{
@@ -68,7 +71,7 @@ export default async function LoginPage({
         </a>
         {codeOffered ? (
           <div style={{ marginTop: 'var(--sp-5)' }}>
-            <CodeLoginForm returnTo={returnTo} error={params.otpError} />
+            <CodeLoginForm returnTo={returnTo} error={params.otpError} waiting={waiting} />
           </div>
         ) : null}
         {bff.env.devBypass ? (

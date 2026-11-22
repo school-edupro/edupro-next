@@ -5,7 +5,19 @@ import { Button } from './Button';
  * the email or mobile number (the code alone); OtpCodeForm asks the 6-digit code, with "remember this
  * device", a new code and a way back. Both post to the app's /api/auth/otp/* routes.
  */
-export function CodeLoginForm({ returnTo, error }: { returnTo: string; error?: string }) {
+export function CodeLoginForm({
+  returnTo,
+  error,
+  waiting = null,
+}: {
+  returnTo: string;
+  error?: string;
+  /**
+   * A code asked for in this browser is still waiting (e.g. the page was reloaded before the code page opened):
+   * said so, with the way to it, so the person does not ask again and again.
+   */
+  waiting?: { sentTo: string | null } | null;
+}) {
   return (
     <form
       method="post"
@@ -19,6 +31,18 @@ export function CodeLoginForm({ returnTo, error }: { returnTo: string; error?: s
       {error ? (
         <div className="ep-alert ep-alert--danger" role="alert">
           {error}
+        </div>
+      ) : null}
+      {waiting ? (
+        <div className="ep-alert ep-alert--info" role="status" data-testid="otp-waiting">
+          <div>
+            A code you asked for is waiting
+            {waiting.sentTo ? ` (sent to ${waiting.sentTo})` : ''}.{' '}
+            <a href="/login/otp">
+              <strong>Enter the code</strong>
+            </a>
+            , or ask for a new one below.
+          </div>
         </div>
       ) : null}
       <div className="ep-field">
