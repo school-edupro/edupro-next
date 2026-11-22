@@ -76,11 +76,12 @@ export async function runToolLoop(provider: ClaudeProvider, input: LoopInput): P
   const calls: LoopCall[] = [];
   let rounds = 0;
   let model = provider.model;
+  const longest = input.maxTokens ?? 800;
   for (;;) {
     rounds += 1;
     const res = await provider.send({
       model: provider.model,
-      max_tokens: input.maxTokens ?? 800,
+      max_tokens: longest,
       // the rules and the tools stay the same for an audience: cached for the next question
       system: [{ type: 'text', text: input.system, cache_control: { type: 'ephemeral' } }],
       tools,

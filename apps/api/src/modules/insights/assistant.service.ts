@@ -979,12 +979,12 @@ export class AssistantService {
         userId: ctx.user.id ? `u${ctx.user.id}` : null,
       });
       const tenant = requireTenant(ctx);
+      // the tokens read (plain, cached, cache writes) and written, for the budget
+      const read = r.usage.inputTokens + r.usage.cacheReadTokens + r.usage.cacheWriteTokens;
+      const written = r.usage.outputTokens;
       await this.budget.record(
         { schoolId: tenant.schoolId, userId: ctx.user.id },
-        {
-          inputTokens: r.usage.inputTokens + r.usage.cacheReadTokens + r.usage.cacheWriteTokens,
-          outputTokens: r.usage.outputTokens,
-        },
+        { inputTokens: read, outputTokens: written },
       );
       if (r.refused || !r.text) return null;
       return {
