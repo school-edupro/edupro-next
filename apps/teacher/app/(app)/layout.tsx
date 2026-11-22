@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { ApiError } from '@edupro/bff';
 import { AssistantDock } from '@/components/AssistantDock';
 import { StaffShell } from '@/components/StaffShell';
+import type { StaffWaiting } from '@/lib/staff-menu';
 import { bff } from '@/lib/bff';
 import { currentLang } from '@/lib/i18n';
 
@@ -31,110 +32,14 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         {children}
       </main>
     );
-  // the header badge and what waits on this person; best effort, never blocks the page
-  const [
-    unread,
-    approvals,
-    profileChanges,
-    exits,
-    noDues,
-    admissions,
-    purchase,
-    requisitions,
-    orders,
-    receipts,
-    issues,
-    assets,
-    leaveMenu,
-  ] = await Promise.all([
-    bff.api
-      .fetch<{ unread: number }>('/comms/inbox/unread')
-      .then((r) => r.unread)
-      .catch(() => 0),
-    bff.api
-      .fetch<{ data: unknown[] }>('/engagement/mine/consent-approvals')
-      .then((r) => r.data.length)
-      .catch(() => 0),
-    bff.api
-      .fetch<{ awaitingMe: number }>('/people/staff-profile-approvals')
-      .then((r) => r.awaitingMe)
-      .catch(() => 0),
-    bff.api
-      .fetch<{ data: unknown[] }>('/people/exits/to-approve')
-      .then((r) => r.data.length)
-      .catch(() => 0),
-    bff.api
-      .fetch<{ data: unknown[] }>('/people/exits/clearance/mine')
-      .then((r) => r.data.length)
-      .catch(() => 0),
-    // admission registrations at my levels, and those I decided lately (docs/design/50)
-    bff.api
-      .fetch<{ waiting: number; decided: number }>('/admissions/approvals?size=1')
-      .then((r) => r.waiting + r.decided)
-      .catch(() => 0),
-    // purchase indents at my approval level (docs/design/83)
-    bff.api
-      .fetch<{ total: number }>('/purchase/indents?view=waiting&status=submitted&size=1')
-      .then((r) => r.total)
-      .catch(() => 0),
-    // purchase requisitions at my level, and comparative statements to sign
-    bff.api
-      .fetch<{ waitingForMe: number; toSign: number }>(
-        '/purchase/requisitions?view=waiting&status=submitted&size=1',
-      )
-      .then((r) => r.waitingForMe + r.toSign)
-      .catch(() => 0),
-    // purchase orders and emergency purchases at my level
-    bff.api
-      .fetch<{ waitingForMe: number }>('/purchase/orders?view=waiting&status=submitted&size=1')
-      .then((r) => r.waitingForMe)
-      .catch(() => 0),
-    // goods and services received for my inspection or signature (docs/design/84)
-    bff.api
-      .fetch<{ waiting: number }>('/purchase/receipts-waiting')
-      .then((r) => r.waiting)
-      .catch(() => 0),
-    // what the store issued to me or my department, to acknowledge (docs/design/84)
-    bff.api
-      .fetch<{ toAcknowledge: number }>('/purchase/issues?mine=1&page=1')
-      .then((r) => r.toAcknowledge)
-      .catch(() => 0),
-    // assets in my care and those handed to me (docs/design/84, part 9)
-    bff.api
-      .fetch<{ rows: unknown[]; pending: unknown[] }>('/purchase/assets-mine')
-      .then((r) => r.rows.length + r.pending.length)
-      .catch(() => 0),
-    // Leave & attendance (docs/design/85): colleagues' leave and attendance corrections at my level,
-    // the staff who report to me, the reports given to me — one call
-    bff.api
-      .fetch<{ leave: number; corrections: number; team: number; reports: number }>('/leave/menu')
-      .catch(() => ({ leave: 0, corrections: 0, team: 0, reports: 0 })),
-  ]);
+  // the header badge and what waits on this person (docs/design/94: the API counts them, as for the app's menu);
+  // best effort, never blocks the page
+  const { unread, waiting } = await bff.api
+    .fetch<{ unread: number; waiting: StaffWaiting }>('/me/staff-waiting')
+    .catch(() => ({ unread: 0, waiting: { approvals: 0 } as StaffWaiting }));
   return (
     <>
-      <StaffShell
-        me={me}
-        lang={lang}
-        currentPath={currentPath}
-        unread={unread}
-        waiting={{
-          approvals,
-          profileChanges,
-          exits,
-          noDues,
-          admissions,
-          purchase,
-          requisitions,
-          orders,
-          receipts,
-          issues,
-          assets,
-          staffLeave: leaveMenu.leave,
-          staffRegularisations: leaveMenu.corrections,
-          leaveReports: leaveMenu.reports,
-          team: leaveMenu.team,
-        }}
-      >
+      <StaffShell me={me} lang={lang} currentPath={currentPath} unread={unread} waiting={waiting}>
         {children}
       </StaffShell>
       {/* the MobiAI chat window (docs/design/92) for those with the assistant */}

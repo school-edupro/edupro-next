@@ -45,6 +45,8 @@ import { MetricsController } from './modules/health/metrics.controller';
 import { IdentityModule } from './modules/identity/identity.module';
 import { MeController } from './modules/me/me.controller';
 import { ProfilesService } from './modules/me/profiles.service';
+import { StaffWaitingService } from './modules/me/staff-waiting.service';
+import { InternalCalls } from './common/http/internal-calls';
 import { LibraryModule } from './modules/library/library.module';
 import { PurchaseModule } from './modules/purchase/purchase.module';
 import { LeaveModule } from './modules/leave/leave.module';
@@ -109,6 +111,8 @@ import { ReportsModule } from './modules/reports/reports.module';
   providers: [
     AuditService,
     ProfilesService,
+    StaffWaitingService,
+    InternalCalls,
     { provide: APP_PIPE, useClass: ZodValidationPipe },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },

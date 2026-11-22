@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { familyIcon, familyScreens, myFamilyLayout, screenIcon, staffScreens } from '@edupro/menus';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -6,11 +17,16 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant } from '../../common/http/request-context';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedOnly, TenantOptional } from '../../common/auth/decorators';
-import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import {
+  ReqCtx,
+  type ContextualRequest,
+  type RequestContext,
+} from '../../common/http/request-context';
 import { AccessService } from '../access/access.service';
 import { DbService } from '../../common/db/db.service';
 import { ProfilesService } from './profiles.service';
 import { FamilyLayoutService } from '../platform/family-layout.service';
+import { StaffWaitingService } from './staff-waiting.service';
 
 /** How and where a sign-in happened (the web apps' BFF and the mobile app send it). */
 const MeSignInSchema = z
@@ -45,7 +61,21 @@ export class MeController {
     private readonly db: DbService,
     private readonly profilesOf: ProfilesService,
     private readonly layouts: FamilyLayoutService,
+    private readonly staffWaiting: StaffWaitingService,
   ) {}
+
+  /**
+   * What waits on me as staff (docs/design/94): unread messages and the work counts that open the staff menu's
+   * work-waiting screens — the staff website and the app read the same counts.
+   */
+  @Get('staff-waiting')
+  @ApiOperation({
+    summary: 'What waits on me as staff: unread messages and the menu’s work counts',
+  })
+  @AuthenticatedOnly()
+  waiting(@Req() req: ContextualRequest) {
+    return this.staffWaiting.count(req);
+  }
 
   /** The mobile app's profiles (docs/design/89): each school as staff, as the parent of each child, as a student. */
   @Get('profiles')
@@ -67,13 +97,19 @@ export class MeController {
     summary: "My menu in the school for a profile kind (the web apps' screens, by my rights)",
   })
   @AuthenticatedOnly()
-  async menu(@ReqCtx() ctx: RequestContext, @Query('kind') kind?: string) {
+  async menu(
+    @ReqCtx() ctx: RequestContext,
+    @Req() req: ContextualRequest,
+    @Query('kind') kind?: string,
+  ) {
     const tenant = requireTenant(ctx);
     const permissions = [...(await this.access.effectivePermissions(tenant))];
-    if (kind === 'staff')
+    if (kind === 'staff') {
+      // docs/design/94: with the work waiting on the person, as the staff website shows it
+      const { waiting } = await this.staffWaiting.count(req);
       return {
         app: 'teacher',
-        groups: staffScreens(permissions).map((g) => ({
+        groups: staffScreens(permissions, waiting).map((g) => ({
           id: g.id,
           label: g.label,
           icon: g.icon,
@@ -85,6 +121,7 @@ export class MeController {
           })),
         })),
       };
+    }
     if (kind === 'parent' || kind === 'student') {
       // the school's published side menu (docs/design/90): its groups, names and order; else as built
       const published = await this.layouts.published(ctx, kind);
