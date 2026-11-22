@@ -5,6 +5,7 @@ import { ApiError } from '@edupro/bff';
 import { AssistantDock } from '@/components/AssistantDock';
 import { StaffShell } from '@/components/StaffShell';
 import type { StaffWaiting } from '@/lib/staff-menu';
+import { myStaffLayout } from '@/lib/staff-layout';
 import { bff } from '@/lib/bff';
 import { currentLang } from '@/lib/i18n';
 
@@ -32,14 +33,21 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         {children}
       </main>
     );
-  // the header badge and what waits on this person (docs/design/94: the API counts them, as for the app's menu);
+  // the header badge, what waits on this person and the school's staff menu (docs/design/94: one call, as the app);
   // best effort, never blocks the page
-  const { unread, waiting } = await bff.api
-    .fetch<{ unread: number; waiting: StaffWaiting }>('/me/staff-waiting')
-    .catch(() => ({ unread: 0, waiting: { approvals: 0 } as StaffWaiting }));
+  const mine = await myStaffLayout();
+  const unread = mine?.unread ?? 0;
+  const waiting: StaffWaiting = mine?.waiting ?? { approvals: 0 };
   return (
     <>
-      <StaffShell me={me} lang={lang} currentPath={currentPath} unread={unread} waiting={waiting}>
+      <StaffShell
+        me={me}
+        lang={lang}
+        currentPath={currentPath}
+        unread={unread}
+        waiting={waiting}
+        layout={mine?.published ? mine : null}
+      >
         {children}
       </StaffShell>
       {/* the MobiAI chat window (docs/design/92) for those with the assistant */}

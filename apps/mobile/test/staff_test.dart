@@ -31,10 +31,13 @@ const staffProfile = {
 };
 
 class School {
-  School({this.webTab = false});
+  School({this.webTab = false, this.arranged = false});
 
   /// the school chose a tab that has only a web page (docs/design/94)
   final bool webTab;
+
+  /// the school arranged the staff menu (docs/design/94, part 2): its order and names; hidden screens left out
+  final bool arranged;
   bool offline = false;
   bool marked = false;
   int applies = 0;
@@ -112,6 +115,30 @@ class School {
             {'id': 'm2', 'title': 'Sports day duties', 'unread': false},
           ],
           'page': {'more': false},
+        };
+      case 'GET /me/menu' when arranged:
+        return {
+          'app': 'teacher',
+          'groups': [
+            {
+              'id': 'leave',
+              'label': 'My leave and attendance',
+              'labelHi': 'मेरा अवकाश',
+              'icon': 'calendar',
+              'items': [
+                {'href': '/my-leave', 'label': 'My leave', 'help': null, 'icon': 'calendar'},
+              ],
+            },
+            {
+              'id': 'classes',
+              'label': 'My classes',
+              'labelHi': null,
+              'icon': 'book',
+              'items': [
+                {'href': '/daily-work', 'label': 'Daily work', 'help': null, 'icon': 'book'},
+              ],
+            },
+          ],
         };
       case 'GET /me/menu':
         return {
@@ -757,6 +784,32 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('openWeb-leaveApprovals')), findsOneWidget);
+  });
+
+  testWidgets('More follows the school’s staff menu: its order and its names', (tester) async {
+    await pumpStaff(tester, with_: School(arranged: true));
+    await tester.tap(find.text('More').last);
+    await tester.pumpAndSettle();
+    final leave = find.text('My leave and attendance');
+    final classes = find.text('My classes');
+    expect(leave, findsOneWidget);
+    expect(classes, findsOneWidget);
+    // the school's order: leave first
+    expect(tester.getTopLeft(leave).dy, lessThan(tester.getTopLeft(classes).dy));
+    // what the school hid never comes: only what the menu sends is listed
+    expect(
+      find.descendant(of: find.byKey(const Key('moreList')), matching: find.text('Timetable')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('More in Hindi: the school’s Hindi group name', (tester) async {
+    await pumpStaff(tester, hindi: true, with_: School(arranged: true));
+    final s = S(true);
+    await tester.tap(find.text(s.more).last);
+    await tester.pumpAndSettle();
+    expect(find.text('मेरा अवकाश'), findsOneWidget);
+    expect(find.text('My leave and attendance'), findsNothing);
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

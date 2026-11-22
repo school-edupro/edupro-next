@@ -3,7 +3,8 @@ import { Icon } from '@/components/nav-icons';
 import { QuickActions, type QuickTile } from '@/components/QuickActions';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { screenIcon, staffMenu } from '@/lib/staff-menu';
+import { staffGroups, myStaffLayout } from '@/lib/staff-layout';
+import { screenIcon } from '@/lib/staff-menu';
 
 interface MeCard {
   roles: string[];
@@ -97,14 +98,15 @@ export default async function HomePage() {
         null,
       ),
     ]);
-  const groups = staffMenu(me, { approvals });
+  // the school's staff layout (docs/design/94, part 2): its groups, order and names; hidden screens left out
+  const groups = staffGroups(me, lang, await myStaffLayout(), { approvals });
   // Quick Actions (docs/design/83, "As built — Quick Actions for every user"): the screens this role
   // opens, each with its icon
   const tiles: QuickTile[] = groups.flatMap((g) =>
     g.items.map((i) => ({
       href: i.href,
       label: `${t(lang, i.label)}${i.href === '/consent-approvals' && approvals ? ` (${String(approvals)})` : ''}`,
-      section: t(lang, g.label),
+      section: g.label,
       icon: screenIcon(i.href, g.icon),
     })),
   );

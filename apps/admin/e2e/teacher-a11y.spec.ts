@@ -57,6 +57,8 @@ const PAGES = [
   '/my-team',
   // CBSE board results (docs/design/88, phase D): a teacher's own sections and subjects
   '/my-board-results',
+  // the Classes tab's page (docs/design/94, part 2)
+  '/classes',
 ];
 
 for (const sub of ['dev-teacher']) {

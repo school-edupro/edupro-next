@@ -1,14 +1,18 @@
 import type { ReactNode } from 'react';
 import type { Me } from '@edupro/bff';
 import { t, type Lang } from '@/lib/i18n';
-import { staffMenu, staffTabs, type StaffWaiting } from '@/lib/staff-menu';
+import { staffTabs, type StaffWaiting } from '@/lib/staff-menu';
+import { staffGroups, type StaffLayoutView } from '@/lib/staff-layout';
 import { Icon, type IconName } from './nav-icons';
+import { PhoneMenu } from './PhoneMenu';
 import { SidebarToggle } from './SidebarToggle';
 
 /**
  * The staff app frame (teachers, wardens, drivers, office staff), laid out like the parent portal:
  * sidebar with only the screens this person may open, header with school, session, language, messages
- * and sign-out, and a tab bar on phones.
+ * and sign-out, and a tab bar on phones. With the school's published staff layout (docs/design/94) the side menu
+ * follows it (the groups in its order and names, hidden screens left out) and the phone bar is the app's: Home, the
+ * three tabs, and Menu (the side menu as a panel).
  */
 export function StaffShell({
   me,
@@ -17,6 +21,7 @@ export function StaffShell({
   children,
   unread = 0,
   waiting,
+  layout = null,
 }: {
   me: Me;
   lang: Lang;
@@ -25,10 +30,26 @@ export function StaffShell({
   /** messages from the school not opened yet (header badge) */
   unread?: number;
   waiting?: StaffWaiting;
+  /** The school's published staff layout for this person; null: the menu and the phone bar as built. */
+  layout?: StaffLayoutView | null;
 }) {
   const isCurrent = (href: string) =>
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
-  const groups = staffMenu(me, waiting);
+  const groups = staffGroups(me, lang, layout, waiting);
+  // the phone bar: the app's tabs from the layout (Classes opens the Classes page), else as built
+  const tabs: Array<{ href: string; label: string; icon: IconName }> = layout
+    ? layout.tabs
+        .filter((x) => x.href !== 'more')
+        .map((x) =>
+          x.href === 'classes'
+            ? { href: '/classes', label: 'Classes', icon: 'book' as IconName }
+            : {
+                href: x.href,
+                label: x.label,
+                icon: (x.href === '/' ? 'home' : x.icon) as IconName,
+              },
+        )
+    : staffTabs(me, waiting);
   const school =
     me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0] ?? null;
   const back = encodeURIComponent(currentPath);
@@ -55,7 +76,7 @@ export function StaffShell({
             <span className="ep-nav__text">{t(lang, 'Home')}</span>
           </a>
           {groups.map((g) => {
-            const label = t(lang, g.label);
+            const label = g.label;
             const active = g.items.some((i) => isCurrent(i.href));
             return (
               <details key={g.id} className="ep-nav__group" open={active || undefined}>
@@ -183,12 +204,52 @@ export function StaffShell({
         {children}
       </div>
       <nav className="fp-tabbar" aria-label={t(lang, 'Quick menu')}>
-        {staffTabs(me, waiting).map((tab) => (
+        {tabs.map((tab) => (
           <a key={tab.href} href={tab.href} aria-current={isCurrent(tab.href) ? 'page' : undefined}>
             <Icon name={tab.icon} size={22} />
             <span>{t(lang, tab.label)}</span>
           </a>
         ))}
+        {layout ? (
+          <PhoneMenu
+            label={t(lang, 'Menu')}
+            closeLabel={t(lang, 'Close the menu')}
+            icon={<Icon name="menu" size={22} />}
+            closeIcon={<span aria-hidden="true">×</span>}
+          >
+            <nav aria-label={t(lang, 'Main menu')} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+              {groups.map((g) => (
+                <section key={g.id} aria-label={g.label}>
+                  <h2
+                    className="ep-field__help"
+                    style={{ margin: '0 0 var(--sp-1)', textTransform: 'uppercase' }}
+                  >
+                    {g.label}
+                  </h2>
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid' }}>
+                    {g.items.map((i) => (
+                      <li key={i.href}>
+                        <a
+                          href={i.href}
+                          aria-current={isCurrent(i.href) ? 'page' : undefined}
+                          style={{
+                            display: 'block',
+                            padding: 'var(--sp-2) 0',
+                            minHeight: '2.75rem',
+                            color: 'var(--text-body)',
+                            fontWeight: isCurrent(i.href) ? 'var(--fw-semibold)' : undefined,
+                          }}
+                        >
+                          {t(lang, i.label)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </nav>
+          </PhoneMenu>
+        ) : null}
       </nav>
     </div>
   );

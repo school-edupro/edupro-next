@@ -111,3 +111,13 @@ the Classes page, Home tiles) and the app's More · **I** close.
   group, hidden or shown. Hidden screens are marked in the tabs, shortcuts and cards lists and left out of the preview;
   the save sends the menu and the hidden screens. Checked in a browser on Alpha (save caught, nothing saved) with axe;
   the family page keeps its words.
+- **H (22 Nov 2026).** Staff website: `lib/staff-layout.ts` reads `me/staff-layout` once per page (React `cache`)
+  and `staffGroups` gives the menu groups — the school's published menu (its order, names, the Hindi name in Hindi,
+  hidden screens left out), else the menu as built. The frame (`StaffShell`) shows that side menu; with a published
+  layout its phone bar is the app's — Home, the three tabs (Classes opens the new **Classes** page: the "My classes"
+  screens as tiles) and **Menu**, the side menu as a full-height panel (`PhoneMenu`, as the families' website). The
+  Home tiles follow the same groups. A hidden screen's page still opens from a link. Never published: as built (Alpha
+  unchanged). The "Menu" word in the phone bar now has the caption size of the other tab words (also on the families'
+  website). App: More already follows `/me/menu` (order, names, Hindi names); tests added in `staff_test.dart`.
+  Checked in a browser on a test school with a published layout (desktop, phone, the Menu panel, Classes, Hindi; axe
+  clean) and on Alpha (as built).

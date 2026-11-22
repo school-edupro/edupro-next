@@ -31,11 +31,12 @@ export function PhoneMenu({
           justifyItems: 'center',
           gap: 'var(--sp-1)',
           padding: 'var(--sp-2) var(--sp-1)',
+          // the font first: the shorthand would undo the size (the tab words are captions)
+          font: 'inherit',
           color: 'var(--text-muted)',
           fontSize: 'var(--fs-caption)',
           background: 'none',
           border: 0,
-          font: 'inherit',
           cursor: 'pointer',
         }}
       >

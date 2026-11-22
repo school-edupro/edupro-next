@@ -423,6 +423,14 @@ const DICT: Record<string, string> = {
   Resolution: 'समाधान',
   // Home
   'My classes': 'मेरी कक्षाएँ',
+  // the school's staff layout on the website (docs/design/94, part 2)
+  Menu: 'मेनू',
+  'Close the menu': 'मेनू बंद करें',
+  'Main menu': 'मुख्य मेनू',
+  'Quick menu': 'त्वरित मेनू',
+  Classes: 'कक्षाएँ',
+  'The screens of my classes, one tap each.': 'मेरी कक्षाओं की स्क्रीन, एक टैप में।',
+  'Nothing here is open to you.': 'यहाँ आपके लिए कुछ खुला नहीं है।',
   'Leave & attendance': 'अवकाश और उपस्थिति',
   'Your sections, subjects and this week’s timetable':
     'आपके अनुभाग, विषय और इस सप्ताह की समय-सारणी',
