@@ -22,7 +22,7 @@ import { discardLayout, publishLayout, saveLayoutDraft } from './actions';
 type Part = Exclude<keyof FamilyLayout, 'menu' | 'hidden'>;
 
 /** One ordered list of the draft: its rows (move up / down, remove) and "Add" from what is not in it yet. */
-function OrderedList({
+export function OrderedList({
   id,
   title,
   help,

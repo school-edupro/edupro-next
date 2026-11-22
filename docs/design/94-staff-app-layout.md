@@ -60,3 +60,10 @@ each person gets); the staff website's own Home and side menu stay as they are.
   `GET / PUT platform/staff-app-layout`, `POST …/publish`, `POST …/discard` (settings rights, audited);
   `GET me/staff-layout`, `PUT / DELETE me/staff-layout/shortcuts` (own shortcuts in `user_preferences`
   `staff.shortcuts`). Tests: `apps/api/test/staff-layout.e2e-spec.ts` (5).
+- **C (22 Nov 2026).** Admin: **System settings → App layouts → Arrange the staff app**
+  (`/system/settings/staff-app-layout`, `StaffLayoutEditor.tsx`, `lib/staff-layout.ts` repeating the API's checks):
+  the status (published or not, the draft changed), Save draft, Publish (asks first; saves first), Discard the draft,
+  Start again from the standard layout, an unsaved-changes guard; Bottom tabs (Home and More fixed, three between,
+  Classes offered), Home shortcuts (4–12) and Home work cards (in order), reusing the family editor's ordered list;
+  a preview of the staff Home (greeting, the four figures, the tiles with All, the cards, the tab bar). Checked in a
+  browser on Alpha (Save caught, nothing saved) with axe; added to the admin accessibility list.

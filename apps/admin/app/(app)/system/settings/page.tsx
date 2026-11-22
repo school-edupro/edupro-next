@@ -38,10 +38,11 @@ export default async function SettingsPage({
         style={{ marginBottom: 'var(--sp-4)' }}
       >
         <h2 id="set-family-app" className="ep-cdash__h3" style={{ marginTop: 0 }}>
-          Family app layout
+          App layouts
         </h2>
         <p className="ep-field__help" style={{ marginTop: 0 }}>
-          The student and parent app: bottom tabs, Home shortcuts, Home cards and the Academics tab.
+          The mobile apps: the student and parent app (bottom tabs, Home shortcuts, Home cards and
+          the Academics tab) and the staff app (bottom tabs, Home shortcuts and work cards).
         </p>
         <ul className="ep-setup-links">
           <li>
@@ -50,6 +51,15 @@ export default async function SettingsPage({
             </a>
             <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
               Students and parents apart; a draft with a phone preview, published to families
+            </span>
+          </li>
+          <li>
+            <a href="/system/settings/staff-app-layout">
+              <strong>Arrange the staff app</strong>
+            </a>
+            <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+              Bottom tabs, Home shortcuts and work cards of the staff mobile app; a draft with a
+              preview, published to staff
             </span>
           </li>
         </ul>
