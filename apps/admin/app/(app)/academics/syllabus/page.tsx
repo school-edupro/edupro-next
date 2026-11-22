@@ -73,9 +73,14 @@ export default async function SyllabusPage({
                 All classes
               </a>
             ) : null}
-            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/academics/syllabus/coverage">
-              Coverage dashboard
-            </a>
+            {me.permissions.includes('academics.syllabus.report') ? (
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href="/academics/syllabus/coverage"
+              >
+                Coverage dashboard
+              </a>
+            ) : null}
           </>
         }
       />

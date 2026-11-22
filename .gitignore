@@ -7,6 +7,8 @@ dist/
 .next/
 out/
 coverage/
+# a page of the apps named coverage (Syllabus coverage) is source, not a test report
+!apps/*/app/**/coverage/
 *.tsbuildinfo
 .turbo/
 
