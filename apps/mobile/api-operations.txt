@@ -40,6 +40,10 @@ DailyWorkController_file !file
 DocumentsController_ack
 DocumentsController_list
 DocumentsController_file !file
+DocumentsController_create
+DocumentsController_remove
+DocumentsController_documentsReport !file
+DocumentsController_ackStatus
 NoticesController_list
 NoticesController_get
 NoticesController_file !file

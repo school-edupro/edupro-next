@@ -132,6 +132,22 @@ class EduProApi {
   Future<ApiFile> documentsFile({required String id, required String fileId}) =>
       _t.file('GET', '/academics/documents/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
 
+  /// POST /academics/documents — Upload a session plan, curriculum, date sheet or a school-wide document
+  Future<dynamic> documentsCreate({required CreateDocumentDto body}) =>
+      _t.send('POST', '/academics/documents', body: body.toJson());
+
+  /// DELETE /academics/documents/{id}
+  Future<dynamic> documentsRemove({required String id}) =>
+      _t.send('DELETE', '/academics/documents/${Uri.encodeComponent(id)}');
+
+  /// GET /academics/documents/report — Class documents with the filters, as Excel or PDF
+  Future<ApiFile> documentsDocumentsReport({String? kind, String? classSectionId, String? from, String? to, String? format, String? wrap}) =>
+      _t.file('GET', '/academics/documents/report', query: {if (kind != null) 'kind': kind, if (classSectionId != null) 'classSectionId': classSectionId, if (from != null) 'from': from, if (to != null) 'to': to, if (format != null) 'format': format, if (wrap != null) 'wrap': wrap});
+
+  /// GET /academics/acks — Who acknowledged an item and who has not
+  Future<dynamic> documentsAckStatus({required String type, required String id}) =>
+      _t.send('GET', '/academics/acks', query: {'type': type, 'id': id});
+
   /// GET /academics/notices — Notices and circulars visible to the caller
   Future<dynamic> noticesList({String? kind, String? status, String? q, String? studentId, String? from, String? to, int? page, int? size}) =>
       _t.send('GET', '/academics/notices', query: {if (kind != null) 'kind': kind, if (status != null) 'status': status, if (q != null) 'q': q, if (studentId != null) 'studentId': studentId, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
@@ -917,6 +933,27 @@ class AckDto {
         'type': type,
         'id': id,
         if (studentId != null) 'studentId': studentId,
+      };
+}
+
+/** The CreateDocumentDto the API takes. */
+class CreateDocumentDto {
+  const CreateDocumentDto({required this.kind, required this.title, this.remark, this.classSectionIds, required this.fileIds, this.publishAt, this.ackRequired});
+  final String kind;
+  final String title;
+  final String? remark;
+  final List<String>? classSectionIds;
+  final List<String> fileIds;
+  final String? publishAt;
+  final bool? ackRequired;
+  Map<String, Object?> toJson() => {
+        'kind': kind,
+        'title': title,
+        if (remark != null) 'remark': remark,
+        if (classSectionIds != null) 'classSectionIds': classSectionIds,
+        'fileIds': fileIds,
+        if (publishAt != null) 'publishAt': publishAt,
+        if (ackRequired != null) 'ackRequired': ackRequired,
       };
 }
 

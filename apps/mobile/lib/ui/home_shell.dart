@@ -32,6 +32,7 @@ import '../staff/approvals.dart';
 import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
 import '../staff/daily_work.dart';
+import '../staff/documents.dart';
 import '../staff/marks.dart';
 import '../staff/my_attendance.dart';
 import '../staff/my_leave.dart';
@@ -84,6 +85,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/my-payslips' => PayslipsScreen(profile: p),
       // as on the staff website: the day's sheet, assignments, the report (docs/design/96)
       '/daily-work' => DailyWorkScreen(profile: p),
+      // session plan, curriculum, date sheet: upload and the list, as on the staff website (docs/design/96 part 3)
+      '/documents' => StaffDocumentsScreen(profile: p),
       '/marks' => MarksHome(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       '/messages' => MessagesScreen(profile: p),

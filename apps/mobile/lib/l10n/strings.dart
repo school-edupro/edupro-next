@@ -1056,6 +1056,50 @@ class S {
   String publishesAt(String when) => _t('Publishes $when', '$when को प्रकाशित होगा');
   String ackCount(int n) => _t('$n acknowledged', '$n ने पावती दी');
   String get workReportFile => _t('Daily work report', 'दैनिक कार्य रिपोर्ट');
+  // Session plan, curriculum, date sheet as on the staff website (docs/design/96, part 3)
+  String get docsUploadTab => _t('Upload', 'अपलोड');
+  String get docsUploadedTab => _t('Uploaded', 'अपलोड किए गए');
+  String docKind(String kind) => switch (kind) {
+    'session_plan' => _t('Session plan', 'सत्र योजना'),
+    'curriculum' => _t('Curriculum / syllabus', 'पाठ्यक्रम'),
+    'date_sheet' => _t('Date sheet', 'डेट शीट'),
+    'magazine' => _t('School magazine', 'विद्यालय पत्रिका'),
+    'almanac' => _t('School almanac', 'विद्यालय डायरी'),
+    _ => _t('Other', 'अन्य'),
+  };
+  String get whatWord => _t('What', 'क्या');
+  String get allDocKinds => _t('All kinds', 'सभी प्रकार');
+  String get docClasses => _t('For the classes', 'किन कक्षाओं के लिए');
+  String get remarkWord => _t('Remark', 'टिप्पणी');
+  String get docsFilesHelp => _t(
+    'Attachments: a PDF or a photo, up to 5 files.',
+    'संलग्नक: PDF या फ़ोटो, अधिकतम 5 फ़ाइलें।',
+  );
+  String get uploadWord => _t('Upload', 'अपलोड करें');
+  String get uploadedDone => _t('Uploaded.', 'अपलोड हो गया।');
+  String get docsNeedTitle =>
+      _t('Write a title (two letters at least).', 'शीर्षक लिखें (कम से कम दो अक्षर)।');
+  String get docsNeedFile => _t('Attach at least one file.', 'कम से कम एक फ़ाइल जोड़ें।');
+  String get docsNeedClass => _t('Choose at least one class.', 'कम से कम एक कक्षा चुनें।');
+  String get docsTooMany => _t('Up to 5 files.', 'अधिकतम 5 फ़ाइलें।');
+  String get noClassThisSession => _t(
+    'You have no class assigned in this session yet.',
+    'इस सत्र में आपको अभी कोई कक्षा नहीं दी गई है।',
+  );
+  String get nothingUploaded => _t('Nothing uploaded yet.', 'अभी कुछ अपलोड नहीं हुआ।');
+  String get publishedFrom => _t('Published from', 'प्रकाशित, से');
+  String get scheduledWord => _t('Scheduled', 'निर्धारित');
+  String get whoAcknowledged => _t('Who acknowledged', 'किसने पावती दी');
+  String acknowledgedOf(int a, int t) => _t('$a of $t acknowledged', '$t में से $a ने पावती दी');
+  String get ackYes => _t('Acknowledged', 'पावती दी');
+  String get ackNotYet => _t('Not yet', 'अभी नहीं');
+  String removeDocAsk(String title) => _t(
+    'Remove “$title”? Families no longer see it.',
+    '“$title” हटाएँ? परिवार इसे फिर नहीं देखेंगे।',
+  );
+  String get removedDone => _t('Removed.', 'हटा दिया गया।');
+  String get docsReportFile => _t('Class documents', 'कक्षा दस्तावेज़');
+  String get clearWord => _t('Clear', 'हटाएँ');
   String get workTitle => _t('Title', 'शीर्षक');
   String get workBody => _t('What to do', 'क्या करना है');
   String get subject => _t('Subject', 'विषय');

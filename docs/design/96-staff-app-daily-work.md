@@ -67,3 +67,20 @@ the Home tiles and start-up tour, the Academics page, the Daily work page's titl
 `family_test.dart` (a day-sheet homework with no due date now counts on Home: 2), 218 app tests; the API's
 family-layout and mobile-family suites. Checked on the parent website with the demo parent (Home: Daily work 2 —
 VI-A's homework for today and tomorrow; menu and page say Daily work; axe clean). The web preview is rebuilt.
+
+## Part 3: Session plan, curriculum, date sheet (22 Nov 2026)
+
+"Staff app: Session plan, curriculum, date sheet opens a web page; do not open a web page."
+
+As built: `lib/staff/documents.dart` — `StaffDocumentsScreen`, opened from the staff menu, Classes and More
+(`nativeScreen('/documents')` for staff), as the staff website's page in two tabs. **Upload**: What (session plan,
+curriculum / syllabus, date sheet, other), For the classes (the teacher's sections), Title, Remark (plain text sent
+as paragraphs), up to 5 PDFs or photos (camera too), Publish on, Ask the parent / student to acknowledge, Upload (a
+class, a title and a file asked for; the list reloads). **Uploaded**: What (all kinds, the school's magazine and
+almanac too), Class, Published from / To (Clear), Excel and PDF (the file viewer); each document with its kind,
+Scheduled, class and subject, title, remark, files, published or publishes, who posted; **who acknowledged** (every
+pupil of the class, acknowledged when and by whom, or not yet) and **Remove** (asked first) for the class ones. Calls
+added: `DocumentsController_create`, `_remove`, `_documentsReport !file`, `_ackStatus`. Tests: `staff_test.dart`
+(the upload's checks, the list, who acknowledged, remove, the PDF; light, dark, Hindi, 2× text); 219 app tests,
+analyze, the generated calls; the web preview rebuilt. (The website's Upload on this page used the Daily work file
+upload, fixed in fd7a216d.)

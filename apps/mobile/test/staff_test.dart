@@ -93,6 +93,7 @@ class School {
       entry('/marks', 'Marks', 'clipboard'),
       by('/timetable'),
       entry('/my-payslips', 'My payslips', 'wallet'),
+      entry('/documents', 'Session plan, curriculum, date sheet', 'file'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -506,6 +507,69 @@ class School {
         };
       case 'GET /academics/daily-work/report':
         return null;
+      // session plan, curriculum, date sheet (docs/design/96, part 3)
+      case 'GET /academics/documents':
+        return {
+          'data': [
+            {
+              'id': '23',
+              'kind': 'session_plan',
+              'kindLabel': 'Session plan',
+              'title': 'Session plan for term 2',
+              'remark': '<p>Read before the parents meeting.</p>',
+              'classSectionId': '300',
+              'section': 'VI-A',
+              'subject': 'Science',
+              'fileIds': ['81'],
+              'publishAt': '2026-11-20T04:30:00.000Z',
+              'scheduled': false,
+              'ackRequired': true,
+              'ackCount': 1,
+              'postedBy': 'Asha Teacher',
+            },
+            {
+              'id': '24',
+              'kind': 'magazine',
+              'kindLabel': 'School magazine',
+              'title': 'The school magazine',
+              'remark': null,
+              'classSectionId': null,
+              'section': null,
+              'subject': null,
+              'fileIds': ['82'],
+              'publishAt': '2026-11-01T04:30:00.000Z',
+              'scheduled': false,
+              'ackRequired': false,
+              'ackCount': 0,
+              'postedBy': null,
+            },
+          ],
+        };
+      case 'POST /academics/documents':
+        return {'id': '701'};
+      case 'DELETE /academics/documents/23':
+        return {'ok': true};
+      case 'GET /academics/documents/report':
+        return null;
+      case 'GET /academics/acks':
+        return {
+          'title': 'Session plan for term 2',
+          'section': 'VI-A',
+          'ackRequired': true,
+          'roster': true,
+          'acknowledged': 1,
+          'total': 2,
+          'data': [
+            {
+              'id': '1',
+              'name': 'Pupil One',
+              'rollNo': 1,
+              'ackedAt': '2026-11-20T10:00:00.000Z',
+              'by': 'Parent One',
+            },
+            {'id': '2', 'name': 'Pupil Two', 'rollNo': 2, 'ackedAt': null, 'by': null},
+          ],
+        };
       case 'GET /payroll/me/payslips':
         return {
           'fy': c.query?['fy'],
@@ -977,6 +1041,62 @@ void main() {
     );
   });
 
+  testWidgets(
+    'Session plan, curriculum, date sheet in the app: upload checks, the list, who acknowledged, remove, PDF',
+    (tester) async {
+      final (t, _) = await pumpStaff(tester, size: const Size(420, 2400));
+      await tester.tap(find.text('Classes').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Session plan, curriculum, date sheet'));
+      await tester.pumpAndSettle();
+      // no web page: the app's own screen
+      expect(find.byKey(const Key('docsUpload')), findsOneWidget);
+      expect(find.byKey(const Key('openWeb-documents')), findsNothing);
+      // Upload: a class, a title and a file are asked for
+      await tester.tap(find.byKey(const Key('docUpload')));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose at least one class.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('docSection-300')));
+      await tester.tap(find.byKey(const Key('docKind-date_sheet')));
+      await tester.enterText(find.byKey(const Key('docTitle')), 'Unit test date sheet');
+      await tester.tap(find.byKey(const Key('docUpload')));
+      await tester.pumpAndSettle();
+      expect(find.text('Attach at least one file.'), findsOneWidget);
+      expect(t.calls.where((c) => c.path == '/academics/documents' && c.method == 'POST'), isEmpty);
+      // Uploaded: the list with its files and who acknowledged
+      Finder tab(String label) =>
+          find.descendant(of: find.byKey(const Key('docsTabs')), matching: find.text(label));
+      await tester.tap(tab('Uploaded'));
+      await tester.pumpAndSettle();
+      expect(find.text('Session plan for term 2'), findsOneWidget);
+      expect(find.text('VI-A · Science'), findsOneWidget);
+      expect(find.text('School magazine'), findsWidgets);
+      // a school-wide item: not the teacher's to remove
+      expect(find.byKey(const Key('docRemove-24')), findsNothing);
+      await tester.tap(find.byKey(const Key('docAcks-23')));
+      await tester.pumpAndSettle();
+      expect(find.text('1 of 2 acknowledged'), findsOneWidget);
+      expect(find.text('Not yet'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('docRemove-23')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('docRemoveYes')));
+      await tester.pumpAndSettle();
+      expect(
+        t.calls.any((c) => c.method == 'DELETE' && c.path == '/academics/documents/23'),
+        isTrue,
+      );
+      expect(find.text('Removed.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('docsPdf')));
+      await tester.pumpAndSettle();
+      expect(
+        t.calls.lastWhere((c) => c.path == '/academics/documents/report').query,
+        containsPair('format', 'pdf'),
+      );
+    },
+  );
+
   testWidgets('list tabs: the school’s names and screens, its own list; Hindi names (part 3)', (
     tester,
   ) async {
@@ -1078,7 +1198,13 @@ void main() {
         }
         await tester.tap(find.text(s.classes).last);
         await tester.pumpAndSettle();
-        for (final screen in [s.dailyWork, s.marksEntry, s.myTimetable, s.payslips]) {
+        for (final screen in [
+          s.dailyWork,
+          s.marksEntry,
+          s.myTimetable,
+          s.payslips,
+          s.menu('Session plan, curriculum, date sheet'),
+        ]) {
           await tester.tap(find.text(screen));
           await check(screen);
           await tester.tap(find.byType(BackButton));
@@ -1125,7 +1251,13 @@ void main() {
     }
     await tester.tap(find.text('Classes').last);
     await tester.pumpAndSettle();
-    for (final screen in ['Daily work', 'Marks entry', 'My timetable', 'My payslips']) {
+    for (final screen in [
+      'Daily work',
+      'Marks entry',
+      'My timetable',
+      'My payslips',
+      'Session plan, curriculum, date sheet',
+    ]) {
       await scrollTo(tester, find.text(screen));
       await tester.tap(find.text(screen));
       await tester.pumpAndSettle();
