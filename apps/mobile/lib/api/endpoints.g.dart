@@ -288,6 +288,42 @@ class EduProApi {
   Future<dynamic> examStatusSendBack({required EntryStatusNoteDto body, required String id}) =>
       _t.send('POST', '/exams/${Uri.encodeComponent(id)}/entry-status/send-back', body: body.toJson());
 
+  /// GET /exams/{id}/indicators
+  Future<dynamic> examEntryIndicators({required String id, required String classSectionId, String? subjectId}) =>
+      _t.send('GET', '/exams/${Uri.encodeComponent(id)}/indicators', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// PUT /exams/{id}/indicators
+  Future<dynamic> examEntryPutIndicators({required PutIndicatorsDto body, required String id}) =>
+      _t.send('PUT', '/exams/${Uri.encodeComponent(id)}/indicators', body: body.toJson());
+
+  /// GET /exams/{id}/indicators/excel — The section's indicators the caller rates, as an Excel sheet (base64)
+  Future<ApiFile> examEntryIndicatorsExcel({required String id, required String classSectionId, String? subjectId}) =>
+      _t.file('GET', '/exams/${Uri.encodeComponent(id)}/indicators/excel', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// POST /exams/{id}/indicators/upload — A filled indicators sheet: preview, then save with apply
+  Future<dynamic> examEntryIndicatorsUpload({required SectionSheetUploadDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/indicators/upload', body: body.toJson());
+
+  /// PUT /exams/{id}/hpc-feedback — The child's, the parent's and the teacher's words on the HPC
+  Future<dynamic> hpcFeedback({required PutHpcFeedbackDto body, required String id}) =>
+      _t.send('PUT', '/exams/${Uri.encodeComponent(id)}/hpc-feedback', body: body.toJson());
+
+  /// GET /exams/{id}/portfolio
+  Future<dynamic> hpcPortfolio({required String id, required String classSectionId, String? studentId}) =>
+      _t.send('GET', '/exams/${Uri.encodeComponent(id)}/portfolio', query: {'classSectionId': classSectionId, if (studentId != null) 'studentId': studentId});
+
+  /// POST /exams/{id}/portfolio — Add a photo to a child's portfolio (PNG or JPEG up to 1 MB)
+  Future<dynamic> hpcAddPhoto({required AddPortfolioDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/portfolio', body: body.toJson());
+
+  /// DELETE /exams/{id}/portfolio/{itemId}
+  Future<dynamic> hpcRemovePhoto({required String id, required String itemId}) =>
+      _t.send('DELETE', '/exams/${Uri.encodeComponent(id)}/portfolio/${Uri.encodeComponent(itemId)}');
+
+  /// GET /exams/{id}/portfolio/{itemId}/image
+  Future<ApiFile> hpcPhoto({required String id, required String itemId}) =>
+      _t.file('GET', '/exams/${Uri.encodeComponent(id)}/portfolio/${Uri.encodeComponent(itemId)}/image');
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');
@@ -1165,6 +1201,97 @@ class EntryStatusNoteDto {
         'classSectionId': classSectionId,
         'subjectId': subjectId,
         'note': note,
+      };
+}
+
+/** The PutIndicatorsDto the API takes. */
+class PutIndicatorsDto {
+  const PutIndicatorsDto({required this.classSectionId, required this.rows});
+  final String classSectionId;
+  final List<PutIndicatorsDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutIndicatorsDtoRowsItem the API takes. */
+class PutIndicatorsDtoRowsItem {
+  const PutIndicatorsDtoRowsItem({required this.studentId, required this.indicatorId, this.grade, this.note});
+  final String studentId;
+  final String indicatorId;
+  final String? grade;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'indicatorId': indicatorId,
+        if (grade != null) 'grade': grade,
+        if (note != null) 'note': note,
+      };
+}
+
+/** The SectionSheetUploadDto the API takes. */
+class SectionSheetUploadDto {
+  const SectionSheetUploadDto({required this.classSectionId, required this.file, this.apply});
+  final String classSectionId;
+  final String file;
+  final bool? apply;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'file': file,
+        if (apply != null) 'apply': apply,
+      };
+}
+
+/** The PutHpcFeedbackDto the API takes. */
+class PutHpcFeedbackDto {
+  const PutHpcFeedbackDto({required this.classSectionId, required this.rows});
+  final String classSectionId;
+  final List<PutHpcFeedbackDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutHpcFeedbackDtoRowsItem the API takes. */
+class PutHpcFeedbackDtoRowsItem {
+  const PutHpcFeedbackDtoRowsItem({required this.studentId, required this.kind, required this.text});
+  final String studentId;
+  final String kind;
+  final String text;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'kind': kind,
+        'text': text,
+      };
+}
+
+/** The AddPortfolioDto the API takes. */
+class AddPortfolioDto {
+  const AddPortfolioDto({required this.classSectionId, required this.studentId, this.caption, this.indicatorId, required this.image});
+  final String classSectionId;
+  final String studentId;
+  final String? caption;
+  final String? indicatorId;
+  final AddPortfolioDtoImage image;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'studentId': studentId,
+        if (caption != null) 'caption': caption,
+        if (indicatorId != null) 'indicatorId': indicatorId,
+        'image': image.toJson(),
+      };
+}
+
+/** The AddPortfolioDtoImage the API takes. */
+class AddPortfolioDtoImage {
+  const AddPortfolioDtoImage({required this.contentType, required this.base64});
+  final String contentType;
+  final String base64;
+  Map<String, Object?> toJson() => {
+        'contentType': contentType,
+        'base64': base64,
       };
 }
 

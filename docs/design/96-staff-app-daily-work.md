@@ -256,3 +256,34 @@ teacher."); the list reads again after each; "Nothing waits for you to verify." 
 `ExamStatusController_waiting`, `_verify`, `_sendBack`. No API change. Tests: `staff_test.dart` (the list, the sheet
 read only, send back refused without a note then sent, verify; light, dark, Hindi, twice the text); 244 app tests;
 the web preview rebuilt.
+
+## Part 12: Indicators and progress card (22 Nov 2026)
+
+"Staff app: the Indicators and progress card section the same as the staff website."
+
+The app opened the website's page. As built: `lib/staff/indicators.dart` — `IndicatorsScreen`
+(`nativeScreen('/indicators')`, from Classes and More), as the website's page laid out for a phone:
+
+- **Exam** (those taking indicators) and **Section** (those the person rates: the class teacher's, or a teacher
+  given areas in Teacher assignments; "You rate no section in this exam …" otherwise); the set's name.
+- **Areas** as chips with what is entered ("Language (1/4)": the person's indicators × pupils); "Also entered by …"
+  for the class teacher, or "Only the indicators given to you are shown …" for a teacher given areas.
+- **Each pupil** of the area as a card: a goal's name over its indicators; a level from the set (or the
+  indicator's own levels), shown with its words ("P (Proficient)"), or written words for a written item; **Save**
+  sends every box of the area (`PUT exams/:id/indicators`; an empty box clears it). Locked: read only.
+- **By Excel** (`lib/staff/sheet_excel.dart`, `SheetByExcel` — for Remarks and Height and weight too): **Download the
+  sheet** (filled with what is entered; the file viewer) and, while open, **Upload the filled sheet (.xlsx)** (up to
+  1.4 MB): checked first ("n rows read · m ready to save · k with a problem", each problem row and why), then **Save
+  the rows** only when none has a problem (`POST …/indicators/upload` with `apply`).
+- **Holistic Progress Card** (the class teacher): **Pupil** (with photo counts); "All about me (the child's
+  words)", "The parent's feedback" (read only when the parent wrote it in the parent app), "My observations";
+  **Save the words** (`PUT exams/:id/hpc-feedback`); **Portfolio** — each photo (caption, what it shows) to view or
+  remove (asked first), and a new one: Choose a photo or take one (PNG or JPEG, up to 1 MB), Caption, Shows
+  (optional), **Add the photo** (`POST exams/:id/portfolio`).
+
+Calls added: `ExamEntryController_indicators`, `_putIndicators`, `_indicatorsExcel !file`, `_indicatorsUpload`,
+`HpcController_feedback`, `_portfolio`, `_addPhoto`, `_removePhoto`, `_photo !file`. No API change. The pickers (an
+.xlsx, a photo) sit behind providers so tests put their own in place. Tests: `staff_test.dart` (areas and counts,
+a goal over its indicators, levels with words, Save's rows, an indicator's own levels, the sheet downloaded, an upload
+with a problem then saved, the parent's words kept, the words saved, a photo removed, a photo asked for then added, a
+teacher given areas; light, dark, Hindi, twice the text); 249 app tests; the web preview rebuilt.

@@ -1503,6 +1503,113 @@ class S {
   String get vmVerified => _t('Verified and locked.', 'सत्यापित और बंद।');
   String get vmSentBack => _t('Sent back to the teacher.', 'शिक्षक को वापस भेजा गया।');
 
+  // ---- Indicators and progress card as on the staff website (docs/design/96 part 12) ----
+  String get inSection => _t('Section', 'वर्ग');
+  String get inIntro => _t(
+    'Class teachers rate their section on the indicators of the exam.',
+    'कक्षा-अध्यापक परीक्षा के संकेतकों पर अपने वर्ग का मूल्यांकन करते हैं।',
+  );
+  String get inDenied => _t(
+    'You are not allowed to open exam registers in this school.',
+    'आप इस विद्यालय में परीक्षा रजिस्टर नहीं खोल सकते।',
+  );
+  String get inNoSection => _t(
+    'You rate no section in this exam: the class teacher does, or a teacher given areas in Teacher assignments.',
+    'इस परीक्षा में आप किसी वर्ग का मूल्यांकन नहीं करते: कक्षा-अध्यापक करते हैं, या शिक्षक-नियुक्ति में क्षेत्र दिए गए शिक्षक।',
+  );
+  String get inNoneGiven => _t(
+    'No indicator of this section is given to you.',
+    'इस वर्ग का कोई संकेतक आपको नहीं दिया गया है।',
+  );
+  String get inNoSet => _t(
+    'This section has no indicators in this exam.',
+    'इस परीक्षा में इस वर्ग के कोई संकेतक नहीं हैं।',
+  );
+  String get inMappedNote => _t(
+    'Only the indicators given to you are shown; the class teacher sees them all.',
+    'केवल आपको दिए गए संकेतक दिखते हैं; कक्षा-अध्यापक सभी देखते हैं।',
+  );
+  String inAlsoBy(String names) => _t('Also entered by: $names', 'ये भी भरते हैं: $names');
+  String get inOther => _t('Other', 'अन्य');
+  String get inSaved => _t('Saved.', 'सहेजा गया।');
+  String get inSave => _t('Save', 'सहेजें');
+  String get inNote => _t('Your words', 'आपके शब्द');
+  String? inError(String type) => switch (type) {
+    'exams.entry_locked' => _t(
+      'Indicator entry is locked; ask the coordinator to reopen it.',
+      'संकेतक प्रविष्टि बंद है; समन्वयक से फिर खुलवाएँ।',
+    ),
+    'exams.not_assigned' => _t(
+      'Only the class teacher of this section can enter these.',
+      'इन्हें केवल इस वर्ग के कक्षा-अध्यापक भर सकते हैं।',
+    ),
+    'exams.indicator_not_mapped' => _t(
+      'Some of these indicators are not given to you in this section.',
+      'इनमें से कुछ संकेतक इस वर्ग में आपको नहीं दिए गए हैं।',
+    ),
+    'exams.feedback_by_family' => _t(
+      'The parent wrote this in the parent app; it is kept as they wrote it.',
+      'यह अभिभावक ने ऐप में लिखा है; जैसा लिखा वैसा ही रहता है।',
+    ),
+    'exams.portfolio_full' => _t(
+      'A child has up to twelve photos in an exam; remove one first.',
+      'एक परीक्षा में बच्चे की अधिकतम बारह फ़ोटो; पहले एक हटाएँ।',
+    ),
+    'scope-denied' => _t('You are not allowed to open this section.', 'आप यह वर्ग नहीं खोल सकते।'),
+    _ => null,
+  };
+
+  // the sheet by Excel (indicators, remarks, height and weight)
+  String get xlByExcel => _t('By Excel', 'Excel से');
+  String get xlIndicatorsHelp => _t(
+    'The sheet holds the indicators you rate in this section, filled with what is entered; a level from its list, or your words for a written item.',
+    'शीट में इस वर्ग के वे संकेतक हैं जिनका आप मूल्यांकन करते हैं, भरे हुए मानों सहित; सूची से स्तर, या लिखित बिंदु के लिए आपके शब्द।',
+  );
+  String get xlDownload => _t('Download the sheet', 'शीट डाउनलोड करें');
+  String get xlUpload => _t('Upload the filled sheet (.xlsx)', 'भरी हुई शीट अपलोड करें (.xlsx)');
+  String get xlChecking => _t('Checking the sheet…', 'शीट जाँची जा रही है…');
+  String xlSummary(int rows, int ready, int errors) => _t(
+    '$rows rows read · $ready ready to save${errors > 0 ? ' · $errors with a problem' : ''}',
+    '$rows पंक्तियाँ पढ़ीं · $ready सहेजने को तैयार${errors > 0 ? ' · $errors में समस्या' : ''}',
+  );
+  String xlSaveRows(int n) => _t('Save the rows ($n)', 'पंक्तियाँ सहेजें ($n)');
+  String xlSaved(int n) => _t('Saved ($n).', 'सहेजा गया ($n)।');
+  String get xlNothing => _t('Nothing was saved.', 'कुछ नहीं सहेजा गया।');
+  String get xlTooLarge => _t('The file is larger than 1.4 MB.', 'फ़ाइल 1.4 MB से बड़ी है।');
+  String xlRowProblem(Object row, String admissionNo, String name, String problem) => _t(
+    'Row $row · $admissionNo · $name: $problem',
+    'पंक्ति $row · $admissionNo · $name: $problem',
+  );
+
+  // the progress card's words and portfolio
+  String inWordsTitle(String name) =>
+      _t('In our words and the portfolio · $name', 'हमारे शब्द और पोर्टफ़ोलियो · $name');
+  String get inPupil => _t('Pupil', 'विद्यार्थी');
+  String inPhotosN(int n) => _t('$n photo${n == 1 ? '' : 's'}', '$n फ़ोटो');
+  String inWordKind(String k) => switch (k) {
+    'self' => _t('All about me (the child’s words)', 'मेरे बारे में (बच्चे के शब्द)'),
+    'parent' => _t('The parent’s feedback', 'अभिभावक की प्रतिक्रिया'),
+    _ => _t('My observations', 'मेरे अवलोकन'),
+  };
+  String get inByParent =>
+      _t('Written by the parent in the parent app.', 'अभिभावक ने अभिभावक ऐप में लिखा।');
+  String get inSaveWords => _t('Save the words', 'शब्द सहेजें');
+  String get inPortfolio => _t('Portfolio', 'पोर्टफ़ोलियो');
+  String get inNoPhoto => _t(
+    'No photo yet (up to twelve; the card prints six).',
+    'अभी कोई फ़ोटो नहीं (बारह तक; कार्ड पर छह छपती हैं)।',
+  );
+  String get inPhoto => _t('Photo', 'फ़ोटो');
+  String get inCaption => _t('Caption', 'कैप्शन');
+  String get inShows => _t('Shows (optional)', 'क्या दिखाती है (वैकल्पिक)');
+  String get inAddPhoto => _t('Add the photo', 'फ़ोटो जोड़ें');
+  String get inAdded => _t('Added.', 'जोड़ दी गई।');
+  String get inChoosePhoto => _t('Choose a photo', 'फ़ोटो चुनें');
+  String get inPhotoTooBig => _t('The photo is larger than 1 MB.', 'फ़ोटो 1 MB से बड़ी है।');
+  String get inPhotoType => _t('Choose a PNG or JPEG photo.', 'PNG या JPEG फ़ोटो चुनें।');
+  String get inRemovePhotoAsk =>
+      _t('Remove this photo from the portfolio?', 'यह फ़ोटो पोर्टफ़ोलियो से हटाएँ?');
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

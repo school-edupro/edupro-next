@@ -4,7 +4,10 @@ import 'package:edupro/app_services.dart';
 import 'package:edupro/auth/session_store.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/staff/data.dart';
+import 'package:edupro/staff/indicators.dart';
+import 'package:edupro/staff/sheet_excel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -71,6 +74,13 @@ class School {
 
   /// the sheets waiting to be verified that were verified or sent back (part 11)
   final marksDone = <String>{};
+
+  /// indicators and the progress card (part 12): what was saved, and the Excel checks
+  final indicatorPuts = <Map<String, Object?>>[];
+  final wordsPuts = <Map<String, Object?>>[];
+  final photosAdded = <Map<String, Object?>>[];
+  final photosRemoved = <String>[];
+  int sheetChecks = 0;
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -217,6 +227,7 @@ class School {
       entry('/lesson-plans', 'Lesson plans', 'book'),
       entry('/syllabus', 'My syllabus', 'book'),
       entry('/verify-marks', 'Verify marks', 'check'),
+      entry('/indicators', 'Indicators and progress card', 'chart'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -625,6 +636,147 @@ class School {
         return {'inserted': (c.body!['rows'] as List).length, 'updated': 0};
       case 'PUT /exams/e1/part-marks':
         return {'saved': (c.body!['rows'] as List).length};
+      case 'GET /exams/e2/entry/sections':
+        return {
+          'data': [
+            {
+              'classSectionId': '300',
+              'code': 'VI-A',
+              'register': true,
+              'indicators': true,
+              'subjects': [],
+            },
+            {
+              'classSectionId': '301',
+              'code': 'VI-B',
+              'register': false,
+              'indicators': true,
+              'subjects': [],
+            },
+            {
+              'classSectionId': '302',
+              'code': 'VI-C',
+              'register': false,
+              'indicators': false,
+              'subjects': [],
+            },
+          ],
+        };
+      case 'GET /exams/e2/indicators':
+        final mapped = c.query?['classSectionId'] == '301';
+        Map<String, Object?> item(
+          String id,
+          String name,
+          String area, {
+          String? parent,
+          String kind = 'level',
+          bool heading = false,
+          bool mine = true,
+          List<String>? levels,
+          List<String> by = const [],
+        }) => {
+          'id': id,
+          'name': name,
+          'area': area,
+          'parentId': parent,
+          'kind': kind,
+          'heading': heading,
+          'levels': levels,
+          'mine': mine,
+          'enteredBy': by,
+        };
+        return {
+          'exam': {'id': 'e2', 'code': 'IND', 'name': 'Indicators', 'marksLocked': false},
+          'section': {'id': mapped ? '301' : '300', 'code': mapped ? 'VI-B' : 'VI-A'},
+          'locked': false,
+          'reach': mapped ? 'mapped' : 'all',
+          'set': {
+            'id': 's1',
+            'code': mapped ? 'IND' : 'HPC',
+            'name': mapped ? 'Indicators' : 'Progress card',
+            'grades': ['B', 'P', 'A'],
+            'kind': mapped ? 'indicators' : 'hpc',
+            'levelWords': {'B': 'Beginner', 'P': 'Proficient', 'A': 'Advanced'},
+          },
+          'indicators': [
+            item('g1', 'Speaking', 'Language', heading: true),
+            item('i1', 'Speaks clearly', 'Language', parent: 'g1', by: ['Ravi Sample (E099)']),
+            item('i2', 'Reading note', 'Language', kind: 'text', mine: !mapped),
+            item('i3', 'Counts to 100', 'Numeracy', levels: ['Yes', 'No'], mine: !mapped),
+          ],
+          'rows': [
+            {
+              'studentId': '41',
+              'name': 'Kid Sample',
+              'admissionNo': 'A-41',
+              'rollNo': 1,
+              'grades': {
+                'i1': {'grade': 'P', 'note': null},
+              },
+              if (!mapped)
+                'feedback': {
+                  'parent': {'text': 'Loves stories', 'byFamily': true},
+                },
+              if (!mapped) 'photos': 1,
+            },
+            {
+              'studentId': '42',
+              'name': 'Ria Sample',
+              'admissionNo': 'A-42',
+              'rollNo': 2,
+              'grades': <String, Object?>{},
+              if (!mapped) 'feedback': <String, Object?>{},
+              if (!mapped) 'photos': 0,
+            },
+          ],
+        };
+      case 'PUT /exams/e2/indicators':
+        indicatorPuts.add(c.body!);
+        return {'changed': 3};
+      case 'GET /exams/e2/indicators/excel':
+        return null;
+      case 'POST /exams/e2/indicators/upload':
+        sheetChecks++;
+        final firstTry = sheetChecks == 1;
+        return {
+          'rows': [
+            {'row': 2, 'admissionNo': 'A-41', 'name': 'Kid Sample', 'error': null},
+            {
+              'row': 3,
+              'admissionNo': 'A-42',
+              'name': 'Ria Sample',
+              'error': firstTry ? 'Level Z is not on the list' : null,
+            },
+          ],
+          'ready': firstTry ? 1 : 2,
+          'errors': firstTry ? 1 : 0,
+          'applied': c.body!['apply'] == true,
+        };
+      case 'PUT /exams/e2/hpc-feedback':
+        wordsPuts.add(c.body!);
+        return {'changed': 2};
+      case 'GET /exams/e2/portfolio':
+        return {
+          'data': [
+            if (c.query?['studentId'] == '41' && !photosRemoved.contains('pf1'))
+              {
+                'id': 'pf1',
+                'studentId': '41',
+                'caption': 'Science fair',
+                'indicatorId': 'i1',
+                'indicator': 'Speaks clearly',
+                'createdAt': '2026-11-20T05:00:00.000Z',
+              },
+          ],
+        };
+      case 'POST /exams/e2/portfolio':
+        photosAdded.add(c.body!);
+        return {'id': 'pf2'};
+      case 'DELETE /exams/e2/portfolio/pf1':
+        photosRemoved.add('pf1');
+        return {'ok': true};
+      case 'GET /exams/e2/portfolio/pf1/image':
+        return null;
       case 'GET /exams/entry-status/waiting':
         Map<String, Object?> waiting(String subject, String name) => {
           'examId': 'e1',
@@ -1120,6 +1272,7 @@ Future<(FakeTransport, School)> pumpStaff(
   bool hindi = false,
   Size size = const Size(420, 1600),
   School? with_,
+  List<Override> overrides = const [],
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1140,6 +1293,7 @@ Future<(FakeTransport, School)> pumpStaff(
         transportProvider.overrideWithValue(t),
         secureStoreProvider.overrideWithValue(mem),
         webFontsProvider.overrideWithValue(false),
+        ...overrides,
         deviceProvider.overrideWith(
           (ref) async =>
               const DeviceDetails(id: 'phone-test0001', name: 'Test phone', platform: 'android'),
@@ -1523,6 +1677,210 @@ void main() {
     });
     expect(find.text(s.vmVerified), findsOneWidget);
     expect(find.byKey(const Key('vmNone')), findsOneWidget);
+  });
+
+  // a made-up picked sheet and photo (the phone's pickers cannot run in tests)
+  final pickers = <Override>[
+    xlsxPickerProvider.overrideWithValue(
+      () async => (name: 'sheet.xlsx', bytes: [80, 75, 3, 4, 1, 2]),
+    ),
+    photoPickerProvider.overrideWithValue(
+      (camera) async => (name: 'drawing.png', bytes: [0x89, 0x50, 0x4e, 0x47, 1, 2, 3]),
+    ),
+  ];
+
+  testWidgets('Indicators and progress card in the app: areas, levels, Excel, words, portfolio', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 4200), overrides: pickers);
+    final s = S(false);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Indicators and progress card'));
+    await tester.pumpAndSettle();
+    // no web page; the exams that take indicators, the sections the person rates
+    expect(find.byKey(const Key('inScreen')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-indicators')), findsNothing);
+    expect(find.text('Indicators (IND)'), findsWidgets);
+    expect(find.text('VI-A · Progress card'), findsOneWidget);
+    // the areas with what is entered (indicators × pupils)
+    expect(find.text('Language (1/4)'), findsOneWidget);
+    expect(find.text('Numeracy (0/2)'), findsOneWidget);
+    expect(find.text('Also entered by: Ravi Sample (E099)'), findsOneWidget);
+    // a goal's name over its indicators; the level with its words
+    final kid = find.byKey(const Key('inPupil-41'));
+    expect(find.descendant(of: kid, matching: find.text('Speaking')), findsOneWidget);
+    expect(find.descendant(of: kid, matching: find.text('P (Proficient)')), findsOneWidget);
+    // a level for Ria, words for Kid; Save sends every box of the area
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('inPupil-42')),
+        matching: find.byType(DropdownButtonFormField<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('A (Advanced)').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('inNote-41|i2')), 'Reads well');
+    await tester.tap(find.byKey(const Key('inSave')));
+    await tester.pumpAndSettle();
+    expect(school.indicatorPuts.single, {
+      'classSectionId': '300',
+      'rows': [
+        {'studentId': '41', 'indicatorId': 'i1', 'grade': 'P'},
+        {'studentId': '41', 'indicatorId': 'i2', 'note': 'Reads well'},
+        {'studentId': '42', 'indicatorId': 'i1', 'grade': 'A'},
+        {'studentId': '42', 'indicatorId': 'i2'},
+      ],
+    });
+    expect(find.text(s.inSaved), findsOneWidget);
+    // another area: an indicator with its own levels
+    await tester.tap(find.byKey(const Key('inArea-Numeracy')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('inPupil-41')),
+        matching: find.byType(DropdownButtonFormField<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Yes'), findsWidgets);
+    await tester.tap(find.text('No').last);
+    await tester.pumpAndSettle();
+
+    // by Excel: the sheet; an upload checked first (a row with a problem: nothing to save), then saved
+    await tester.tap(find.byKey(const Key('xlDownload')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e2/indicators/excel').query, {
+      'classSectionId': '300',
+    });
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('xlUpload')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 rows read · 1 ready to save · 1 with a problem'), findsOneWidget);
+    expect(find.text('Row 3 · A-42 · Ria Sample: Level Z is not on the list'), findsOneWidget);
+    expect(find.byKey(const Key('xlSave')), findsNothing);
+    final checked = t.calls.lastWhere((c) => c.path == '/exams/e2/indicators/upload').body!;
+    expect(checked['apply'], false);
+    expect(checked['file'], 'UEsDBAEC');
+    await tester.tap(find.byKey(const Key('xlUpload')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('xlSave')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e2/indicators/upload').body!['apply'], true);
+    expect(find.text('Saved (2).'), findsOneWidget);
+
+    // the progress card: the parent's own words stay; the child's and mine are saved
+    expect(find.text('In our words and the portfolio · Kid Sample'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const Key('inWords-parent-41'))).enabled, isFalse);
+    expect(find.text(s.inByParent), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('inWords-self-41')), 'I like maths');
+    await tester.enterText(find.byKey(const Key('inWords-teacher-41')), 'Curious');
+    await tester.tap(find.byKey(const Key('inSaveWords')));
+    await tester.pumpAndSettle();
+    expect(school.wordsPuts.single, {
+      'classSectionId': '300',
+      'rows': [
+        {'studentId': '41', 'kind': 'self', 'text': 'I like maths'},
+        {'studentId': '41', 'kind': 'teacher', 'text': 'Curious'},
+      ],
+    });
+    // the portfolio: remove (asked first), then a photo is asked for, then added with what it shows
+    expect(find.text('Science fair'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('inPhotoRemove-pf1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('inPhotoRemoveYes')));
+    await tester.pumpAndSettle();
+    expect(school.photosRemoved, ['pf1']);
+    expect(find.byKey(const Key('inNoPhoto')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('inAddPhoto')));
+    await tester.pumpAndSettle();
+    expect(school.photosAdded, isEmpty);
+    await tester.tap(find.byKey(const Key('inPickPhoto')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('inPhotoChosen')), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('inCaption')), 'Drawing');
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Speaks clearly').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('inAddPhoto')));
+    await tester.pumpAndSettle();
+    expect(school.photosAdded.single, {
+      'classSectionId': '300',
+      'studentId': '41',
+      'caption': 'Drawing',
+      'indicatorId': 'i1',
+      'image': {'contentType': 'image/png', 'base64': 'iVBORwECAw=='},
+    });
+    expect(find.text(s.inAdded), findsOneWidget);
+
+    // a teacher given areas in another section: only theirs, no progress card; a section not rated: not offered
+    await tester.tap(find.byKey(const Key('inSection')));
+    await tester.pumpAndSettle();
+    expect(find.text('VI-C'), findsNothing);
+    await tester.tap(find.text('VI-B').last);
+    await tester.pumpAndSettle();
+    expect(find.text(s.inMappedNote), findsOneWidget);
+    expect(find.byKey(const Key('inArea-Numeracy')), findsNothing);
+    expect(find.byKey(const Key('inNote-41|i2')), findsNothing);
+    expect(find.byKey(const Key('inProgressCard')), findsNothing);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets('Indicators: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})', (
+      tester,
+    ) async {
+      tester.platformDispatcher.platformBrightnessTestValue = dark
+          ? Brightness.dark
+          : Brightness.light;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      final handle = tester.ensureSemantics();
+      await pumpStaff(tester, hindi: hindi, size: const Size(420, 4200), overrides: pickers);
+      final s = S(hindi);
+      Future<void> check(String where) async {
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+        }
+      }
+
+      await tester.tap(find.text(s.classes).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(s.menu('Indicators and progress card')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('xlUpload')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('inPickPhoto')));
+      await check('Indicators');
+      handle.dispose();
+    });
+  }
+
+  testWidgets('Indicators: large text (twice the size) lays out without overflow', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780), overrides: pickers);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Indicators and progress card'));
+    await tester.tap(find.text('Indicators and progress card'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Indicators');
+    final list = find
+        .descendant(of: find.byKey(const Key('inScreen')), matching: find.byType(Scrollable))
+        .first;
+    for (final k in ['inSave', 'xlUpload', 'inSaveWords', 'inAddPhoto']) {
+      await tester.scrollUntilVisible(find.byKey(Key(k)), 300, scrollable: list);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: k);
+    }
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

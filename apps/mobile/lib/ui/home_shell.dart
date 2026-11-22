@@ -33,6 +33,7 @@ import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
 import '../staff/daily_work.dart';
 import '../staff/documents.dart';
+import '../staff/indicators.dart';
 import '../staff/lesson_plans.dart';
 import '../staff/syllabus.dart';
 import '../staff/verify_marks.dart';
@@ -96,6 +97,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/marks' => MarksHome(profile: p),
       // the sheets submitted for the person's sections: open, verify, send back (docs/design/96 part 11)
       '/verify-marks' => VerifyMarksScreen(profile: p),
+      // rate the indicators, the sheet by Excel, the progress card's words and photos (docs/design/96 part 12)
+      '/indicators' => IndicatorsScreen(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       // upload a lesson for approval, the lesson report, a lesson in full (docs/design/96 part 7)
       '/lesson-plans' => LessonPlansScreen(profile: p),

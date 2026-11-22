@@ -84,6 +84,17 @@ ExamEntryController_putPartMarks
 ExamStatusController_waiting
 ExamStatusController_verify
 ExamStatusController_sendBack
+# indicators and the progress card as on the staff website (docs/design/96 part 12): rating, the sheet by Excel,
+# the child's, parent's and teacher's words, the portfolio photos
+ExamEntryController_indicators
+ExamEntryController_putIndicators
+ExamEntryController_indicatorsExcel !file
+ExamEntryController_indicatorsUpload
+HpcController_feedback
+HpcController_portfolio
+HpcController_addPhoto
+HpcController_removePhoto
+HpcController_photo !file
 DailyWorkController_sheetOptions
 DailyWorkController_sheet
 DailyWorkController_saveSheet
