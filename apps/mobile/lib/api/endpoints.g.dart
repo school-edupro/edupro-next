@@ -316,6 +316,18 @@ class EduProApi {
   Future<dynamic> lessonUploadsRemove({required String id}) =>
       _t.send('DELETE', '/academics/lessons/${Uri.encodeComponent(id)}');
 
+  /// GET /academics/lessons/approvers
+  Future<dynamic> lessonUploadsRules() =>
+      _t.send('GET', '/academics/lessons/approvers');
+
+  /// POST /academics/lessons/approvers — Who approves lessons of an employee, a class, a department, or by default
+  Future<dynamic> lessonUploadsSaveRule({required LessonRuleDto body}) =>
+      _t.send('POST', '/academics/lessons/approvers', body: body.toJson());
+
+  /// DELETE /academics/lessons/approvers/{id}
+  Future<dynamic> lessonUploadsRemoveRule({required String id}) =>
+      _t.send('DELETE', '/academics/lessons/approvers/${Uri.encodeComponent(id)}');
+
   /// POST /platform/files — Register a file and obtain a signed upload URL
   Future<dynamic> filesCreate({required CreateUploadDto body}) =>
       _t.send('POST', '/platform/files', body: body.toJson());
@@ -1183,6 +1195,36 @@ class LessonDecideDto {
   Map<String, Object?> toJson() => {
         'action': action,
         if (remark != null) 'remark': remark,
+      };
+}
+
+/** The LessonRuleDto the API takes. */
+class LessonRuleDto {
+  const LessonRuleDto({required this.scope, this.employeeId, this.classId, this.department, required this.levels});
+  final String scope;
+  final String? employeeId;
+  final String? classId;
+  final String? department;
+  final List<LessonRuleDtoLevelsItem> levels;
+  Map<String, Object?> toJson() => {
+        'scope': scope,
+        if (employeeId != null) 'employeeId': employeeId,
+        if (classId != null) 'classId': classId,
+        if (department != null) 'department': department,
+        'levels': levels.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The LessonRuleDtoLevelsItem the API takes. */
+class LessonRuleDtoLevelsItem {
+  const LessonRuleDtoLevelsItem({required this.kind, this.employeeId, this.roleCode});
+  final String kind;
+  final String? employeeId;
+  final String? roleCode;
+  Map<String, Object?> toJson() => {
+        'kind': kind,
+        if (employeeId != null) 'employeeId': employeeId,
+        if (roleCode != null) 'roleCode': roleCode,
       };
 }
 

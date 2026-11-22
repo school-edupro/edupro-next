@@ -91,6 +91,10 @@ LessonUploadsController_get
 LessonUploadsController_file !file
 LessonUploadsController_decide
 LessonUploadsController_remove
+# who approves whose lessons (the admin app's Approvers; the set-up right only)
+LessonUploadsController_rules
+LessonUploadsController_saveRule
+LessonUploadsController_removeRule
 FilesController_create
 FilesController_complete
 StaffAttendanceController_mine

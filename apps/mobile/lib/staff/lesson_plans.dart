@@ -108,10 +108,22 @@ final lessonProvider = FutureProvider.autoDispose.family<Json, String>(
   (ref, id) async => asJson(await ref.read(apiProvider).lessonUploadsGet(id: id)),
 );
 
+/// Who approves whose lessons and the lists to choose from (the admin app's Approvers); null when setting it is
+/// not part of the person's role (the set-up right).
+final lessonRulesProvider = FutureProvider.autoDispose.family<Json?, Profile>((ref, p) async {
+  try {
+    return asJson(await ref.read(apiProvider).lessonUploadsRules());
+  } on ApiException catch (e) {
+    if (e.status == 403) return null;
+    rethrow;
+  }
+});
+
 /// Lesson plans as on the staff website (docs/design/96, part 7): **Upload Lesson** (the date, master class or
 /// class section, the classes, the topic, a description, attachments; it goes to the approvers) and **Lesson
 /// Report** (the four counts, the filters, Excel and PDF, the lessons with where each one waits; a lesson opens in
-/// full with its levels, and acknowledge or reject when it waits for the teacher). No web page.
+/// full with its levels, and acknowledge or reject when it waits for the teacher). For those with the set-up right
+/// (as in the admin app), **Approvers**: who approves whose lessons (part 8). No web page.
 class LessonPlansScreen extends ConsumerWidget {
   const LessonPlansScreen({super.key, required this.profile});
   final Profile profile;
@@ -119,8 +131,10 @@ class LessonPlansScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
+    final setup = ref.watch(lessonRulesProvider(profile)).value != null;
     return DefaultTabController(
-      length: 2,
+      key: ValueKey('lpTabs-$setup'),
+      length: setup ? 3 : 2,
       child: Column(
         children: [
           Material(
@@ -130,6 +144,7 @@ class LessonPlansScreen extends ConsumerWidget {
               tabs: [
                 Tab(text: s.lpUploadTab),
                 Tab(text: s.lpReportTab),
+                if (setup) Tab(text: s.lpApproversTab),
               ],
             ),
           ),
@@ -138,6 +153,7 @@ class LessonPlansScreen extends ConsumerWidget {
               children: [
                 _UploadTab(profile: profile),
                 const LessonReportTab(),
+                if (setup) LessonApproversTab(profile: profile),
               ],
             ),
           ),
@@ -1190,6 +1206,312 @@ class _LessonDetailScreenState extends ConsumerState<LessonDetailScreen> {
           if (acted != null) Text(acted, style: TextStyle(color: muted, fontSize: 13)),
           if (a['remark'] != null)
             Text('${s.remarkWord}: ${a['remark']}', style: TextStyle(color: muted, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+// ---- Approvers ------------------------------------------------------------------------------------------------
+
+/// Who approves whose lessons, as the admin app's Approvers: the rules (the school default, a department, a class,
+/// an employee — up to three levels, each a person or anyone with a role) with Remove, and Add or replace a rule.
+class LessonApproversTab extends ConsumerStatefulWidget {
+  const LessonApproversTab({super.key, required this.profile});
+  final Profile profile;
+
+  @override
+  ConsumerState<LessonApproversTab> createState() => _LessonApproversTabState();
+}
+
+class _LessonApproversTabState extends ConsumerState<LessonApproversTab>
+    with AutomaticKeepAliveClientMixin {
+  String _scope = 'default';
+  String _department = '';
+  String _classId = '';
+  String _employeeId = '';
+
+  /// each level: `role:<code>`, `emp:<id>` or empty (no such level)
+  final List<String> _levels = ['', '', ''];
+
+  /// a new number empties the form's boxes after a save
+  int _version = 0;
+  bool _busy = false;
+  String? _error;
+  String? _notice;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  Future<void> _save() async {
+    final s = ref.read(stringsProvider);
+    final missing = switch (_scope) {
+      'department' when _department.isEmpty => s.lpChooseDepartment,
+      'class' when _classId.isEmpty => s.lpChooseClass,
+      'employee' when _employeeId.isEmpty => s.lpChooseEmployee,
+      _ when _levels[0].isEmpty => s.lpChooseLevel1,
+      _ => null,
+    };
+    if (missing != null) {
+      return setState(() {
+        _error = missing;
+        _notice = null;
+      });
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await ref
+          .read(apiProvider)
+          .lessonUploadsSaveRule(
+            body: LessonRuleDto(
+              scope: _scope,
+              employeeId: _scope == 'employee' ? _employeeId : null,
+              classId: _scope == 'class' ? _classId : null,
+              department: _scope == 'department' ? _department : null,
+              levels: [
+                for (final v in _levels)
+                  if (v.startsWith('role:'))
+                    LessonRuleDtoLevelsItem(kind: 'role', roleCode: v.substring(5))
+                  else if (v.startsWith('emp:'))
+                    LessonRuleDtoLevelsItem(kind: 'employee', employeeId: v.substring(4)),
+              ],
+            ),
+          );
+      if (!mounted) return;
+      setState(() {
+        _notice = s.lpRuleSaved;
+        _scope = 'default';
+        _department = '';
+        _classId = '';
+        _employeeId = '';
+        _levels.setAll(0, ['', '', '']);
+        _version++;
+      });
+      ref.invalidate(lessonRulesProvider(widget.profile));
+    } catch (e) {
+      if (mounted) setState(() => _error = errorText(s, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove(Json rule, String label) async {
+    final s = ref.read(stringsProvider);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        content: Text(s.lpRemoveRuleAsk(label)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(s.cancel)),
+          FilledButton(
+            key: const Key('lpRuleRemoveYes'),
+            onPressed: () => Navigator.pop(c, true),
+            child: Text(s.remove),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await ref.read(apiProvider).lessonUploadsRemoveRule(id: '${rule['id']}');
+      if (!mounted) return;
+      setState(() => _notice = s.lpRuleRemoved);
+      ref.invalidate(lessonRulesProvider(widget.profile));
+    } catch (e) {
+      if (mounted) setState(() => _error = errorText(s, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final s = ref.watch(stringsProvider);
+    final data = ref.watch(lessonRulesProvider(widget.profile)).value ?? const <String, Object?>{};
+    final rules = [for (final r in asList(data['data'])) asJson(r)];
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final head = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwSemibold);
+    final roles = [for (final r in asList(data['roles'])) asJson(r)];
+    final employees = [for (final e in asList(data['employees'])) asJson(e)];
+    // who can approve a level: a role (anyone with it) or a person
+    final who = [
+      for (final r in roles) ('role:${r['value']}', s.lpRole('${r['label']}')),
+      for (final e in employees) ('emp:${e['value']}', '${e['label']}'),
+    ];
+    Widget pick(
+      String key,
+      String label,
+      String value,
+      List<(String, String)> entries,
+      void Function(String) on,
+    ) => Padding(
+      padding: const EdgeInsets.only(bottom: Tokens.sp3),
+      child: DropdownMenu<String>(
+        key: Key(key),
+        label: Text(label),
+        expandedInsets: EdgeInsets.zero,
+        initialSelection: value,
+        // type to find (a long list of staff); the arrow that opens the list says which list it is
+        enableFilter: true,
+        trailingIcon: Icon(Icons.arrow_drop_down, semanticLabel: label),
+        selectedTrailingIcon: Icon(Icons.arrow_drop_up, semanticLabel: label),
+        requestFocusOnTap: true,
+        menuHeight: 320,
+        enabled: !_busy,
+        onSelected: (v) => on(v ?? ''),
+        dropdownMenuEntries: [for (final (v, l) in entries) DropdownMenuEntry(value: v, label: l)],
+      ),
+    );
+    return ListView(
+      key: const Key('lpApprovers'),
+      padding: const EdgeInsets.all(Tokens.sp4),
+      children: [
+        if (_notice != null) _Note(text: _notice!, ok: true, key: const Key('lpRuleNotice')),
+        if (_error != null) _Note(text: _error!, ok: false, key: const Key('lpRuleError')),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.sp3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(header: true, child: Text(s.lpRulesTitle, style: head)),
+                const SizedBox(height: Tokens.sp1),
+                Text(s.lpRulesHelp, style: TextStyle(color: muted, fontSize: 13)),
+                const SizedBox(height: Tokens.sp3),
+                if (rules.isEmpty)
+                  Text(
+                    s.lpNoRule,
+                    key: const Key('lpNoRule'),
+                    style: TextStyle(color: muted),
+                  )
+                else
+                  for (final r in rules) _rule(s, r, muted),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: Tokens.sp3),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.sp3),
+            child: KeyedSubtree(
+              key: ValueKey('lpRuleForm-$_version'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(header: true, child: Text(s.lpAddRule, style: head)),
+                  const SizedBox(height: Tokens.sp1),
+                  Text(s.lpAddRuleHelp, style: TextStyle(color: muted, fontSize: 13)),
+                  const SizedBox(height: Tokens.sp3),
+                  Text(s.lpRuleFor, style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: Tokens.sp1),
+                  Wrap(
+                    spacing: Tokens.sp2,
+                    runSpacing: Tokens.sp2,
+                    children: [
+                      for (final v in ['default', 'department', 'class', 'employee'])
+                        ChoiceChip(
+                          key: Key('lpScope-$v'),
+                          label: Text(s.lpRuleForOption(v)),
+                          selected: _scope == v,
+                          onSelected: _busy ? null : (_) => setState(() => _scope = v),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: Tokens.sp3),
+                  // only the box the rule is for
+                  if (_scope == 'department')
+                    pick('lpRuleDept', s.lpDepartment, _department, [
+                      for (final d in asList(data['departments'])) ('$d', '$d'),
+                    ], (v) => setState(() => _department = v)),
+                  if (_scope == 'class')
+                    pick('lpRuleClass', s.classWord, _classId, [
+                      for (final c in asList(data['classes']))
+                        ('${asJson(c)['value']}', '${asJson(c)['label']}'),
+                    ], (v) => setState(() => _classId = v)),
+                  if (_scope == 'employee')
+                    pick('lpRuleEmployee', s.lpEmployee, _employeeId, [
+                      for (final e in employees) ('${e['value']}', '${e['label']}'),
+                    ], (v) => setState(() => _employeeId = v)),
+                  for (var n = 1; n <= 3; n++)
+                    pick(
+                      'lpRuleLevel-$n',
+                      n == 1 ? '${s.lpLevelApprover(1)} *' : s.lpLevelApprover(n),
+                      _levels[n - 1],
+                      [if (n > 1) ('', s.lpNoOne), ...who],
+                      (v) => setState(() => _levels[n - 1] = v),
+                    ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      key: const Key('lpSaveRule'),
+                      onPressed: _busy ? null : _save,
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(_busy ? s.loading : s.lpSaveRule),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A rule: what it is for, whose lessons, the approver of each level; Remove (asked first).
+  Widget _rule(S s, Json r, Color muted) {
+    final scope = '${r['scope']}';
+    final label = scope == 'default' ? s.lpEveryoneElse : '${r['label']}';
+    final levels = [for (final l in asList(r['levels'])) asJson(l)];
+    return Container(
+      key: Key('lpRule-${r['id']}'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: Tokens.sp2),
+      padding: const EdgeInsets.all(Tokens.sp2),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(Tokens.radiusSm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: Tokens.sp2,
+            runSpacing: Tokens.sp1,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              StatusChip(s.lpScope(scope), scope == 'default' ? Tone.neutral : Tone.info),
+              Text(label, style: const TextStyle(fontWeight: Tokens.fwSemibold)),
+            ],
+          ),
+          const SizedBox(height: Tokens.sp1),
+          for (var n = 1; n <= 3; n++)
+            Text(
+              '${s.lpLevelN(n)}: ${levels.where((l) => l['level'] == n).firstOrNull?['label'] ?? '–'}',
+              style: TextStyle(color: n == 1 ? null : muted, fontSize: 13),
+            ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              key: Key('lpRuleRemove-${r['id']}'),
+              onPressed: _busy ? null : () => _remove(r, label),
+              icon: const Icon(Icons.delete_outline),
+              label: Text(s.remove),
+            ),
+          ),
         ],
       ),
     );

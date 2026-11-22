@@ -31,7 +31,16 @@ const staffProfile = {
 };
 
 class School {
-  School({this.webTab = false, this.arranged = false, this.lists = false, this.register});
+  School({
+    this.webTab = false,
+    this.arranged = false,
+    this.lists = false,
+    this.register,
+    this.lessonSetup = false,
+  });
+
+  /// the person may set who approves lessons (the set-up right; docs/design/96, part 8)
+  final bool lessonSetup;
 
   /// the school chose a tab that has only a web page (docs/design/94)
   final bool webTab;
@@ -53,6 +62,33 @@ class School {
   Map<String, Object?>? lessonUploaded;
   String? lessonDecision;
   bool lessonDeleted = false;
+  Map<String, Object?>? ruleSaved;
+  final lessonRules = <Map<String, Object?>>[
+    {
+      'id': 'r1',
+      'scope': 'default',
+      'employeeId': null,
+      'classId': null,
+      'department': null,
+      'label': 'Everyone else (school default)',
+      'levels': [
+        {
+          'level': 1,
+          'kind': 'role',
+          'employeeId': null,
+          'roleCode': 'academic_coordinator',
+          'label': 'Academic Coordinator',
+        },
+        {
+          'level': 2,
+          'kind': 'employee',
+          'employeeId': '15',
+          'roleCode': null,
+          'label': 'Asha Teacher',
+        },
+      ],
+    },
+  ];
 
   Map<String, Object?> lessonRow(
     String id,
@@ -706,6 +742,47 @@ class School {
           'page': {'number': 1, 'size': 50, 'total': rows.length},
           'office': false,
         };
+      case 'GET /academics/lessons/approvers':
+        if (!lessonSetup) throw const ApiException(403, 'forbidden', 'Not allowed');
+        return {
+          'data': lessonRules,
+          'employees': [
+            {'value': '15', 'label': 'Asha Teacher (E015)'},
+            {'value': '99', 'label': 'Ravi Sample (E099)'},
+          ],
+          'classes': [
+            {'value': '60', 'label': 'VI'},
+            {'value': '70', 'label': 'VII'},
+          ],
+          'departments': ['Science'],
+          'roles': [
+            {'value': 'academic_coordinator', 'label': 'Academic Coordinator'},
+            {'value': 'principal', 'label': 'Principal'},
+          ],
+        };
+      case 'POST /academics/lessons/approvers':
+        ruleSaved = c.body;
+        lessonRules.add({
+          'id': 'r2',
+          'scope': c.body!['scope'],
+          'employeeId': null,
+          'classId': c.body!['classId'],
+          'department': null,
+          'label': 'VI',
+          'levels': [
+            {
+              'level': 1,
+              'kind': 'role',
+              'employeeId': null,
+              'roleCode': 'principal',
+              'label': 'Principal',
+            },
+          ],
+        });
+        return {'id': 'r2'};
+      case 'DELETE /academics/lessons/approvers/r1':
+        lessonRules.removeWhere((r) => r['id'] == 'r1');
+        return {'ok': true};
       case 'GET /academics/lessons/9' || 'GET /academics/lessons/12' || 'GET /academics/lessons/15':
         return lessonDetail(c.path.split('/').last);
       case 'POST /academics/lessons/9/decide':
@@ -1345,6 +1422,11 @@ void main() {
       // no web page: the app's own screen, Upload Lesson first
       expect(find.byKey(const Key('lpUpload')), findsOneWidget);
       expect(find.byKey(const Key('openWeb-lesson-plans')), findsNothing);
+      // a teacher without the set-up right: no Approvers tab
+      expect(
+        find.descendant(of: find.byKey(const Key('lpTabs')), matching: find.text(s.lpApproversTab)),
+        findsNothing,
+      );
       // nothing ticked: Submit waits, the hint says why
       expect(tester.widget<FilledButton>(find.byKey(const Key('lpSubmit'))).onPressed, isNull);
       expect(find.byKey(const Key('lpTickHint')), findsOneWidget);
@@ -1484,7 +1566,12 @@ void main() {
             : Brightness.light;
         addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
         final handle = tester.ensureSemantics();
-        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2400));
+        await pumpStaff(
+          tester,
+          hindi: hindi,
+          size: const Size(420, 2400),
+          with_: School(lessonSetup: true),
+        );
         final s = S(hindi);
         Future<void> check(String where) async {
           await tester.pumpAndSettle();
@@ -1512,6 +1599,17 @@ void main() {
         await check('Lesson Report');
         await tester.tap(find.byKey(const Key('lpOpen-9')));
         await check('A lesson');
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const Key('lpTabs')),
+            matching: find.text(s.lpApproversTab),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('lpScope-employee')));
+        await check('Approvers');
         handle.dispose();
       },
     );
@@ -1522,7 +1620,7 @@ void main() {
   ) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2.0;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await pumpStaff(tester, size: const Size(360, 780));
+    await pumpStaff(tester, size: const Size(360, 780), with_: School(lessonSetup: true));
     // down the screen's own list (the tab pages slide sideways)
     Future<void> down(String list, Finder f) async {
       if (f.evaluate().isEmpty) {
@@ -1562,6 +1660,106 @@ void main() {
     expect(tester.takeException(), isNull, reason: 'A lesson');
     await down('lpDetail', find.byKey(const Key('lpReject')));
     expect(tester.takeException(), isNull, reason: 'A lesson, scrolled');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Approvers'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Approvers');
+    await down('lpApprovers', find.byKey(const Key('lpScope-employee')));
+    await tester.tap(find.byKey(const Key('lpScope-employee')));
+    await tester.pumpAndSettle();
+    await down('lpApprovers', find.byKey(const Key('lpSaveRule')));
+    expect(tester.takeException(), isNull, reason: 'Approvers, the form');
+  });
+
+  testWidgets('Lesson approvers in the app (the set-up right): the rules, add a rule, remove one', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(
+      tester,
+      size: const Size(420, 2600),
+      with_: School(lessonSetup: true),
+    );
+    final s = S(false);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lesson plans'));
+    await tester.pumpAndSettle();
+    // the third tab, as the admin app's Approvers; no web page
+    await tester.tap(
+      find.descendant(of: find.byKey(const Key('lpTabs')), matching: find.text(s.lpApproversTab)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('lpApprovers')), findsOneWidget);
+    // the rule there is: the school default, its levels
+    final r1 = find.byKey(const Key('lpRule-r1'));
+    Finder inRule(Finder rule, String text) => find.descendant(of: rule, matching: find.text(text));
+    expect(inRule(r1, 'School default'), findsOneWidget);
+    expect(inRule(r1, 'Everyone else (school default)'), findsOneWidget);
+    expect(inRule(r1, 'Level 1: Academic Coordinator'), findsOneWidget);
+    expect(inRule(r1, 'Level 2: Asha Teacher'), findsOneWidget);
+    expect(inRule(r1, 'Level 3: –'), findsOneWidget);
+    // level 1 is asked for; a class rule asks for the class
+    await tester.tap(find.byKey(const Key('lpSaveRule')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.lpChooseLevel1), findsOneWidget);
+    await tester.tap(find.byKey(const Key('lpScope-class')));
+    await tester.pumpAndSettle();
+    // only the box the rule is for
+    expect(find.byKey(const Key('lpRuleClass')), findsOneWidget);
+    expect(find.byKey(const Key('lpRuleEmployee')), findsNothing);
+    await tester.tap(find.byKey(const Key('lpSaveRule')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.lpChooseClass), findsOneWidget);
+    expect(
+      t.calls.where((c) => c.method == 'POST' && c.path == '/academics/lessons/approvers'),
+      isEmpty,
+    );
+    // the class, then level 1 a role, level 2 a person found by typing
+    await tester.tap(find.byKey(const Key('lpRuleClass')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('VI').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lpRuleLevel-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Role: Principal').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lpRuleLevel-2')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(of: find.byKey(const Key('lpRuleLevel-2')), matching: find.byType(TextField)),
+      'Ravi',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Asha Teacher (E015)'), findsNothing);
+    await tester.tap(find.text('Ravi Sample (E099)').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lpSaveRule')));
+    await tester.pumpAndSettle();
+    expect(school.ruleSaved, {
+      'scope': 'class',
+      'classId': '60',
+      'levels': [
+        {'kind': 'role', 'roleCode': 'principal'},
+        {'kind': 'employee', 'employeeId': '99'},
+      ],
+    });
+    expect(find.text(s.lpRuleSaved), findsOneWidget);
+    // the list again, with the new rule; the form empty
+    expect(find.byKey(const Key('lpRule-r2')), findsOneWidget);
+    expect(find.byKey(const Key('lpRuleClass')), findsNothing);
+    // remove (asked first)
+    await tester.tap(find.byKey(const Key('lpRuleRemove-r1')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.lpRemoveRuleAsk('Everyone else (school default)')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('lpRuleRemoveYes')));
+    await tester.pumpAndSettle();
+    expect(
+      t.calls.any((c) => c.method == 'DELETE' && c.path == '/academics/lessons/approvers/r1'),
+      isTrue,
+    );
+    expect(find.text(s.lpRuleRemoved), findsOneWidget);
+    expect(find.byKey(const Key('lpRule-r1')), findsNothing);
   });
 
   testWidgets('list tabs: the school’s names and screens, its own list; Hindi names (part 3)', (

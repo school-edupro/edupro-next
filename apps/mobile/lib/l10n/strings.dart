@@ -1336,6 +1336,52 @@ class S {
   String get lpDeletedDone => _t('The lesson was deleted.', 'पाठ हटा दिया गया।');
   String get lpWasDeleted => _t('This lesson was deleted.', 'यह पाठ हटा दिया गया था।');
 
+  // who approves whose lessons (the admin app's Approvers)
+  String get lpApproversTab => _t('Approvers', 'स्वीकृतकर्ता');
+  String get lpRulesTitle => _t('Who approves whose lessons', 'किसके पाठ कौन स्वीकृत करता है');
+  String get lpRulesHelp => _t(
+    'When a teacher uploads a lesson the first rule that fits decides the approvers: the teacher’s own rule, else the rule of the class, else of the teacher’s department, else the school default. With no rule at all it goes to the principal / school admin.',
+    'शिक्षक के पाठ अपलोड करने पर पहला लागू नियम स्वीकृतकर्ता तय करता है: शिक्षक का अपना नियम, फिर कक्षा का, फिर शिक्षक के विभाग का, फिर विद्यालय का सामान्य नियम। कोई नियम न हो तो पाठ प्रधानाचार्य / विद्यालय व्यवस्थापक को जाता है।',
+  );
+  String get lpNoRule => _t(
+    'No rule yet: add the school default first.',
+    'अभी कोई नियम नहीं: पहले विद्यालय का सामान्य नियम जोड़ें।',
+  );
+  String lpScope(String v) => switch (v) {
+    'department' => _t('Department', 'विभाग'),
+    'class' => _t('Class', 'कक्षा'),
+    'employee' => _t('Employee', 'कर्मचारी'),
+    _ => _t('School default', 'विद्यालय का सामान्य नियम'),
+  };
+  String get lpEveryoneElse =>
+      _t('Everyone else (school default)', 'बाकी सभी (विद्यालय का सामान्य नियम)');
+  String get lpAddRule => _t('Add or replace a rule', 'नियम जोड़ें या बदलें');
+  String get lpAddRuleHelp => _t(
+    'Choose what the rule is for, then the approver of each level. Saving a rule that already exists replaces its levels.',
+    'चुनें कि नियम किसके लिए है, फिर हर स्तर का स्वीकृतकर्ता। पहले से बने नियम को सहेजने पर उसके स्तर बदल जाते हैं।',
+  );
+  String get lpRuleFor => _t('Rule for', 'नियम किसके लिए');
+  String lpRuleForOption(String v) => switch (v) {
+    'department' => _t('A department', 'एक विभाग'),
+    'class' => _t('A class', 'एक कक्षा'),
+    'employee' => _t('An employee', 'एक कर्मचारी'),
+    _ => _t('School default (everyone else)', 'विद्यालय का सामान्य नियम (बाकी सभी)'),
+  };
+  String get lpDepartment => _t('Department', 'विभाग');
+  String lpLevelApprover(int n) => _t('Level $n approver', 'स्तर $n स्वीकृतकर्ता');
+  String get lpNoOne => _t('No one (no such level)', 'कोई नहीं (यह स्तर नहीं)');
+  String lpRole(String name) => _t('Role: $name', 'भूमिका: $name');
+  String get lpSaveRule => _t('Save rule', 'नियम सहेजें');
+  String get lpRuleSaved => _t('The rule is saved.', 'नियम सहेज लिया गया।');
+  String get lpChooseDepartment => _t('Choose the department.', 'विभाग चुनें।');
+  String get lpChooseClass => _t('Choose the class.', 'कक्षा चुनें।');
+  String get lpChooseEmployee => _t('Choose the employee.', 'कर्मचारी चुनें।');
+  String get lpChooseLevel1 =>
+      _t('Choose who approves at level 1.', 'चुनें कि स्तर 1 पर कौन स्वीकृत करेगा।');
+  String lpRemoveRuleAsk(String label) =>
+      _t('Remove the rule for $label?', '$label का नियम हटाएँ?');
+  String get lpRuleRemoved => _t('The rule is removed.', 'नियम हटा दिया गया।');
+
   // ---- phase D
   String get phones => _t('Phones signed in', 'साइन-इन फ़ोन');
   String get thisPhone => _t('This phone', 'यह फ़ोन');

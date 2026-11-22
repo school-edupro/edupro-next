@@ -178,3 +178,24 @@ sent: section, date, the description's paragraphs escaped), the report (Review a
 Reset with the query sent), acknowledge (a reject without a remark refused), the next level, delete, the PDF with
 `format` and `wrap`; light, dark, Hindi; twice the text. 229 app tests, analyze and the generated calls pass; the web
 preview rebuilt.
+
+## Part 8: Lesson approvers in the staff app (22 Nov 2026)
+
+"Staff mobile app: the approvers set-up the same as the admin app's, and not opening any web page."
+
+As built: the app's Lesson plans gains a third tab, **Approvers**, for those with the lesson set-up right
+(`academics.lesson_plan.setup` — by default the school admin, group admin and academic coordinator), as the admin
+app shows its Approvers tab only to them. The app learns it from `GET academics/lessons/approvers` (a 403: no tab).
+
+- **Who approves whose lessons**: the help line (the teacher's own rule, else the class's, else the department's,
+  else the school default; with none, the principal / school admin); each rule — School default, Department, Class or
+  Employee, whose lessons, Level 1, 2 and 3 (a person, or "Role: …"), **Remove** (asked first); "No rule yet: add
+  the school default first."
+- **Add or replace a rule**: Rule for (school default, a department, a class, an employee) and only the box it needs;
+  Level 1 approver (needed), Level 2 and 3 (or "No one"); the lists of staff type to search; **Save rule** (saving a
+  rule that exists replaces its levels), "The rule is saved.", the list again and the form empty.
+
+Calls added: `LessonUploadsController_rules`, `_saveRule`, `_removeRule`. No API change. Tests: `staff_test.dart` — a
+teacher has no Approvers tab; the rules shown, level 1 and the class asked for, a class rule with a role and a person
+found by typing (the body sent), remove; light, dark, Hindi, twice the text. 230 app tests, analyze and the generated
+calls pass; the web preview rebuilt.
