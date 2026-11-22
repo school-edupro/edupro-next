@@ -1,187 +1,131 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
-import { getTranslations } from 'next-intl/server';
+import { Badge, PageHeader } from '@edupro/ui';
+import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
-import { setSetting } from '@/lib/actions';
-import { apiFetch } from '@/lib/api';
-import type { Setting } from '@/lib/types';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { APP_LAYOUT_LINKS, sectionsFor, valueText, type SettingRow } from '@/lib/settings-sections';
+import { SettingsSearch, type SearchEntry } from './SettingsSearch';
 
-const ENUMS: Record<string, string[]> = {
-  'school.locale': ['en', 'hi'],
-  'fees.late_fee_mode': ['daywise', 'slab'],
-  'attendance.absent_alert_channel': ['none', 'sms', 'whatsapp', 'push'],
-};
-
-function kindOf(s: Setting): 'enum' | 'boolean' | 'number' | 'string' | 'json' {
-  if (ENUMS[s.key]) return 'enum';
-  if (typeof s.value === 'boolean') return 'boolean';
-  if (typeof s.value === 'number') return 'number';
-  if (typeof s.value === 'string') return 'string';
-  return 'json';
-}
-
+/**
+ * School settings (docs/design/95): a card per area — what it covers, a few of its values, how many differ from the
+ * standard — opening that area's form; a search finds a setting by its name; App layouts link to their own pages.
+ */
 export default async function SettingsPage({
   searchParams,
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
-  const t = await getTranslations('pages.system_settings');
   const sp = await searchParams;
-  const settings = await apiFetch<{ data: Setting[] }>('/platform/settings');
-  const modules = [...new Set(settings.data.map((s) => s.module))];
+  const me = await getMe();
+  if (!me.permissions.includes('platform.settings.view')) notFound();
+  let rows: SettingRow[];
+  try {
+    rows = (await apiFetch<{ data: SettingRow[] }>('/platform/settings')).data;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403) notFound();
+    throw e;
+  }
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+  const sections = sectionsFor(rows);
+  const entries: SearchEntry[] = sections.flatMap((s) =>
+    s.fields.map((f) => ({
+      key: f.setting,
+      label: f.label,
+      help: f.help,
+      section: s.id,
+      sectionTitle: s.title,
+      value: valueText(f, byKey.get(f.setting)?.value),
+    })),
+  );
   return (
     <>
-      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <PageHeader
+        kicker="System"
+        title="School settings"
+        description="How the school works in EduPro, area by area. Open an area to see and change its settings; a change applies from today unless you choose a later date."
+      />
       <Notice params={sp} />
-      <section
-        className="ep-card"
-        aria-labelledby="set-family-app"
-        style={{ marginBottom: 'var(--sp-4)' }}
-      >
-        <h2 id="set-family-app" className="ep-cdash__h3" style={{ marginTop: 0 }}>
-          App layouts
-        </h2>
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          The mobile apps: the student and parent app (bottom tabs, Home shortcuts, Home cards and
-          the Academics tab) and the staff app (bottom tabs, Home shortcuts and work cards).
-        </p>
-        <ul className="ep-setup-links">
-          <li>
-            <a href="/system/settings/family-app-layout">
-              <strong>Arrange the family app</strong>
-            </a>
-            <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
-              Students and parents apart; a draft with a phone preview, published to families
-            </span>
-          </li>
-          <li>
-            <a href="/system/settings/staff-app-layout">
-              <strong>Arrange the staff app</strong>
-            </a>
-            <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
-              Bottom tabs, Home shortcuts and work cards of the staff mobile app; a draft with a
-              preview, published to staff
-            </span>
-          </li>
-        </ul>
-      </section>
-      {modules.map((m) => (
-        <Card key={m} title={m} style={{ marginBottom: 'var(--sp-4)' }}>
-          <div className="ep-table-wrap">
-            <table className="ep-table">
-              <thead>
-                <tr>
-                  <th scope="col">Setting</th>
-                  <th scope="col">Value</th>
-                  <th scope="col">From</th>
-                  <th scope="col"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {settings.data
-                  .filter((s) => s.module === m)
-                  .map((s) => {
-                    const kind = kindOf(s);
-                    const id = `set-${s.key.replace(/\W/g, '-')}`;
-                    return (
-                      <tr key={s.key}>
-                        <td>
-                          <code>{s.key}</code>
-                          <div className="ep-field__help">{s.description}</div>
-                        </td>
-                        <td colSpan={3}>
-                          <form
-                            action={setSetting}
-                            style={{
-                              display: 'flex',
-                              gap: 'var(--sp-2)',
-                              alignItems: 'center',
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            <input type="hidden" name="key" value={s.key} />
-                            <input
-                              type="hidden"
-                              name="valueKind"
-                              value={kind === 'enum' ? 'string' : kind}
-                            />
-                            {kind === 'enum' ? (
-                              <select
-                                id={id}
-                                name="value"
-                                className="ep-select"
-                                defaultValue={String(s.value)}
-                                aria-label={s.key}
-                              >
-                                {ENUMS[s.key]!.map((v) => (
-                                  <option key={v} value={v}>
-                                    {v}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : kind === 'boolean' ? (
-                              <select
-                                id={id}
-                                name="value"
-                                className="ep-select"
-                                defaultValue={String(s.value)}
-                                aria-label={s.key}
-                              >
-                                <option value="true">yes</option>
-                                <option value="false">no</option>
-                              </select>
-                            ) : kind === 'number' ? (
-                              <input
-                                id={id}
-                                name="value"
-                                type="number"
-                                className="ep-input"
-                                defaultValue={String(s.value)}
-                                aria-label={s.key}
-                              />
-                            ) : kind === 'string' ? (
-                              <input
-                                id={id}
-                                name="value"
-                                type="text"
-                                className="ep-input"
-                                defaultValue={String(s.value)}
-                                aria-label={s.key}
-                              />
-                            ) : (
-                              <input
-                                id={id}
-                                name="value"
-                                type="text"
-                                className="ep-input"
-                                defaultValue={JSON.stringify(s.value)}
-                                aria-label={s.key}
-                                style={{ minWidth: 280 }}
-                              />
-                            )}
-                            <input
-                              name="validFrom"
-                              type="date"
-                              className="ep-input"
-                              aria-label={`${s.key} valid from`}
-                            />
-                            <Button type="submit" size="sm" variant="secondary">
-                              Save
-                            </Button>
-                            {s.isDefault ? (
-                              <Badge tone="neutral">default</Badge>
-                            ) : (
-                              <Badge tone="info">since {s.validFrom}</Badge>
-                            )}
-                          </form>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ))}
+      <SettingsSearch entries={entries} />
+      <div className="ep-setup-sections" style={{ marginTop: 0 }}>
+        {sections.map((s) => {
+          const changed = s.fields.filter((f) => byKey.get(f.setting)?.isDefault === false).length;
+          const elsewhere = s.fields.filter((f) => f.ownPage).length;
+          const shown = s.fields.filter((f) => f.control.kind !== 'json').slice(0, 3);
+          return (
+            <section key={s.id} className="ep-card" aria-labelledby={`set-card-${s.id}`}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 'var(--sp-2)',
+                  alignItems: 'baseline',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <h2 id={`set-card-${s.id}`} className="ep-card__title" style={{ margin: 0 }}>
+                  <a href={`/system/settings/${s.id}`}>{s.title}</a>
+                </h2>
+                {changed ? (
+                  <Badge tone="info">{`${String(changed)} changed`}</Badge>
+                ) : (
+                  <Badge tone="neutral">Standard</Badge>
+                )}
+              </div>
+              <p className="ep-field__help" style={{ margin: 'var(--sp-1) 0 var(--sp-3)' }}>
+                {s.summary}
+              </p>
+              <dl
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) auto',
+                  gap: 'var(--sp-1) var(--sp-3)',
+                  margin: 0,
+                  fontSize: 'var(--fs-small)',
+                }}
+              >
+                {shown.map((f) => (
+                  <div key={f.setting} style={{ display: 'contents' }}>
+                    <dt style={{ color: 'var(--text-muted)' }}>{f.label}</dt>
+                    <dd style={{ margin: 0, textAlign: 'right', fontWeight: 'var(--fw-semibold)' }}>
+                      {valueText(f, byKey.get(f.setting)?.value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p style={{ margin: 'var(--sp-3) 0 0' }}>
+                <a href={`/system/settings/${s.id}`} aria-label={`Open ${s.title}`}>
+                  {`Open · ${String(s.fields.length)} settings`}
+                </a>
+                {elsewhere ? (
+                  <span className="ep-field__help" style={{ marginLeft: 'var(--sp-2)' }}>
+                    {`${String(elsewhere)} on their own pages`}
+                  </span>
+                ) : null}
+              </p>
+            </section>
+          );
+        })}
+        <section className="ep-card" aria-labelledby="set-card-app-layouts">
+          <h2 id="set-card-app-layouts" className="ep-card__title" style={{ margin: 0 }}>
+            App layouts
+          </h2>
+          <p className="ep-field__help" style={{ margin: 'var(--sp-1) 0 var(--sp-3)' }}>
+            What the mobile apps and the websites show; each is a draft with a preview, published
+            when ready.
+          </p>
+          <ul className="ep-setup-links">
+            {APP_LAYOUT_LINKS.map((l) => (
+              <li key={l.href}>
+                <a href={l.href}>
+                  <strong>{l.label}</strong>
+                </a>
+                <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                  {l.help}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </>
   );
 }

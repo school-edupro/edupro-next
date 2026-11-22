@@ -63,3 +63,8 @@ Decided without asking:
   `platform.settings.edit` audit row each; `PUT /platform/settings {values, validFrom?}` (edit right). Tests:
   `settings-batch.e2e-spec.ts` (4); permission coverage passes. (`compat-writes` fails from 22 Nov for its own
   reason: its homework is dated 21 Sep and the old-app read covers 60 days — flagged separately.)
+- **B (22 Nov 2026).** Admin `lib/settings-sections.ts`: the 12 areas and every one of the 76 settings with a plain
+  name, help line and control (`sectionsFor` sends any key not placed to Advanced as JSON), `valueText` for values in
+  words (money in Indian grouping). `/system/settings`: Find a setting (name, help, area or value; opens the area at
+  the setting) and a card per area — its line, three of its values, "N changed" or Standard, how many are on their
+  own pages, Open — plus the App layouts card. Checked in a browser on Alpha (desktop and phone) with axe.
