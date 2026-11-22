@@ -397,3 +397,36 @@ kept as entered."); locked: read only. Calls added: `ExamEntryController_registe
 `_attendanceFromDaily`. No API change. Tests: `staff_test.dart` (the marks sheet's closed line, download, upload
 checked then saved; exam attendance: the days, over the total refused, Save's rows, counted from daily; light,
 dark, Hindi, twice the text); 275 app tests; the web preview rebuilt.
+
+## Part 18: The Exam register, with By Excel (API, website, app); By Excel folded on Remarks (22 Nov 2026)
+
+"Staff app: the Exam register section the same as the staff website, with the same By Excel as Marks." Decided
+(asked): **add By Excel, website and app** — a new API sheet. Also asked: "Remarks: By Excel the same as Height and
+weight" — folded, closed.
+
+**API** — `GET exams/:id/register/excel` (the register's read right): a section's sheet — Admission no, Roll no,
+Name, Remark, Took part in, Promoted to, Days present, Total days and, for those who see health, Height (cm), Weight
+(kg), Blood group — filled with what is entered. `POST exams/:id/register/upload` (`apply` saves): every row checked
+(the pupil in the section, once; lengths 600 / 300 / 40; days 0–400 and 1–400, present not above total, one left
+empty keeps what is entered; height 40–250, weight 3–200, a blood group); only what differs from what is entered is a
+change, and each part needs its own right (`exams.remark.enter`, `exams.attendance.enter`, `exams.health.enter`) —
+"Remarks are not part of your role" otherwise; saved through the register's own saves (remarks, exam attendance,
+height and weight), which keep their checks (the class teacher, the lock). Test: `entry-by-mapping.e2e-spec.ts` (the
+columns, more days present than total refused with nothing saved, an unchanged height not counted, the changes saved,
+a teacher without the register's rights refused); permission coverage passes.
+
+**Staff website** — the Exam register page (not the attendance-only view) has the **By Excel** card (`SheetCard
+kind="register"`, the `/api/sheet` route and `uploadSheet` taking `register`), upload offered while the exam is open;
+Hindi words added. Checked on Alpha as the demo teacher (desktop and phone; the download is the .xlsx; axe clean).
+
+**App** — `ExamAttendanceScreen(full: true)` for the menu's Exam register (`nativeScreen('/exam-register')` without
+`only=attendance`): exams taking remarks, attendance or health; the class teacher's sections; **By Excel** as one
+closed line; "Register · VI-A"; each pupil — the admission number and the last health check (date, BMI), **Remark**
+(the school's general remarks to choose from), **Took part in**, **Promoted to (final term)**, **Days present** /
+**Total days**, and for those who see health **Height cm**, **Weight kg**, **Blood group**; **Save remarks** (the
+pupils with a remark; an empty "took part in" or "promoted to" goes as null and is cleared, as on the website), **Save
+exam attendance**, **Save height and weight** (the pupils with a value; an empty one goes as null); Count from daily
+attendance. Remarks' By Excel is now one closed line too. Calls added: `ExamEntryController_putRemarks`,
+`_registerExcel !file`, `_registerUpload`. Tests: `staff_test.dart` (the register's boxes and last health, a remark
+from the list, Save remarks' rows with nulls, Save height and weight's rows, the closed By Excel, download and upload;
+Remarks' closed fold; light, dark, Hindi, twice the text); 280 app tests; the web preview rebuilt.

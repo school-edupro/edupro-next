@@ -36,11 +36,13 @@ final examsTakingProvider = FutureProvider.autoDispose.family<List<Json>?, (Prof
   a,
 ) async {
   final (_, area) = a;
+  // `a|b`: an exam that takes any of them (the Exam register: remarks, attendance, health)
+  final want = area.split('|');
   try {
     final r = asJson(await ref.read(apiProvider).examsList());
     return [
       for (final e in asList(r['data']))
-        if (e['areas'] == null || ((e['areas'] as List?) ?? const []).contains(area)) e,
+        if (e['areas'] == null || want.any(((e['areas'] as List?) ?? const []).contains)) e,
     ];
   } on ApiException catch (e) {
     if (e.status == 403) return null;

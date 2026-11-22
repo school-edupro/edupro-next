@@ -118,6 +118,10 @@ ExamEntryController_marksUpload
 ExamEntryController_register
 ExamEntryController_putAttendance
 ExamEntryController_attendanceFromDaily
+# the exam register as on the staff website, and its sheet by Excel (docs/design/96 part 18)
+ExamEntryController_putRemarks
+ExamEntryController_registerExcel !file
+ExamEntryController_registerUpload
 DailyWorkController_sheetOptions
 DailyWorkController_sheet
 DailyWorkController_saveSheet

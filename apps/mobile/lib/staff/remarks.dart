@@ -298,8 +298,9 @@ class _RemarkSheetViewState extends ConsumerState<RemarkSheetView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // first, so it is there without going past every pupil
+        // folded, closed, as on Height and weight: one line that opens Download and Upload (asked, 22 Nov 2026)
         SheetByExcel(
+          folded: true,
           title: '${section['code']} · ${s.menu('Remarks')}',
           help: s.xlRemarksHelp,
           canUpload: open,

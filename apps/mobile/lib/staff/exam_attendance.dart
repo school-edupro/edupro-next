@@ -11,8 +11,12 @@ import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'indicators.dart' show examsTakingProvider;
+import 'sheet_excel.dart';
 
-/// A section's exam register for an exam: each pupil's days present of the total (and what else the register keeps).
+const _blood = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+/// A section's exam register for an exam: each pupil's remark, what they took part in, the class promoted to, days
+/// present of the total and (for those who see health) the last height and weight.
 final examRegisterProvider = FutureProvider.autoDispose.family<Json, (String, String)>((
   ref,
   a,
@@ -21,12 +25,35 @@ final examRegisterProvider = FutureProvider.autoDispose.family<Json, (String, St
   return asJson(await ref.read(apiProvider).examEntryRegister(id: exam, classSectionId: section));
 });
 
-/// Exam attendance as on the staff website (the Exam register with only the attendance; docs/design/96, part 17):
-/// the exam and the class teacher's section, each pupil's days present of the total days, Save exam attendance, and
-/// Count from daily attendance (from, to, replace what is entered). No web page.
+/// A row sent as the website sends it: an empty value goes as null (the API clears it), which the generated rows
+/// leave out.
+class _RemarkRow extends PutRemarksDtoRowsItem {
+  _RemarkRow(this.json) : super(studentId: '${json['studentId']}', remark: '${json['remark']}');
+  final Map<String, Object?> json;
+
+  @override
+  Map<String, Object?> toJson() => json;
+}
+
+class _HealthRow extends PutHealthDtoRowsItem {
+  _HealthRow(this.json) : super(studentId: '${json['studentId']}');
+  final Map<String, Object?> json;
+
+  @override
+  Map<String, Object?> toJson() => json;
+}
+
+/// The Exam register as on the staff website (docs/design/96, parts 17 and 18): the exam and the class teacher's
+/// section; with [full], each pupil's remark (the school's remarks to pick from), what they took part in, the class
+/// promoted to, days present of total, height, weight and blood group, the sheet by Excel (one closed line) and a
+/// Save for each part; without it, the menu's Exam attendance (the days only). Count from daily attendance under both.
+/// No web page.
 class ExamAttendanceScreen extends ConsumerStatefulWidget {
-  const ExamAttendanceScreen({super.key, required this.profile});
+  const ExamAttendanceScreen({super.key, required this.profile, this.full = false});
   final Profile profile;
+
+  /// the whole register (the menu's Exam register), not the attendance only
+  final bool full;
 
   @override
   ConsumerState<ExamAttendanceScreen> createState() => _ExamAttendanceScreenState();
@@ -36,13 +63,15 @@ class _ExamAttendanceScreenState extends ConsumerState<ExamAttendanceScreen> {
   String? _exam;
   String? _section;
 
+  String get _areas => widget.full ? 'remarks|attendance|health' : 'attendance';
+
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    final examsAsync = ref.watch(examsTakingProvider((widget.profile, 'attendance')));
+    final examsAsync = ref.watch(examsTakingProvider((widget.profile, _areas)));
     Widget page(List<Widget> children) => ListView(
-      key: const Key('eaScreen'),
+      key: Key(widget.full ? 'erScreen' : 'eaScreen'),
       padding: const EdgeInsets.all(Tokens.sp4),
       children: children,
     );
@@ -74,7 +103,7 @@ class _ExamAttendanceScreenState extends ConsumerState<ExamAttendanceScreen> {
             sections.firstOrNull;
         return RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(examsTakingProvider((widget.profile, 'attendance')));
+            ref.invalidate(examsTakingProvider((widget.profile, _areas)));
             ref.invalidate(entrySectionsProvider((widget.profile, examId)));
             if (chosen != null) {
               ref.invalidate(examRegisterProvider((examId, '${chosen['classSectionId']}')));
@@ -129,9 +158,10 @@ class _ExamAttendanceScreenState extends ConsumerState<ExamAttendanceScreen> {
               ),
               const SizedBox(height: Tokens.sp3),
               ExamAttendanceView(
-                key: ValueKey('eaView-$examId-${chosen['classSectionId']}'),
+                key: ValueKey('eaView-$examId-${chosen['classSectionId']}-${widget.full}'),
                 examId: examId,
                 sectionId: '${chosen['classSectionId']}',
+                full: widget.full,
               ),
             ],
           ]),
@@ -141,11 +171,17 @@ class _ExamAttendanceScreenState extends ConsumerState<ExamAttendanceScreen> {
   }
 }
 
-/// One section's exam attendance: the days boxes, Save, Count from daily attendance.
+/// One section's register: the sheet by Excel (the full register), each pupil's boxes, the Saves, Count from daily.
 class ExamAttendanceView extends ConsumerStatefulWidget {
-  const ExamAttendanceView({super.key, required this.examId, required this.sectionId});
+  const ExamAttendanceView({
+    super.key,
+    required this.examId,
+    required this.sectionId,
+    this.full = false,
+  });
   final String examId;
   final String sectionId;
+  final bool full;
 
   @override
   ConsumerState<ExamAttendanceView> createState() => _ExamAttendanceViewState();
@@ -154,7 +190,14 @@ class ExamAttendanceView extends ConsumerStatefulWidget {
 class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
   final Map<String, TextEditingController> _present = {};
   final Map<String, TextEditingController> _total = {};
+  final Map<String, TextEditingController> _remark = {};
+  final Map<String, TextEditingController> _part = {};
+  final Map<String, TextEditingController> _promoted = {};
+  final Map<String, TextEditingController> _height = {};
+  final Map<String, TextEditingController> _weight = {};
+  final Map<String, String> _bloodOf = {};
   Object? _filledFrom;
+  int _version = 0;
   String _from = '';
   String _to = '';
   bool _overwrite = false;
@@ -165,19 +208,35 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
 
   @override
   void dispose() {
-    for (final c in [..._present.values, ..._total.values]) {
-      c.dispose();
+    for (final m in [_present, _total, _remark, _part, _promoted, _height, _weight]) {
+      for (final c in m.values) {
+        c.dispose();
+      }
     }
     super.dispose();
+  }
+
+  static String _num(Object? v) {
+    final n = num.tryParse('${v ?? ''}');
+    if (n == null) return '${v ?? ''}';
+    return n == n.roundToDouble() ? '${n.toInt()}' : '$n';
   }
 
   void _fill(Json reg) {
     if (identical(_filledFrom, reg)) return;
     _filledFrom = reg;
+    _version++;
     for (final r in asList(reg['rows'])) {
       final id = '${r['studentId']}';
+      final h = asJson(r['health']);
       (_present[id] ??= TextEditingController()).text = '${r['daysPresent'] ?? ''}';
       (_total[id] ??= TextEditingController()).text = '${r['daysTotal'] ?? ''}';
+      (_remark[id] ??= TextEditingController()).text = '${r['remark'] ?? ''}';
+      (_part[id] ??= TextEditingController()).text = '${r['participation'] ?? ''}';
+      (_promoted[id] ??= TextEditingController()).text = '${r['promotedTo'] ?? ''}';
+      (_height[id] ??= TextEditingController()).text = _num(h['heightCm']);
+      (_weight[id] ??= TextEditingController()).text = _num(h['weightKg']);
+      _bloodOf[id] = '${h['bloodGroup'] ?? ''}';
     }
   }
 
@@ -193,8 +252,26 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(text)));
 
+  Future<void> _send(Future<dynamic> Function() call, String Function(Json r) done) async {
+    final s = ref.read(stringsProvider);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final r = asJson(await call());
+      if (!mounted) return;
+      _toast(done(r));
+      ref.invalidate(examRegisterProvider(_key));
+    } catch (e) {
+      if (mounted) setState(() => _error = _say(s, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// As the website: the pupils with both boxes filled.
-  Future<void> _save(List<Json> rows) async {
+  Future<void> _saveAttendance(List<Json> rows) async {
     final s = ref.read(stringsProvider);
     final out = <PutExamAttendanceDtoRowsItem>[];
     for (final r in rows) {
@@ -211,27 +288,80 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
       out.add(PutExamAttendanceDtoRowsItem(studentId: id, daysPresent: present, daysTotal: total));
     }
     if (out.isEmpty) return setState(() => _error = s.eaNothing);
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final r = asJson(
-        await ref
-            .read(apiProvider)
-            .examEntryPutAttendance(
-              id: widget.examId,
-              body: PutExamAttendanceDto(classSectionId: widget.sectionId, rows: out),
-            ),
-      );
-      if (!mounted) return;
-      _toast(s.eaSaved((r['changed'] as num?)?.toInt() ?? out.length));
-      ref.invalidate(examRegisterProvider(_key));
-    } catch (e) {
-      if (mounted) setState(() => _error = _say(s, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
+    await _send(
+      () => ref
+          .read(apiProvider)
+          .examEntryPutAttendance(
+            id: widget.examId,
+            body: PutExamAttendanceDto(classSectionId: widget.sectionId, rows: out),
+          ),
+      (r) => s.eaSaved((r['changed'] as num?)?.toInt() ?? out.length),
+    );
+  }
+
+  /// As the website: the pupils with a remark, with what they took part in and the class promoted to (empty: cleared).
+  Future<void> _saveRemarks(List<Json> rows) async {
+    final s = ref.read(stringsProvider);
+    final out = <PutRemarksDtoRowsItem>[
+      for (final r in rows)
+        if (_remark['${r['studentId']}']!.text.trim().isNotEmpty)
+          _RemarkRow({
+            'studentId': '${r['studentId']}',
+            'remark': _remark['${r['studentId']}']!.text.trim(),
+            'participation': _part['${r['studentId']}']!.text.trim().isEmpty
+                ? null
+                : _part['${r['studentId']}']!.text.trim(),
+            'promotedTo': _promoted['${r['studentId']}']!.text.trim().isEmpty
+                ? null
+                : _promoted['${r['studentId']}']!.text.trim(),
+          }),
+    ];
+    if (out.isEmpty) return setState(() => _error = s.erNoRemark);
+    await _send(
+      () => ref
+          .read(apiProvider)
+          .examEntryPutRemarks(
+            id: widget.examId,
+            body: PutRemarksDto(classSectionId: widget.sectionId, rows: out),
+          ),
+      (r) => s.erRemarksSaved((r['changed'] as num?)?.toInt() ?? out.length),
+    );
+  }
+
+  /// As the website: the pupils with a height, a weight or a blood group (an empty one goes as null).
+  Future<void> _saveHealth(List<Json> rows) async {
+    final s = ref.read(stringsProvider);
+    final out = <PutHealthDtoRowsItem>[];
+    for (final r in rows) {
+      final id = '${r['studentId']}';
+      final row = <String, Object?>{'studentId': id};
+      for (final (field, box, lo, hi) in [
+        ('heightCm', _height[id]!, 40, 250),
+        ('weightKg', _weight[id]!, 3, 200),
+      ]) {
+        final text = box.text.trim();
+        final value = text.isEmpty ? null : num.tryParse(text);
+        if (text.isNotEmpty && (value == null || value < lo || value > hi)) {
+          return setState(() => _error = '${r['name']}: ${s.hwRange}');
+        }
+        row[field] = value;
+      }
+      final blood = _bloodOf[id] ?? '';
+      row['bloodGroup'] = blood.isEmpty ? null : blood;
+      if (row['heightCm'] != null || row['weightKg'] != null || row['bloodGroup'] != null) {
+        out.add(_HealthRow(row));
+      }
     }
+    if (out.isEmpty) return setState(() => _error = s.erNoHealth);
+    await _send(
+      () => ref
+          .read(apiProvider)
+          .examEntryPutHealth(
+            id: widget.examId,
+            body: PutHealthDto(classSectionId: widget.sectionId, rows: out),
+          ),
+      (r) => s.erHealthSaved((r['recorded'] as num?)?.toInt() ?? out.length),
+    );
   }
 
   Future<void> _pickDay(bool from) async {
@@ -248,39 +378,59 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
 
   Future<void> _count() async {
     final s = ref.read(stringsProvider);
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final r = asJson(
-        await ref
-            .read(apiProvider)
-            .examEntryAttendanceFromDaily(
-              id: widget.examId,
-              body: AttendanceFromDailyDto(
-                classSectionId: widget.sectionId,
-                from: _from.isEmpty ? null : _from,
-                to: _to.isEmpty ? null : _to,
-                overwrite: _overwrite,
-              ),
+    await _send(
+      () => ref
+          .read(apiProvider)
+          .examEntryAttendanceFromDaily(
+            id: widget.examId,
+            body: AttendanceFromDailyDto(
+              classSectionId: widget.sectionId,
+              from: _from.isEmpty ? null : _from,
+              to: _to.isEmpty ? null : _to,
+              overwrite: _overwrite,
             ),
-      );
-      if (!mounted) return;
-      _toast(
-        s.eaCounted(
-          (r['filled'] as num?)?.toInt() ?? 0,
-          '${r['from'] ?? ''}'.isEmpty ? '' : s.date('${r['from']}'),
-          '${r['to'] ?? ''}'.isEmpty ? '' : s.date('${r['to']}'),
-          (r['kept'] as num?)?.toInt() ?? 0,
+          ),
+      (r) => s.eaCounted(
+        (r['filled'] as num?)?.toInt() ?? 0,
+        '${r['from'] ?? ''}'.isEmpty ? '' : s.date('${r['from']}'),
+        '${r['to'] ?? ''}'.isEmpty ? '' : s.date('${r['to']}'),
+        (r['kept'] as num?)?.toInt() ?? 0,
+      ),
+    );
+  }
+
+  /// The school's general remarks, to put in the box (and change).
+  Future<void> _choose(TextEditingController box, List<Json> bank) async {
+    final s = ref.read(stringsProvider);
+    final text = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.7),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Tokens.sp4),
+                child: Semantics(
+                  header: true,
+                  child: Text(s.rmChoose, style: Theme.of(c).textTheme.titleMedium),
+                ),
+              ),
+              for (final b in bank)
+                ListTile(
+                  key: Key('erBank-${b['code']}'),
+                  title: Text('${b['text']}'),
+                  onTap: () => Navigator.pop(c, '${b['text']}'),
+                ),
+            ],
+          ),
         ),
-      );
-      ref.invalidate(examRegisterProvider(_key));
-    } catch (e) {
-      if (mounted) setState(() => _error = _say(s, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+      ),
+    );
+    if (text != null) setState(() => box.text = text);
   }
 
   @override
@@ -296,9 +446,17 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
     final rows = asList(reg['rows']);
     final section = asJson(reg['section']);
     final locked = asJson(reg['exam'])['marksLocked'] == true;
-    InputDecoration box(String label) =>
-        InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true);
-    return Card(
+    final full = widget.full;
+    final showHealth = full && reg['healthVisible'] == true;
+    final bank = asList(reg['remarkBank']);
+    InputDecoration box(String label, {Widget? suffix}) => InputDecoration(
+      labelText: label,
+      border: const OutlineInputBorder(),
+      isDense: true,
+      suffixIcon: suffix,
+    );
+    Widget gap() => const SizedBox(height: Tokens.sp2);
+    final sheet = Card(
       key: const Key('eaSheet'),
       margin: EdgeInsets.zero,
       child: Padding(
@@ -314,7 +472,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                 Semantics(
                   header: true,
                   child: Text(
-                    s.eaOf('${section['code']}'),
+                    full ? s.erTitle('${section['code']}') : s.eaOf('${section['code']}'),
                     style: Theme.of(context).textTheme.titleMedium
                         ?.copyWith(fontWeight: Tokens.fwSemibold),
                   ),
@@ -326,55 +484,149 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
             ),
             const SizedBox(height: Tokens.sp3),
             for (final r in rows)
-              Container(
-                key: Key('eaPupil-${r['studentId']}'),
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: Tokens.sp2),
-                padding: const EdgeInsets.all(Tokens.sp2),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(Tokens.radiusSm),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${r['rollNo'] == null ? '' : '${r['rollNo']}. '}${r['name']}',
-                      style: const TextStyle(fontWeight: Tokens.fwSemibold),
-                    ),
-                    if ('${r['admissionNo'] ?? ''}'.isNotEmpty)
-                      Text('${r['admissionNo']}', style: TextStyle(color: muted, fontSize: 13)),
-                    const SizedBox(height: Tokens.sp2),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            key: Key('eaPresent-${r['studentId']}'),
-                            controller: _present['${r['studentId']}'],
-                            enabled: !locked,
-                            keyboardType: TextInputType.number,
-                            decoration: box(s.eaPresent),
-                          ),
+              () {
+                final id = '${r['studentId']}';
+                final h = asJson(r['health']);
+                final blood = _bloodOf[id] ?? '';
+                return Container(
+                  key: Key('eaPupil-$id'),
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: Tokens.sp2),
+                  padding: const EdgeInsets.all(Tokens.sp2),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(Tokens.radiusSm),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${r['rollNo'] == null ? '' : '${r['rollNo']}. '}${r['name']}',
+                        style: const TextStyle(fontWeight: Tokens.fwSemibold),
+                      ),
+                      Text(
+                        [
+                          '${r['admissionNo'] ?? ''}',
+                          if (full && h['recordedOn'] != null)
+                            s.erLastHealth(
+                              s.date('${h['recordedOn']}'),
+                              h['bmi'] == null ? null : '${h['bmi']}',
+                            ),
+                        ].where((x) => x.isNotEmpty).join(' · '),
+                        style: TextStyle(color: muted, fontSize: 13),
+                      ),
+                      if (full) ...[
+                        gap(),
+                        TextField(
+                          key: Key('erRemark-$id'),
+                          controller: _remark[id],
+                          enabled: !locked,
+                          maxLength: 600,
+                          minLines: 1,
+                          maxLines: 4,
+                          decoration: box(
+                            s.erRemark,
+                            suffix: !locked && bank.isNotEmpty
+                                ? IconButton(
+                                    key: Key('erPick-$id'),
+                                    tooltip: '${s.rmChoose}: ${r['name']}',
+                                    icon: const Icon(Icons.list_alt_outlined),
+                                    onPressed: () => _choose(_remark[id]!, bank),
+                                  )
+                                : null,
+                          ).copyWith(counterText: ''),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: Tokens.sp2),
-                          child: Text('/'),
+                        gap(),
+                        TextField(
+                          key: Key('erPart-$id'),
+                          controller: _part[id],
+                          enabled: !locked,
+                          maxLength: 300,
+                          decoration: box(s.erTookPart).copyWith(counterText: ''),
                         ),
-                        Expanded(
-                          child: TextField(
-                            key: Key('eaTotal-${r['studentId']}'),
-                            controller: _total['${r['studentId']}'],
-                            enabled: !locked,
-                            keyboardType: TextInputType.number,
-                            decoration: box(s.eaTotal),
-                          ),
+                        gap(),
+                        TextField(
+                          key: Key('erPromoted-$id'),
+                          controller: _promoted[id],
+                          enabled: !locked,
+                          maxLength: 40,
+                          decoration: box(s.erPromoted).copyWith(counterText: ''),
                         ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-            if (_error != null) ...[ErrorText(_error!), const SizedBox(height: Tokens.sp2)],
+                      gap(),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              key: Key('eaPresent-$id'),
+                              controller: _present[id],
+                              enabled: !locked,
+                              keyboardType: TextInputType.number,
+                              decoration: box(s.eaPresent),
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: Tokens.sp2),
+                            child: Text('/'),
+                          ),
+                          Expanded(
+                            child: TextField(
+                              key: Key('eaTotal-$id'),
+                              controller: _total[id],
+                              enabled: !locked,
+                              keyboardType: TextInputType.number,
+                              decoration: box(s.eaTotal),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (showHealth) ...[
+                        gap(),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                key: Key('erHeight-$id'),
+                                controller: _height[id],
+                                enabled: !locked,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: box(s.hwHeight),
+                              ),
+                            ),
+                            const SizedBox(width: Tokens.sp2),
+                            Expanded(
+                              child: TextField(
+                                key: Key('erWeight-$id'),
+                                controller: _weight[id],
+                                enabled: !locked,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: box(s.hwWeight),
+                              ),
+                            ),
+                          ],
+                        ),
+                        gap(),
+                        DropdownButtonFormField<String>(
+                          key: Key('erBlood-$id-$_version'),
+                          initialValue: blood,
+                          isExpanded: true,
+                          decoration: box(s.hwBlood),
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('—')),
+                            for (final b in [
+                              ..._blood,
+                              if (blood.isNotEmpty && !_blood.contains(blood)) blood,
+                            ])
+                              DropdownMenuItem(value: b, child: Text(b)),
+                          ],
+                          onChanged: locked ? null : (v) => setState(() => _bloodOf[id] = v ?? ''),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }(),
+            if (_error != null) ...[ErrorText(_error!), gap()],
             if (locked)
               Text(
                 s.eaLocked,
@@ -382,17 +634,45 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                 style: TextStyle(color: muted),
               )
             else ...[
+              if (full) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    key: const Key('erSaveRemarks'),
+                    onPressed: _busy ? null : () => _saveRemarks(rows),
+                    child: Text(s.erSaveRemarks),
+                  ),
+                ),
+                gap(),
+              ],
               SizedBox(
                 width: double.infinity,
-                child: FilledButton(
-                  key: const Key('eaSave'),
-                  onPressed: _busy ? null : () => _save(rows),
-                  child: Text(_busy ? s.loading : s.eaSave),
-                ),
+                child: full
+                    ? OutlinedButton(
+                        key: const Key('eaSave'),
+                        onPressed: _busy ? null : () => _saveAttendance(rows),
+                        child: Text(s.eaSave),
+                      )
+                    : FilledButton(
+                        key: const Key('eaSave'),
+                        onPressed: _busy ? null : () => _saveAttendance(rows),
+                        child: Text(_busy ? s.loading : s.eaSave),
+                      ),
               ),
+              if (showHealth) ...[
+                gap(),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    key: const Key('erSaveHealth'),
+                    onPressed: _busy ? null : () => _saveHealth(rows),
+                    child: Text(s.hwSave),
+                  ),
+                ),
+              ],
               const Divider(height: Tokens.sp5),
               Text(s.eaFromDailyHelp, style: TextStyle(color: muted, fontSize: 13)),
-              const SizedBox(height: Tokens.sp2),
+              gap(),
               Wrap(
                 spacing: Tokens.sp2,
                 runSpacing: Tokens.sp2,
@@ -431,6 +711,35 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
           ],
         ),
       ),
+    );
+    if (!full) return sheet;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // the register by Excel, one closed line as on Marks and Height and weight (docs/design/96 part 18)
+        SheetByExcel(
+          folded: true,
+          title: s.erTitle('${section['code']}'),
+          help: s.xlRegisterHelp,
+          canUpload: !locked,
+          download: () => ref
+              .read(apiProvider)
+              .examEntryRegisterExcel(id: widget.examId, classSectionId: widget.sectionId),
+          upload: (file, apply) => ref
+              .read(apiProvider)
+              .examEntryRegisterUpload(
+                id: widget.examId,
+                body: SectionSheetUploadDto(
+                  classSectionId: widget.sectionId,
+                  file: file,
+                  apply: apply,
+                ),
+              ),
+          onSaved: () => ref.invalidate(examRegisterProvider(_key)),
+        ),
+        const SizedBox(height: Tokens.sp3),
+        sheet,
+      ],
     );
   }
 }

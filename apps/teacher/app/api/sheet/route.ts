@@ -9,6 +9,8 @@ const PATHS: Record<string, string> = {
   health: 'health/excel',
   // a subject's marks of the section (its parts as columns; docs/design/96 part 17)
   marks: 'marks/excel',
+  // the exam register: remark, took part in, promoted to, attendance, height and weight (part 18)
+  register: 'register/excel',
 };
 
 /**

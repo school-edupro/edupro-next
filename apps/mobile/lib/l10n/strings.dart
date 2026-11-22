@@ -1810,6 +1810,27 @@ class S {
     _ => null,
   };
 
+  // ---- the Exam register as on the staff website, and its sheet by Excel (docs/design/96 part 18) ----
+  String erTitle(String section) => _t('Register · $section', 'रजिस्टर · $section');
+  String get erRemark => _t('Remark', 'टिप्पणी');
+  String get erTookPart => _t('Took part in', 'भाग लिया');
+  String get erPromoted => _t('Promoted to (final term)', 'अगली कक्षा (अंतिम सत्र)');
+  String erLastHealth(String date, String? bmi) => _t(
+    'last health $date${bmi == null ? '' : ' · BMI $bmi'}',
+    'पिछली स्वास्थ्य जाँच $date${bmi == null ? '' : ' · BMI $bmi'}',
+  );
+  String get erSaveRemarks => _t('Save remarks', 'टिप्पणियाँ सहेजें');
+  String erRemarksSaved(int n) =>
+      _t('Saved ($n remarks changed).', 'सहेजा गया ($n टिप्पणियाँ बदलीं)।');
+  String get erNoRemark => _t('No remark entered.', 'कोई टिप्पणी नहीं भरी।');
+  String erHealthSaved(int n) =>
+      _t('Saved ($n health records saved).', 'सहेजा गया ($n स्वास्थ्य रिकॉर्ड)।');
+  String get erNoHealth => _t('No measurement entered.', 'कोई माप नहीं भरी।');
+  String get xlRegisterHelp => _t(
+    'The sheet lists the section with each pupil’s remark, what they took part in, the class promoted to and the exam attendance (with height and weight when you see them), filled with what is entered. Leave a cell empty to keep it; only what you change is saved.',
+    'शीट में वर्ग के हर विद्यार्थी की टिप्पणी, जिसमें भाग लिया, अगली कक्षा और परीक्षा उपस्थिति (और लंबाई-वज़न, यदि आप देखते हैं) भरे हुए मानों सहित है। रखने के लिए सेल खाली छोड़ें; केवल जो बदलें वही सहेजा जाता है।',
+  );
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

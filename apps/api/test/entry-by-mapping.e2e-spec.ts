@@ -445,6 +445,68 @@ describe('who enters what (e2e)', () => {
     });
   });
 
+  it('the exam register by Excel: the sheet filled, rows checked, only changes saved (docs/design/96 part 18)', async () => {
+    const file = (
+      await call(as('CT'), 'GET', `/exams/${id.exam!}/register/excel?classSectionId=${id.A!}`)
+    ).json() as { base64: string };
+    const wb = await sheetOf(file.base64);
+    const ws = wb.worksheets[0]!;
+    expect(headers(ws)).toEqual([
+      'Admission no',
+      'Roll no',
+      'Name',
+      'Remark',
+      'Took part in',
+      'Promoted to',
+      'Days present',
+      'Total days',
+      'Height (cm)',
+      'Weight (kg)',
+      'Blood group',
+    ]);
+    // the second pupil: a remark, what they took part in, days present of total
+    ws.getRow(3).getCell(4).value = 'Works steadily';
+    ws.getRow(3).getCell(5).value = 'Quiz club';
+    ws.getRow(3).getCell(7).value = 50;
+    ws.getRow(3).getCell(8).value = 45;
+    const up = (apply: boolean) =>
+      b64Of(wb).then((f) =>
+        call(as('CT'), 'POST', `/exams/${id.exam!}/register/upload`, {
+          classSectionId: id.A,
+          file: f,
+          apply,
+        }),
+      );
+    // more days present than total: refused, nothing saved
+    const bad = (await up(true)).json();
+    expect(bad).toMatchObject({ errors: 1, applied: false });
+    expect(bad.rows[1].error).toBe('Days present cannot exceed the total days');
+    ws.getRow(3).getCell(7).value = 41;
+    const check = (await up(false)).json();
+    expect(check).toMatchObject({ errors: 0, applied: false });
+    // what was already entered (the height from the Height and weight sheet) is not a change
+    expect(check.ready).toBe(1);
+    expect((await up(true)).json()).toMatchObject({ errors: 0, applied: true, ready: 1 });
+    const reg = (
+      await call(as('CT'), 'GET', `/exams/${id.exam!}/register?classSectionId=${id.A!}`)
+    ).json();
+    expect(reg.rows[1]).toMatchObject({
+      remark: 'Works steadily',
+      participation: 'Quiz club',
+      daysPresent: 41,
+      daysTotal: 45,
+    });
+    // a teacher without the register's rights in the section cannot save it
+    const other = await b64Of(wb).then((f) =>
+      call(as('ART'), 'POST', `/exams/${id.exam!}/register/upload`, {
+        classSectionId: id.A,
+        file: f,
+        apply: true,
+      }),
+    );
+    expect(other.json().applied ?? false).toBe(false);
+  });
+
   it('a teacher’s "To enter": what is theirs and not done yet', async () => {
     const lines = (who: string) =>
       call(as(who), 'GET', '/exams/my-entry').then((r) =>

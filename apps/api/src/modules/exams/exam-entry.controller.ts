@@ -183,6 +183,30 @@ export class ExamEntryController {
     return this.entry.register(ctx, id, q);
   }
 
+  @Get(':id/register/excel')
+  @ApiOperation({
+    summary:
+      "A section's exam register (remark, took part in, promoted to, attendance; height and weight) as an Excel sheet (base64)",
+  })
+  @RequirePermission(EXAMS.marksView)
+  registerExcel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: EntryQueryDto) {
+    return this.entry.registerExcel(ctx, id, q);
+  }
+
+  @Post(':id/register/upload')
+  @ApiOperation({
+    summary:
+      'A filled exam register sheet: preview, then save with apply (each part needs its right)',
+  })
+  @RequirePermission(EXAMS.marksView)
+  registerUpload(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SectionSheetUploadDto,
+  ) {
+    return this.entry.registerUpload(ctx, id, dto);
+  }
+
   @Put(':id/remarks')
   @RequirePermission(EXAMS.remarkEnter, { description: 'Enter exam remarks' })
   putRemarks(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: PutRemarksDto) {

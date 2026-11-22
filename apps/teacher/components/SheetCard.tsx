@@ -16,7 +16,7 @@ export function SheetCard({
   help,
   subjectId,
 }: {
-  kind: 'indicators' | 'remarks' | 'health' | 'marks';
+  kind: 'indicators' | 'remarks' | 'health' | 'marks' | 'register';
   examId: string;
   sectionId: string;
   /** the marks sheet is a subject's */

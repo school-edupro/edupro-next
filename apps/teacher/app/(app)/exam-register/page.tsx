@@ -1,6 +1,7 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { SheetCard } from '@/components/SheetCard';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { attendanceFromDaily, saveAttendance, saveHealth, saveRemarks } from './actions';
@@ -429,6 +430,20 @@ export default async function ExamRegisterPage({
             </form>
           ) : null}
         </Card>
+      ) : null}
+      {reg && exam && chosen && !only ? (
+        // the register by Excel (docs/design/96 part 18): only what is changed is saved, each part by its right
+        <SheetCard
+          kind="register"
+          examId={exam.id}
+          sectionId={chosen.classSectionId}
+          lang={lang}
+          canUpload={!locked}
+          help={t(
+            lang,
+            'The sheet lists the section with each pupil’s remark, what they took part in, the class promoted to and the exam attendance (with height and weight when you see them), filled with what is entered. Leave a cell empty to keep it; only what you change is saved.',
+          )}
+        />
       ) : null}
     </main>
   );

@@ -396,6 +396,18 @@ class EduProApi {
   Future<dynamic> examEntryAttendanceFromDaily({required AttendanceFromDailyDto body, required String id}) =>
       _t.send('POST', '/exams/${Uri.encodeComponent(id)}/attendance/from-daily', body: body.toJson());
 
+  /// PUT /exams/{id}/remarks
+  Future<dynamic> examEntryPutRemarks({required PutRemarksDto body, required String id}) =>
+      _t.send('PUT', '/exams/${Uri.encodeComponent(id)}/remarks', body: body.toJson());
+
+  /// GET /exams/{id}/register/excel — A section's exam register (remark, took part in, promoted to, attendance; height and weight) as an Excel sheet (base64)
+  Future<ApiFile> examEntryRegisterExcel({required String id, required String classSectionId, String? subjectId}) =>
+      _t.file('GET', '/exams/${Uri.encodeComponent(id)}/register/excel', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// POST /exams/{id}/register/upload — A filled exam register sheet: preview, then save with apply (each part needs its right)
+  Future<dynamic> examEntryRegisterUpload({required SectionSheetUploadDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/register/upload', body: body.toJson());
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');
@@ -1528,6 +1540,34 @@ class AttendanceFromDailyDto {
         if (from != null) 'from': from,
         if (to != null) 'to': to,
         if (overwrite != null) 'overwrite': overwrite,
+      };
+}
+
+/** The PutRemarksDto the API takes. */
+class PutRemarksDto {
+  const PutRemarksDto({required this.classSectionId, required this.rows});
+  final String classSectionId;
+  final List<PutRemarksDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutRemarksDtoRowsItem the API takes. */
+class PutRemarksDtoRowsItem {
+  const PutRemarksDtoRowsItem({required this.studentId, required this.remark, this.bankCode, this.participation, this.promotedTo});
+  final String studentId;
+  final String remark;
+  final String? bankCode;
+  final String? participation;
+  final String? promotedTo;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'remark': remark,
+        if (bankCode != null) 'bankCode': bankCode,
+        if (participation != null) 'participation': participation,
+        if (promotedTo != null) 'promotedTo': promotedTo,
       };
 }
 

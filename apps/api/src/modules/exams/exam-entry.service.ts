@@ -2303,4 +2303,241 @@ export class ExamEntryService {
     });
     return { ...preview, applied: true };
   }
+
+  private static readonly REGISTER_COLS = [
+    'Remark',
+    'Took part in',
+    'Promoted to',
+    'Days present',
+    'Total days',
+  ];
+
+  /**
+   * A section's exam register as a sheet to fill (docs/design/96 part 18): the remark, what the pupil took part
+   * in, the class promoted to, the exam attendance (days present of total) and — for those who see health — height,
+   * weight and blood group; filled with what is entered.
+   */
+  async registerExcel(ctx: RequestContext, examId: string, q: EntryQueryDto) {
+    const reg = await this.register(ctx, examId, q);
+    const health = reg.healthVisible;
+    const bytes = await templateSheet({
+      sheet: 'Exam register',
+      columns: [
+        { header: 'Admission no', width: 16, required: true, format: 'text' },
+        { header: 'Roll no', width: 8 },
+        { header: 'Name', width: 28 },
+        { header: 'Remark', width: 44, note: 'Up to 600 characters' },
+        { header: 'Took part in', width: 28, note: 'Up to 300 characters' },
+        { header: 'Promoted to', width: 14, note: 'The final term: the class promoted to' },
+        { header: 'Days present', width: 12, format: 'number', note: '0 to 400' },
+        { header: 'Total days', width: 12, format: 'number', note: '1 to 400' },
+        ...(health
+          ? [
+              {
+                header: 'Height (cm)',
+                width: 12,
+                format: 'number' as const,
+                note: '40 to 250',
+              },
+              { header: 'Weight (kg)', width: 12, format: 'number' as const, note: '3 to 200' },
+              { header: 'Blood group', width: 12, options: ExamEntryService.BLOOD },
+            ]
+          : []),
+      ],
+      guide: [
+        `${reg.exam.name} · ${reg.section.code}`,
+        'Write a remark, what the pupil took part in and the class promoted to; days present and total days of the exam attendance.',
+        ...(health
+          ? [
+              'Height in centimetres (40 to 250), weight in kilograms (3 to 200); the last reading is filled in.',
+            ]
+          : []),
+        'Leave a cell empty to keep what is entered. Only what you change is saved, and only the parts your role enters.',
+        'Do not change the Admission no column; upload the sheet on the Exam register page, check, then save.',
+      ],
+      rows: reg.rows.map((r) => [
+        r.admissionNo,
+        r.rollNo,
+        r.name,
+        r.remark,
+        r.participation ?? null,
+        r.promotedTo ?? null,
+        r.daysPresent,
+        r.daysTotal,
+        ...(health
+          ? [
+              r.health?.heightCm == null ? null : Number(r.health.heightCm),
+              r.health?.weightKg == null ? null : Number(r.health.weightKg),
+              r.health?.bloodGroup ?? null,
+            ]
+          : []),
+      ]),
+    });
+    return {
+      filename: `exam-register-${reg.exam.code}-${reg.section.code}.xlsx`
+        .toLowerCase()
+        .replace(/[^\w.-]+/g, '-'),
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      base64: bytes.toString('base64'),
+    };
+  }
+
+  /**
+   * A filled exam register sheet: every row checked; only what differs from what is entered is saved, through the
+   * register's own saves (remarks, exam attendance, height and weight), each needing its right. `apply` saves it.
+   */
+  async registerUpload(ctx: RequestContext, examId: string, dto: SectionSheetUploadDto) {
+    const reg = await this.register(ctx, examId, { classSectionId: dto.classSectionId });
+    const health = reg.healthVisible;
+    const rows = await readSheet(
+      dto.file,
+      ['Admission no', ...ExamEntryService.REGISTER_COLS],
+      health ? ExamEntryService.HEALTH_COLS : [],
+    );
+    const byNo = new Map(reg.rows.map((r) => [r.admissionNo.trim().toLowerCase(), r]));
+    const seen = new Set<string>();
+    const may = (permission: string) => ctx.permissions?.has(permission) === true;
+    const whole = (raw: string, lo: number) =>
+      /^\d{1,3}$/.test(raw) && Number(raw) >= lo && Number(raw) <= 400 ? Number(raw) : null;
+    const num = (raw: string, lo: number, hi: number) => {
+      const n = Number(raw);
+      return /^\d+(\.\d{1,2})?$/.test(raw) && n >= lo && n <= hi ? n : null;
+    };
+    const columns = [
+      ...ExamEntryService.REGISTER_COLS,
+      ...(health ? ExamEntryService.HEALTH_COLS : []),
+    ];
+    const checked = rows.map(({ row, cells }) => {
+      const no = cells['Admission no']!.trim();
+      const student = byNo.get(no.toLowerCase());
+      const values: Record<string, string> = {};
+      for (const h of columns) values[h] = (cells[h] ?? '').trim();
+      let error: string | null = null;
+      if (!student) error = `No student with admission no ${no} in ${reg.section.code}`;
+      else if (seen.has(student.studentId)) error = 'The student is in the sheet twice';
+      if (student) seen.add(student.studentId);
+      let remark: {
+        remark: string;
+        bankCode?: string;
+        participation?: string;
+        promotedTo?: string;
+      } | null = null;
+      let attendance: { daysPresent: number; daysTotal: number } | null = null;
+      const v: { heightCm?: number; weightKg?: number; bloodGroup?: string } = {};
+      if (!error && student) {
+        // the remark, what the pupil took part in, the class promoted to: a filled cell that differs
+        const text = values['Remark']!;
+        const part = values['Took part in']!;
+        const promoted = values['Promoted to']!;
+        if (text.length > 600) error = 'The remark is longer than 600 characters';
+        else if (part.length > 300) error = '"Took part in" is longer than 300 characters';
+        else if (promoted.length > 40) error = '"Promoted to" is longer than 40 characters';
+        else if (
+          (text && text !== (student.remark ?? '')) ||
+          (part && part !== (student.participation ?? '')) ||
+          (promoted && promoted !== (student.promotedTo ?? ''))
+        ) {
+          const kept = !text || text === (student.remark ?? '');
+          remark = {
+            remark: text || student.remark || '',
+            ...(kept && student.bankCode ? { bankCode: student.bankCode } : {}),
+            ...(part ? { participation: part } : {}),
+            ...(promoted ? { promotedTo: promoted } : {}),
+          };
+          if (!may(EXAMS.remarkEnter)) error = 'Remarks are not part of your role';
+        }
+        // the exam attendance: days present of total (one cell left empty keeps what is entered)
+        const dp = values['Days present']!;
+        const dt = values['Total days']!;
+        if (!error && (dp || dt)) {
+          const present = dp ? whole(dp, 0) : student.daysPresent;
+          const total = dt ? whole(dt, 1) : student.daysTotal;
+          if (dp && present === null) error = `Days present ${dp} is not a whole number up to 400`;
+          else if (dt && total === null)
+            error = `Total days ${dt} is not a whole number from 1 to 400`;
+          else if (present === null || total === null)
+            error = 'Write both the days present and the total days';
+          else if (present > total) error = 'Days present cannot exceed the total days';
+          else if (present !== student.daysPresent || total !== student.daysTotal) {
+            attendance = { daysPresent: present, daysTotal: total };
+            if (!may(EXAMS.attendanceEnter)) error = 'Exam attendance is not part of your role';
+          }
+        }
+        // height and weight: as on the Height and weight sheet, against the last reading
+        if (!error && health) {
+          const now = student.health;
+          const h = values['Height (cm)']!;
+          const w = values['Weight (kg)']!;
+          const bg = values['Blood group']!.toUpperCase().replace(/\s+/g, '');
+          if (h) {
+            const n = num(h, 40, 250);
+            if (n === null) error = `Height ${h} is not 40 to 250 cm`;
+            else if (n !== Number(now?.heightCm ?? NaN)) v.heightCm = n;
+          }
+          if (!error && w) {
+            const n = num(w, 3, 200);
+            if (n === null) error = `Weight ${w} is not 3 to 200 kg`;
+            else if (n !== Number(now?.weightKg ?? NaN)) v.weightKg = n;
+          }
+          if (!error && bg) {
+            if (!ExamEntryService.BLOOD.includes(bg)) error = `${bg} is not a blood group`;
+            else if (bg !== (now?.bloodGroup ?? '')) v.bloodGroup = bg;
+          }
+          if (!error && Object.keys(v).length && !may(EXAMS.healthEnter))
+            error = 'Height and weight are not part of your role';
+        }
+      }
+      return {
+        row,
+        admissionNo: no,
+        name: student?.name ?? null,
+        student,
+        values,
+        remark,
+        attendance,
+        v,
+        error,
+      };
+    });
+    const errors = checked.filter((x) => x.error).length;
+    const ready = checked.filter(
+      (x) => !x.error && (x.remark || x.attendance || Object.keys(x.v).length),
+    );
+    const preview = {
+      columns,
+      rows: checked.map((x) => ({
+        row: x.row,
+        admissionNo: x.admissionNo,
+        name: x.name,
+        values: x.values,
+        error: x.error,
+      })),
+      ready: ready.length,
+      errors,
+      applied: false,
+    };
+    if (!dto.apply || errors || !ready.length) return preview;
+    const remarks = ready.filter((x) => x.remark);
+    if (remarks.length)
+      await this.putRemarks(ctx, examId, {
+        classSectionId: dto.classSectionId,
+        rows: remarks.map((x) => ({ studentId: x.student!.studentId, ...x.remark! })),
+      });
+    const days = ready.filter((x) => x.attendance);
+    if (days.length)
+      await this.putAttendance(ctx, examId, {
+        classSectionId: dto.classSectionId,
+        rows: days.map((x) => ({ studentId: x.student!.studentId, ...x.attendance! })),
+      });
+    const measured = ready.filter((x) => Object.keys(x.v).length);
+    if (measured.length)
+      await this.putHealth(ctx, examId, {
+        classSectionId: dto.classSectionId,
+        rows: measured.map((x) => ({
+          studentId: x.student!.studentId,
+          ...(x.v as { heightCm?: number; weightKg?: number; bloodGroup?: 'A+' }),
+        })),
+      });
+    return { ...preview, applied: true };
+  }
 }

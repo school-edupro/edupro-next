@@ -12,8 +12,18 @@ export interface SheetPreview {
 }
 export type SheetOut = { ok: true; data: SheetPreview } | { ok: false; error: string };
 
-const PATHS = { indicators: 'indicators', remarks: 'remark-items', health: 'health' } as const;
-const PAGES = { indicators: '/indicators', remarks: '/remarks', health: '/health' } as const;
+const PATHS = {
+  indicators: 'indicators',
+  remarks: 'remark-items',
+  health: 'health',
+  register: 'register',
+} as const;
+const PAGES = {
+  indicators: '/indicators',
+  remarks: '/remarks',
+  health: '/health',
+  register: '/exam-register',
+} as const;
 
 /**
  * A filled section sheet (docs/design/71): every row is checked first (`apply` false) and saved only

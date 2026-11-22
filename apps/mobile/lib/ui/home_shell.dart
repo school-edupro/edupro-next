@@ -88,10 +88,9 @@ List<AppTab> familyTabs(Profile p, S s, FamilyLayoutView layout) => [
 Widget? nativeScreen(Profile p, String href, S s) {
   final path = href.split('?').first;
   if (p.isStaff) {
-    // the Exam register's attendance only (its own menu entry, `?only=attendance`; docs/design/96 part 17); the whole
-    // register stays the website's page
-    if (path == '/exam-register' && href.contains('only=attendance')) {
-      return ExamAttendanceScreen(profile: p);
+    if (path == '/exam-register') {
+      // the menu's Exam attendance (`?only=attendance`) or the whole Exam register (docs/design/96 parts 17, 18)
+      return ExamAttendanceScreen(profile: p, full: !href.contains('only=attendance'));
     }
     return switch (path) {
       '/attendance' => MarkClassScreen(profile: p),
