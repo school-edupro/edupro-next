@@ -25,14 +25,20 @@ async function uploadFiles(fd: FormData, key = 'files'): Promise<string[]> {
     const target = reg.upload.url.startsWith('http')
       ? reg.upload.url
       : `${process.env.API_BASE_URL ?? 'http://localhost:4000'}${reg.upload.url}`;
-    const headers: Record<string, string> = { 'content-type': entry.type };
-    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers[k] = v;
+    // one Content-Type: the store's own header replaces ours whatever its case (two would be joined into
+    // "image/jpeg, image/jpeg", which the API refuses with 415)
+    const headers = new Headers({ 'content-type': entry.type });
+    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers.set(k, v);
     const put = await fetch(target, {
       method: reg.upload.method || 'PUT',
       headers,
       body: Buffer.from(await entry.arrayBuffer()),
     });
-    if (!put.ok) throw new ApiError(put.status, { type: 'file.upload_failed' });
+    if (!put.ok)
+      throw new ApiError(put.status, {
+        type: 'file.upload_failed',
+        detail: `${entry.name} could not be uploaded. Try again, or a smaller PDF or photo.`,
+      });
     fileIds.push(reg.file.id);
   }
   return fileIds;
