@@ -38,9 +38,10 @@ function Preview({
     return !needs || !hidden.has(needs);
   });
   const shownTabs = staffShownTabs(draft, hidden);
-  const tile = (text: string) => (
+  // keyed by the screen (two may share a name), not by the words
+  const tile = (key: string, text: string) => (
     <div
-      key={text}
+      key={key}
       style={{
         display: 'grid',
         justifyItems: 'center',
@@ -68,7 +69,11 @@ function Preview({
       <span style={{ lineHeight: 1.2 }}>{text}</span>
     </div>
   );
-  const tabs = ['Home', ...shownTabs.map((t) => labelOf(t).label), 'More'];
+  const tabs = [
+    { key: '/', label: 'Home' },
+    ...shownTabs.map((t) => ({ key: t, label: labelOf(t).label })),
+    { key: 'more', label: 'More' },
+  ];
   return (
     <figure style={{ margin: 0 }} aria-labelledby="sal-preview-cap">
       <figcaption
@@ -134,8 +139,8 @@ function Preview({
               gap: 'var(--sp-3) var(--sp-2)',
             }}
           >
-            {shortcuts.map((h) => tile(labelOf(h).label))}
-            {tile('All')}
+            {shortcuts.map((h) => tile(h, labelOf(h).label))}
+            {tile('all', 'All')}
           </div>
           <ol
             data-testid="sal-preview-cards"
@@ -176,8 +181,11 @@ function Preview({
           }}
         >
           {tabs.map((t) => (
-            <span key={t} style={{ padding: 'var(--sp-2) var(--sp-1)', overflowWrap: 'anywhere' }}>
-              {t}
+            <span
+              key={t.key}
+              style={{ padding: 'var(--sp-2) var(--sp-1)', overflowWrap: 'anywhere' }}
+            >
+              {t.label}
             </span>
           ))}
         </div>

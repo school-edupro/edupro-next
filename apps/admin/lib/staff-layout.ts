@@ -130,6 +130,17 @@ export function staffLayoutProblems(l: StaffLayout, c: StaffLayoutSetup['catalog
   const listKeys = new Set(lists.map((x) => x.key));
   for (const t of l.tabs)
     if (!listKeys.has(t) && !screens.has(t)) problems.push(`${t} cannot be a tab here.`);
+  // two bottom tabs under one name (a list and a screen, say) would confuse staff
+  const tabName = (t: string) =>
+    (
+      lists.find((x) => x.key === t)?.label ??
+      c.screens.find((s) => s.href === t)?.label ??
+      t
+    ).trim();
+  const tabNames = l.tabs.map(tabName);
+  for (const [i, n] of tabNames.entries())
+    if (n && tabNames.findIndex((m) => m.toLowerCase() === n.toLowerCase()) < i)
+      problems.push(`Two bottom tabs are both named ${n}: rename the list or choose another tab.`);
   // the list tabs (part 3), as the API checks them
   const LL = c.limits.lists;
   if (lists.length > LL.max) problems.push(`Keep at most ${String(LL.max)} tab lists.`);

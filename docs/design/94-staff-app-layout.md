@@ -185,3 +185,7 @@ Phases: **J** the model and the API · **K** admin's sections · **L** the app a
   tests, analyze; the web preview rebuilt) and the staff website's accessibility pages (desktop and phone, now with
   `/tabs/classes`) pass; the local secret scan is clean. The test school is switched off again. Alpha has no
   published staff layout, so its staff keep the two standard lists until the office publishes one.
+- **Fix (22 Nov 2026).** The admin preview keyed its tabs and tiles by their names, so a list and a screen of one name
+  (the Attendance list and the Attendance screen) raised React's duplicate-key error; they are keyed by tab and
+  screen now. Two bottom tabs of one name are also refused (admin and API): "Two bottom tabs are both named
+  Attendance: rename the list or choose another tab."

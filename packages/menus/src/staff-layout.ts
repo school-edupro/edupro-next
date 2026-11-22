@@ -217,6 +217,14 @@ export function checkStaffLayout(given: StaffLayout): string[] {
   if (!distinct(l.tabs)) problems.push('A tab is chosen twice.');
   for (const t of l.tabs)
     if (!listKeys.has(t) && !screens.has(t)) problems.push(`${t} cannot be a tab here.`);
+  // two bottom tabs under one name (a list and a screen, say) would confuse staff
+  const screenName = new Map(staffLayoutScreens().map((s) => [s.href, s.label]));
+  const tabNames = l.tabs.map((t) =>
+    (l.lists.find((x) => x.key === t)?.label ?? screenName.get(t) ?? t).trim(),
+  );
+  for (const [i, n] of tabNames.entries())
+    if (n && tabNames.findIndex((m) => m.toLowerCase() === n.toLowerCase()) < i)
+      problems.push(`Two bottom tabs are both named ${n}: rename the list or choose another tab.`);
   // the list tabs (part 3)
   const { lists: LL } = STAFF_LAYOUT_LIMITS;
   if (l.lists.length > LL.max) problems.push(`Keep at most ${String(LL.max)} tab lists.`);

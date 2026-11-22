@@ -358,6 +358,12 @@ describe('the staff app layout (e2e, docs/design/94 phase B)', () => {
     expect(errors).toContain('The tab list A name far too long here takes 1 to 12 screens.');
     expect(errors).toContain('/nowhere cannot be in the tab list Classes.');
     expect(errors).toContain('nowhere cannot be a tab here.');
+    // the Attendance list and the Attendance screen both as tabs: one name twice
+    const twice = await put({ ...setup.draft, tabs: ['attendance', '/attendance', '/messages'] });
+    expect(twice.statusCode).toBe(400);
+    expect(twice.json().errors).toContain(
+      'Two bottom tabs are both named Attendance: rename the list or choose another tab.',
+    );
 
     // Attendance renamed and given Leave to approve; Classes without payslips; the school's own Office list
     const lists = [
