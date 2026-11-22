@@ -1700,6 +1700,43 @@ class S {
     _ => null,
   };
 
+  // ---- Subject choices as on the staff website (docs/design/96 part 15) ----
+  String get scIntro => _t(
+    'The subjects each student of your section takes this year. The report card and the mark register follow them.',
+    'आपके वर्ग का हर विद्यार्थी इस वर्ष कौन-से विषय लेता है। रिपोर्ट कार्ड और अंक रजिस्टर इन्हीं के अनुसार चलते हैं।',
+  );
+  String get scNoSection => _t(
+    "A section's class teacher sets its students' subject choices; you are not the class teacher of a section this year.",
+    'वर्ग के विद्यार्थियों के विषय कक्षा-अध्यापक चुनते हैं; आप इस वर्ष किसी वर्ग के कक्षा-अध्यापक नहीं हैं।',
+  );
+  String get scViewOnly => _t(
+    "You see this section's choices; its class teacher sets them.",
+    'आप इस वर्ग के विषय देख रहे हैं; इन्हें इसके कक्षा-अध्यापक तय करते हैं।',
+  );
+  String scEveryone(String codes) => _t(
+    'Everyone takes $codes. A subject with marks this year stays.',
+    'सभी लेते हैं: $codes। जिस विषय में इस वर्ष अंक हैं, वह बना रहता है।',
+  );
+  String get scNothing => _t(
+    'Every subject of the class is compulsory: nothing to choose.',
+    'कक्षा के सभी विषय अनिवार्य हैं: चुनने को कुछ नहीं।',
+  );
+  String get scNotSet => _t('not set: takes every subject', 'तय नहीं: सभी विषय लेता/लेती है');
+  String get scStream => _t('Stream', 'संकाय');
+  String get scOther => _t('Other subjects', 'अन्य विषय');
+  String get scOpt => _t('Opt (additional, out of total)', 'अतिरिक्त (कुल से बाहर)');
+  String get scMarkedNote => _t('has marks this year: stays', 'इस वर्ष अंक हैं: बना रहेगा');
+  String get scSave => _t('Save the choices', 'विषय सहेजें');
+  String get scLastYearHelp => _t(
+    "Students without choices take their last year's subjects and stream.",
+    'जिन विद्यार्थियों के विषय तय नहीं, वे पिछले वर्ष के विषय और संकाय लेंगे।',
+  );
+  String get scLastYear => _t("Bring last year's choices", 'पिछले वर्ष के विषय लाएँ');
+  String scCopied(int n) => _t(
+    "$n students given last year's subjects.",
+    '$n विद्यार्थियों को पिछले वर्ष के विषय दिए गए।',
+  );
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

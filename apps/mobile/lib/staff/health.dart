@@ -308,8 +308,9 @@ class _HealthSheetViewState extends ConsumerState<HealthSheetView> {
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: Tokens.sp2),
-        // first, so it is there without going past every pupil
+        // folded, closed: one line that opens Download and Upload (asked, 22 Nov 2026)
         SheetByExcel(
+          folded: true,
           title: '${section['code']} · ${s.menu('Height and weight')}',
           help: s.xlHealthHelp,
           canUpload: open,

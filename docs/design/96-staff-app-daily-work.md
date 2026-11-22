@@ -329,3 +329,27 @@ row); "Nothing changed." when nothing did; heights 40–250 cm and weights 3–2
 `staff_test.dart` (By Excel first with its upload, the last reading, nothing changed, out of range, the changed rows
 with a cleared weight, the sheet; light, dark, Hindi, twice the text); 259 app tests; the web preview rebuilt and
 checked to serve the new build (Upload the filled sheet, Save height and weight, Choose a remark).
+
+## Part 15: Subject choices; By Excel folded on Height and weight (22 Nov 2026)
+
+"Staff app: the Subject choices section the same as the staff website; and on Height and weight hide the By Excel
+section." Decided (asked): **fold it, closed** — on Height and weight only.
+
+**By Excel on Height and weight** — `SheetByExcel(folded: true)`: one closed "By Excel" line above the pupils;
+opened, the help, Download the sheet and Upload the filled sheet as before. Indicators and Remarks keep it open.
+
+**Subject choices** — `lib/staff/subject_choices.dart`, `SubjectChoicesScreen` (`nativeScreen('/subject-choices')`),
+as the website's page: the line on what it is for; **Section** (those the person sets as class teacher or teaches:
+"VI-A (32)"; none: "A section's class teacher sets …"); a section the person only teaches: "You see this section's
+choices; its class teacher sets them." (read only); "Everyone takes ENG · MAT. A subject with marks this year stays.";
+"Every subject of the class is compulsory: nothing to choose." when so; each student a card — the admission number
+("not set: takes every subject" when none), **Stream** (the class's streams), each **choice group** (one subject:
+a drop-down; more: ticks of the codes), **Other subjects** (ticks), **Opt (additional, out of total)** (a subject
+the student takes, not compulsory nor of an additional group); a subject with marks this year cannot be changed.
+**Save the choices** sends every student as the website's save does (the chosen subjects with the marked ones kept;
+a new stream takes the old stream's subjects off; the server adds the compulsory ones and the stream's) to `PUT
+exams/subject-choices`; **Bring last year's choices** (`POST …/last-year`) for students without, unless the choices
+come from exams. Calls added: `SubjectChoicesController_sections`, `_list`, `_put`, `_lastYear`. No API change.
+Tests: `staff_test.dart` (the sections, the compulsory line, a marked subject locked, a group pick, ticks, the stream,
+Opt, Save's rows with a stream change, last year, a section to see only; light, dark, Hindi, twice the text; Height
+and weight's closed fold); 264 app tests; the web preview rebuilt.

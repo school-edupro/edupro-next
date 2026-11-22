@@ -356,6 +356,22 @@ class EduProApi {
   Future<dynamic> examEntryHealthUpload({required SectionSheetUploadDto body, required String id}) =>
       _t.send('POST', '/exams/${Uri.encodeComponent(id)}/health/upload', body: body.toJson());
 
+  /// GET /exams/subject-choices/sections — The year's sections (with the number of students and whether the caller sets them)
+  Future<dynamic> subjectChoicesSections() =>
+      _t.send('GET', '/exams/subject-choices/sections');
+
+  /// GET /exams/subject-choices — A section's students with their subjects for the year
+  Future<dynamic> subjectChoicesList({required String classSectionId}) =>
+      _t.send('GET', '/exams/subject-choices', query: {'classSectionId': classSectionId});
+
+  /// PUT /exams/subject-choices — Set students' subjects (each list replaces the student's)
+  Future<dynamic> subjectChoicesPut({required PutSubjectChoicesDto body}) =>
+      _t.send('PUT', '/exams/subject-choices', body: body.toJson());
+
+  /// POST /exams/subject-choices/last-year — Give students without choices their last year's subjects and stream
+  Future<dynamic> subjectChoicesLastYear({required SubjectChoicesQueryDto body}) =>
+      _t.send('POST', '/exams/subject-choices/last-year', body: body.toJson());
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');
@@ -1386,6 +1402,54 @@ class PutHealthDtoRowsItem {
         if (visionRight != null) 'visionRight': visionRight,
         if (dental != null) 'dental': dental,
         if (notes != null) 'notes': notes,
+      };
+}
+
+/** The PutSubjectChoicesDto the API takes. */
+class PutSubjectChoicesDto {
+  const PutSubjectChoicesDto({required this.classSectionId, this.partial, required this.rows});
+  final String classSectionId;
+  final bool? partial;
+  final List<PutSubjectChoicesDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        if (partial != null) 'partial': partial,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutSubjectChoicesDtoRowsItem the API takes. */
+class PutSubjectChoicesDtoRowsItem {
+  const PutSubjectChoicesDtoRowsItem({required this.studentId, this.stream, required this.subjects});
+  final String studentId;
+  final String? stream;
+  final List<PutSubjectChoicesDtoRowsItemSubjectsItem> subjects;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        if (stream != null) 'stream': stream,
+        'subjects': subjects.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutSubjectChoicesDtoRowsItemSubjectsItem the API takes. */
+class PutSubjectChoicesDtoRowsItemSubjectsItem {
+  const PutSubjectChoicesDtoRowsItemSubjectsItem({required this.subjectId, this.kind, this.additional});
+  final String subjectId;
+  final String? kind;
+  final bool? additional;
+  Map<String, Object?> toJson() => {
+        'subjectId': subjectId,
+        if (kind != null) 'kind': kind,
+        if (additional != null) 'additional': additional,
+      };
+}
+
+/** The SubjectChoicesQueryDto the API takes. */
+class SubjectChoicesQueryDto {
+  const SubjectChoicesQueryDto({required this.classSectionId});
+  final String classSectionId;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
       };
 }
 

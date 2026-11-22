@@ -42,6 +42,7 @@ import '../staff/marks.dart';
 import '../staff/my_attendance.dart';
 import '../staff/my_leave.dart';
 import '../staff/remarks.dart';
+import '../staff/subject_choices.dart';
 import '../staff/layout.dart' show staffFallback, staffLayoutProvider, staffTabs;
 import 'brand.dart';
 import 'widgets.dart';
@@ -105,6 +106,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/remarks' => RemarksScreen(profile: p),
       // height, weight, blood group a pupil, the sheet by Excel (docs/design/96 part 14)
       '/health' => StaffHealthScreen(profile: p),
+      // each student's subjects: the stream, a group's subject, the others, Opt (docs/design/96 part 15)
+      '/subject-choices' => SubjectChoicesScreen(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       // upload a lesson for approval, the lesson report, a lesson in full (docs/design/96 part 7)
       '/lesson-plans' => LessonPlansScreen(profile: p),

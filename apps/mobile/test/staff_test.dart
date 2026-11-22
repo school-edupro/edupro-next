@@ -83,6 +83,7 @@ class School {
   int sheetChecks = 0;
   final remarkPuts = <Map<String, Object?>>[];
   final healthPuts = <Map<String, Object?>>[];
+  final choicePuts = <Map<String, Object?>>[];
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -232,6 +233,7 @@ class School {
       entry('/indicators', 'Indicators and progress card', 'chart'),
       entry('/remarks', 'Remarks', 'message'),
       entry('/health', 'Height and weight', 'heart'),
+      entry('/subject-choices', 'Subject choices', 'book'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -903,6 +905,94 @@ class School {
           'errors': 0,
           'applied': c.body!['apply'] == true,
         };
+      case 'GET /exams/subject-choices/sections':
+        return {
+          'data': [
+            {'id': '300', 'code': 'VI-A', 'students': 2, 'canEdit': true, 'mine': true},
+            {'id': '301', 'code': 'VI-B', 'students': 2, 'canEdit': false, 'mine': true},
+            {'id': '302', 'code': 'VI-C', 'students': 2, 'canEdit': false, 'mine': false},
+          ],
+        };
+      case 'GET /exams/subject-choices':
+        final mine = c.query?['classSectionId'] == '300';
+        Map<String, Object?> sub(String id, String code, String name, String take, [String? g]) => {
+          'id': id,
+          'code': code,
+          'name': name,
+          'take': take,
+          'groupId': g,
+        };
+        Map<String, Object?> took(String id, [bool additional = false]) => {
+          'subjectId': id,
+          'kind': 'optional',
+          'additional': additional,
+        };
+        return {
+          'section': {'id': mine ? '300' : '301', 'code': mine ? 'VI-A' : 'VI-B'},
+          'fromExams': false,
+          'canEdit': mine,
+          'subjects': [
+            sub('s1', 'ENG', 'English', 'all'),
+            sub('s2', 'MAT', 'Mathematics', 'all'),
+            sub('s3', 'HIN', 'Hindi', 'group', 'g1'),
+            sub('s4', 'SKT', 'Sanskrit', 'group', 'g1'),
+            sub('s5', 'CA', 'Computer', 'group', 'g2'),
+            sub('s6', 'PE', 'Physical education', 'group', 'g2'),
+            sub('s7', 'ART', 'Art', 'free'),
+            sub('s8', 'PHY', 'Physics', 'free'),
+          ],
+          'groups': [
+            {
+              'id': 'g1',
+              'name': 'Second language',
+              'kind': 'optional',
+              'min': 1,
+              'max': 1,
+              'subjectIds': ['s3', 's4'],
+            },
+            {
+              'id': 'g2',
+              'name': 'Skill subjects',
+              'kind': 'additional',
+              'min': 0,
+              'max': 2,
+              'subjectIds': ['s5', 's6'],
+            },
+          ],
+          'streams': [
+            {
+              'id': 'st1',
+              'name': 'Science',
+              'subjectIds': ['s8'],
+            },
+            {'id': 'st2', 'name': 'Arts', 'subjectIds': <String>[]},
+          ],
+          'rows': [
+            {
+              'studentId': '41',
+              'name': 'Kid Sample',
+              'admissionNo': 'A-41',
+              'rollNo': 1,
+              'stream': 'Science',
+              'subjects': [took('s1'), took('s3'), took('s8'), took('s7', true)],
+              'marked': ['s3'],
+            },
+            {
+              'studentId': '42',
+              'name': 'Ria Sample',
+              'admissionNo': 'A-42',
+              'rollNo': 2,
+              'stream': null,
+              'subjects': <Object?>[],
+              'marked': <Object?>[],
+            },
+          ],
+        };
+      case 'PUT /exams/subject-choices':
+        choicePuts.add(c.body!);
+        return {'saved': 2};
+      case 'POST /exams/subject-choices/last-year':
+        return {'copied': 1};
       case 'GET /exams/entry-status/waiting':
         Map<String, Object?> waiting(String subject, String name) => {
           'examId': 'e1',
@@ -2162,8 +2252,9 @@ void main() {
     expect(find.byKey(const Key('hwScreen')), findsOneWidget);
     expect(find.byKey(const Key('openWeb-health')), findsNothing);
     expect(find.text('VI-A · 1 of 2 entered'), findsOneWidget);
-    // the sheet by Excel first, with its upload
-    expect(find.byKey(const Key('xlUpload')), findsOneWidget);
+    // By Excel: one closed line above the pupils; opened, its download and upload
+    expect(find.byKey(const Key('xlFold')), findsOneWidget);
+    expect(find.byKey(const Key('xlUpload')), findsNothing);
     expect(
       tester.getTopLeft(find.byKey(const Key('xlCard'))).dy,
       lessThan(tester.getTopLeft(find.byKey(const Key('hwSheet'))).dy),
@@ -2211,7 +2302,10 @@ void main() {
     });
     expect((school.healthPuts.single['rows'] as List).first, containsPair('weightKg', null));
     expect(find.text('Saved (2).'), findsOneWidget);
-    // the sheet by Excel
+    // the sheet by Excel, once its line is opened
+    await tester.tap(find.byKey(const Key('xlFold')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('xlUpload')), findsOneWidget);
     await tester.tap(find.byKey(const Key('xlDownload')));
     await tester.pumpAndSettle();
     expect(t.calls.lastWhere((c) => c.path == '/exams/e2/health/excel').query, {
@@ -2269,6 +2363,135 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const Key('hwSave')), 300, scrollable: list);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Height and weight, scrolled');
+  });
+
+  testWidgets('Subject choices in the app: groups, other subjects, stream, Opt; saved; last year', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2600));
+    final s = S(false);
+    Finder keyed(String start) => find.byWidgetPredicate(
+      (w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith(start),
+    );
+    Future<void> pick(String key, String text) async {
+      await tester.tap(keyed(key));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(text).last);
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Subject choices'));
+    await tester.pumpAndSettle();
+    // no web page; the sections set or seen (not one neither)
+    expect(find.byKey(const Key('scScreen')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-subject-choices')), findsNothing);
+    expect(find.text('VI-A (2)'), findsWidgets);
+    expect(find.text(s.scEveryone('ENG · MAT')), findsOneWidget);
+    expect(find.text('A-42 · ${s.scNotSet}'), findsOneWidget);
+    // a subject with marks stays: Kid's second language cannot change
+    final kidLanguage = tester.widget<DropdownButtonFormField<String>>(keyed('scGroup-41-g1'));
+    expect(kidLanguage.onChanged, isNull);
+    expect(find.text('Hindi (HIN)'), findsOneWidget);
+    // Ria: a second language, a skill, Art, a stream, Art as her additional subject
+    await pick('scGroup-42-g1', 'Sanskrit (SKT)');
+    await tester.tap(find.byKey(const Key('scTick-42-s5')));
+    await tester.tap(find.byKey(const Key('scTick-42-s7')));
+    await tester.pumpAndSettle();
+    await pick('scStream-42', 'Arts');
+    await pick('scOpt-42', 'Art (ART)');
+    // Kid moves from Science to Arts: Science's Physics goes, the marked Hindi stays
+    await pick('scStream-41', 'Arts');
+    await tester.tap(find.byKey(const Key('scSave')));
+    await tester.pumpAndSettle();
+    expect(school.choicePuts.single, {
+      'classSectionId': '300',
+      'rows': [
+        {
+          'studentId': '41',
+          'stream': 'Arts',
+          'subjects': [
+            {'subjectId': 's3', 'additional': false},
+            {'subjectId': 's7', 'additional': true},
+          ],
+        },
+        {
+          'studentId': '42',
+          'stream': 'Arts',
+          'subjects': [
+            {'subjectId': 's4', 'additional': false},
+            {'subjectId': 's5', 'additional': false},
+            {'subjectId': 's7', 'additional': true},
+          ],
+        },
+      ],
+    });
+    expect(find.text(s.inSaved), findsOneWidget);
+    // last year's choices for those without
+    await tester.tap(find.byKey(const Key('scLastYear')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/subject-choices/last-year').body, {
+      'classSectionId': '300',
+    });
+    expect(find.text(s.scCopied(1)), findsOneWidget);
+    // a section the person teaches but does not set: to see only
+    await tester.tap(find.byKey(const Key('scSection')));
+    await tester.pumpAndSettle();
+    expect(find.text('VI-C (2)'), findsNothing);
+    await tester.tap(find.text('VI-B (2)').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('scViewOnly')), findsOneWidget);
+    expect(find.byKey(const Key('scSave')), findsNothing);
+    expect(find.byKey(const Key('scLastYear')), findsNothing);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Subject choices: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600));
+        final s = S(hindi);
+        await tester.tap(find.text(s.classes).last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.menu('Subject choices')));
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: 'Subject choices: ${g.description}');
+        }
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Subject choices: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Subject choices'));
+    await tester.tap(find.text('Subject choices'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Subject choices');
+    final list = find
+        .descendant(of: find.byKey(const Key('scScreen')), matching: find.byType(Scrollable))
+        .first;
+    await tester.scrollUntilVisible(find.byKey(const Key('scLastYear')), 300, scrollable: list);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Subject choices, scrolled');
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

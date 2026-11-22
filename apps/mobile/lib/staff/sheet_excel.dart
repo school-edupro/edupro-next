@@ -37,6 +37,7 @@ class SheetByExcel extends ConsumerStatefulWidget {
     required this.download,
     required this.upload,
     required this.onSaved,
+    this.folded = false,
   });
 
   /// the downloaded file's title in the viewer
@@ -48,6 +49,9 @@ class SheetByExcel extends ConsumerStatefulWidget {
   /// the file in base64; `apply` false only checks it
   final Future<dynamic> Function(String file, bool apply) upload;
   final VoidCallback onSaved;
+
+  /// shown as one closed line that opens (Height and weight: the pupils come first)
+  final bool folded;
 
   @override
   ConsumerState<SheetByExcel> createState() => _SheetByExcelState();
@@ -128,6 +132,117 @@ class _SheetByExcelState extends ConsumerState<SheetByExcel> {
     final bad = rows.where((x) => '${x['error'] ?? ''}'.isNotEmpty).toList();
     final ready = (p?['ready'] as num?)?.toInt() ?? 0;
     final errors = (p?['errors'] as num?)?.toInt() ?? 0;
+    final content = <Widget>[
+      Text(widget.help, style: TextStyle(color: muted, fontSize: 13)),
+      const SizedBox(height: Tokens.sp2),
+      Wrap(
+        spacing: Tokens.sp2,
+        runSpacing: Tokens.sp2,
+        children: [
+          OutlinedButton.icon(
+            key: const Key('xlDownload'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => FileScreen(title: widget.title, load: widget.download),
+              ),
+            ),
+            icon: const Icon(Icons.download_outlined),
+            label: Text(s.xlDownload),
+          ),
+          if (widget.canUpload)
+            OutlinedButton.icon(
+              key: const Key('xlUpload'),
+              onPressed: _busy ? null : _pick,
+              icon: const Icon(Icons.upload_file_outlined),
+              label: Text(s.xlUpload),
+            ),
+        ],
+      ),
+      if (_busy && p == null) ...[
+        const SizedBox(height: Tokens.sp2),
+        Text(s.xlChecking, style: TextStyle(color: muted)),
+      ],
+      if (p != null) ...[
+        const SizedBox(height: Tokens.sp2),
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            s.xlSummary(rows.length, ready, errors),
+            key: const Key('xlSummary'),
+            style: TextStyle(
+              color: errors > 0 ? Theme.of(context).colorScheme.error : null,
+              fontWeight: Tokens.fwSemibold,
+            ),
+          ),
+        ),
+        for (final x in bad.take(50))
+          Padding(
+            padding: const EdgeInsets.only(top: Tokens.sp1),
+            child: Text(
+              s.xlRowProblem(
+                x['row'] ?? '',
+                '${x['admissionNo'] ?? ''}',
+                '${x['name'] ?? '-'}',
+                '${x['error']}',
+              ),
+              style: TextStyle(color: muted, fontSize: 13),
+            ),
+          ),
+        if (errors == 0 && ready > 0) ...[
+          const SizedBox(height: Tokens.sp2),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              key: const Key('xlSave'),
+              onPressed: _busy ? null : _save,
+              child: Text(s.xlSaveRows(ready)),
+            ),
+          ),
+        ],
+      ],
+      if (_done != null) ...[
+        const SizedBox(height: Tokens.sp2),
+        Semantics(
+          liveRegion: true,
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle_outline, color: Tokens.statusSuccess),
+              const SizedBox(width: Tokens.sp2),
+              Expanded(child: Text(_done!, key: const Key('xlDone'))),
+            ],
+          ),
+        ),
+      ],
+      if (_error != null) ...[
+        const SizedBox(height: Tokens.sp2),
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            _error!,
+            key: const Key('xlError'),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+      ],
+    ];
+    if (widget.folded) {
+      // closed until opened: the screen's own entry comes first (Height and weight)
+      return Card(
+        key: const Key('xlCard'),
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          key: const Key('xlFold'),
+          leading: const Icon(Icons.table_chart_outlined),
+          title: Text(s.xlByExcel),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          childrenPadding: const EdgeInsets.fromLTRB(Tokens.sp3, 0, Tokens.sp3, Tokens.sp3),
+          children: content,
+        ),
+      );
+    }
     return Card(
       key: const Key('xlCard'),
       margin: EdgeInsets.zero,
@@ -145,97 +260,7 @@ class _SheetByExcelState extends ConsumerState<SheetByExcel> {
               ),
             ),
             const SizedBox(height: Tokens.sp1),
-            Text(widget.help, style: TextStyle(color: muted, fontSize: 13)),
-            const SizedBox(height: Tokens.sp2),
-            Wrap(
-              spacing: Tokens.sp2,
-              runSpacing: Tokens.sp2,
-              children: [
-                OutlinedButton.icon(
-                  key: const Key('xlDownload'),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => FileScreen(title: widget.title, load: widget.download),
-                    ),
-                  ),
-                  icon: const Icon(Icons.download_outlined),
-                  label: Text(s.xlDownload),
-                ),
-                if (widget.canUpload)
-                  OutlinedButton.icon(
-                    key: const Key('xlUpload'),
-                    onPressed: _busy ? null : _pick,
-                    icon: const Icon(Icons.upload_file_outlined),
-                    label: Text(s.xlUpload),
-                  ),
-              ],
-            ),
-            if (_busy && p == null) ...[
-              const SizedBox(height: Tokens.sp2),
-              Text(s.xlChecking, style: TextStyle(color: muted)),
-            ],
-            if (p != null) ...[
-              const SizedBox(height: Tokens.sp2),
-              Semantics(
-                liveRegion: true,
-                child: Text(
-                  s.xlSummary(rows.length, ready, errors),
-                  key: const Key('xlSummary'),
-                  style: TextStyle(
-                    color: errors > 0 ? Theme.of(context).colorScheme.error : null,
-                    fontWeight: Tokens.fwSemibold,
-                  ),
-                ),
-              ),
-              for (final x in bad.take(50))
-                Padding(
-                  padding: const EdgeInsets.only(top: Tokens.sp1),
-                  child: Text(
-                    s.xlRowProblem(
-                      x['row'] ?? '',
-                      '${x['admissionNo'] ?? ''}',
-                      '${x['name'] ?? '-'}',
-                      '${x['error']}',
-                    ),
-                    style: TextStyle(color: muted, fontSize: 13),
-                  ),
-                ),
-              if (errors == 0 && ready > 0) ...[
-                const SizedBox(height: Tokens.sp2),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    key: const Key('xlSave'),
-                    onPressed: _busy ? null : _save,
-                    child: Text(s.xlSaveRows(ready)),
-                  ),
-                ),
-              ],
-            ],
-            if (_done != null) ...[
-              const SizedBox(height: Tokens.sp2),
-              Semantics(
-                liveRegion: true,
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle_outline, color: Tokens.statusSuccess),
-                    const SizedBox(width: Tokens.sp2),
-                    Expanded(child: Text(_done!, key: const Key('xlDone'))),
-                  ],
-                ),
-              ),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: Tokens.sp2),
-              Semantics(
-                liveRegion: true,
-                child: Text(
-                  _error!,
-                  key: const Key('xlError'),
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            ],
+            ...content,
           ],
         ),
       ),
