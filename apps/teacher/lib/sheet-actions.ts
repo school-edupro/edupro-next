@@ -44,3 +44,33 @@ export async function uploadSheet(
     throw e;
   }
 }
+
+/**
+ * A filled marks sheet of a section's subject (docs/design/96 part 17): checked first, saved with `apply`
+ * when no row is in error. Bound on the Marks page to the exam, the section and the subject.
+ */
+export async function uploadMarksSheet(
+  examId: string,
+  classSectionId: string,
+  subjectId: string,
+  file: string,
+  apply: boolean,
+): Promise<SheetOut> {
+  if (![examId, classSectionId, subjectId].every((x) => /^\d{1,18}$/.test(x)))
+    return { ok: false, error: 'Choose the exam, section and subject' };
+  try {
+    const data = await bff.api.fetch<SheetPreview>(`/exams/${examId}/marks/upload`, {
+      method: 'POST',
+      body: JSON.stringify({ classSectionId, subjectId, file, apply }),
+    });
+    if (data.applied) revalidatePath('/marks');
+    return { ok: true, data };
+  } catch (e) {
+    if (e instanceof ApiError)
+      return {
+        ok: false,
+        error: typeof e.problem.detail === 'string' ? e.problem.detail : e.problem.type,
+      };
+    throw e;
+  }
+}

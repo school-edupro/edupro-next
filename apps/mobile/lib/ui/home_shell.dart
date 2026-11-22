@@ -34,6 +34,7 @@ import '../staff/classes.dart';
 import '../staff/daily_work.dart';
 import '../staff/date_sheet.dart';
 import '../staff/documents.dart';
+import '../staff/exam_attendance.dart';
 import '../staff/health.dart';
 import '../staff/indicators.dart';
 import '../staff/lesson_plans.dart';
@@ -87,6 +88,11 @@ List<AppTab> familyTabs(Profile p, S s, FamilyLayoutView layout) => [
 Widget? nativeScreen(Profile p, String href, S s) {
   final path = href.split('?').first;
   if (p.isStaff) {
+    // the Exam register's attendance only (its own menu entry, `?only=attendance`; docs/design/96 part 17); the whole
+    // register stays the website's page
+    if (path == '/exam-register' && href.contains('only=attendance')) {
+      return ExamAttendanceScreen(profile: p);
+    }
     return switch (path) {
       '/attendance' => MarkClassScreen(profile: p),
       '/my-attendance' => MyAttendanceScreen(profile: p),

@@ -10,6 +10,7 @@ import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
+import 'sheet_excel.dart';
 
 /// The exams of the year that take marks (as the website lists them); null when entering marks is not part of the
 /// person's role.
@@ -452,7 +453,7 @@ class _MarksSheetViewState extends ConsumerState<MarksSheetView> {
     ];
     final grades = [for (final g in (sheet['grades'] as List?) ?? const []) '$g'];
     final head = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwSemibold);
-    return Card(
+    final sheetCard = Card(
       key: const Key('mkSheet'),
       margin: EdgeInsets.zero,
       child: Padding(
@@ -564,6 +565,40 @@ class _MarksSheetViewState extends ConsumerState<MarksSheetView> {
           ],
         ),
       ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // the section's marks of the subject by Excel (its parts as columns), one closed line as on Height and
+        // weight (docs/design/96 part 17)
+        SheetByExcel(
+          folded: true,
+          title: '${section['code'] ?? ''} · ${sub['name'] ?? ''}',
+          help: s.xlMarksHelp,
+          canUpload: !locked,
+          download: () => ref
+              .read(apiProvider)
+              .examEntryMarksExcel(
+                id: widget.examId,
+                classSectionId: widget.pick.sectionId,
+                subjectId: widget.pick.subjectId,
+              ),
+          upload: (file, apply) => ref
+              .read(apiProvider)
+              .examEntryMarksUpload(
+                id: widget.examId,
+                body: MarksUploadDto(
+                  classSectionId: widget.pick.sectionId,
+                  subjectId: widget.pick.subjectId,
+                  file: file,
+                  apply: apply,
+                ),
+              ),
+          onSaved: _reload,
+        ),
+        const SizedBox(height: Tokens.sp3),
+        sheetCard,
+      ],
     );
   }
 

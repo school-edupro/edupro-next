@@ -112,6 +112,12 @@ SubjectChoicesController_put
 SubjectChoicesController_lastYear
 # the exam date sheets of the teacher's classes as on the staff website (docs/design/96 part 16)
 ExamDateSheetsController_staff
+# marks by Excel, and exam attendance as on the staff website (docs/design/96 part 17)
+ExamEntryController_marksExcel !file
+ExamEntryController_marksUpload
+ExamEntryController_register
+ExamEntryController_putAttendance
+ExamEntryController_attendanceFromDaily
 DailyWorkController_sheetOptions
 DailyWorkController_sheet
 DailyWorkController_saveSheet

@@ -84,6 +84,8 @@ class School {
   final remarkPuts = <Map<String, Object?>>[];
   final healthPuts = <Map<String, Object?>>[];
   final choicePuts = <Map<String, Object?>>[];
+  final attendancePuts = <Map<String, Object?>>[];
+  int marksSheetChecks = 0;
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -235,6 +237,7 @@ class School {
       entry('/health', 'Height and weight', 'heart'),
       entry('/subject-choices', 'Subject choices', 'book'),
       entry('/date-sheet', 'Exam date sheet', 'calendar'),
+      entry('/exam-register?only=attendance', 'Exam attendance', 'clipboard'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -520,7 +523,7 @@ class School {
               'id': 'e2',
               'code': 'IND',
               'name': 'Indicators',
-              'areas': ['indicators', 'remarks', 'health'],
+              'areas': ['indicators', 'remarks', 'health', 'attendance'],
             },
             {
               'id': 'e3',
@@ -1037,6 +1040,53 @@ class School {
             },
           ],
         };
+      case 'GET /exams/e1/marks/excel':
+        return null;
+      case 'POST /exams/e1/marks/upload':
+        marksSheetChecks++;
+        return {
+          'rows': [
+            {'row': 2, 'admissionNo': 'A-41', 'name': 'Kid Sample', 'error': null},
+            {'row': 3, 'admissionNo': 'A-42', 'name': 'Ria Sample', 'error': null},
+          ],
+          'ready': 2,
+          'errors': 0,
+          'applied': c.body!['apply'] == true,
+        };
+      case 'GET /exams/e2/register':
+        return {
+          'exam': {'id': 'e2', 'code': 'IND', 'name': 'Indicators', 'marksLocked': false},
+          'section': {'id': '300', 'code': 'VI-A'},
+          'healthVisible': true,
+          'remarkBank': <Object?>[],
+          'rows': [
+            {
+              'studentId': '41',
+              'name': 'Kid Sample',
+              'admissionNo': 'A-41',
+              'rollNo': 1,
+              'remark': null,
+              'daysPresent': 40,
+              'daysTotal': 45,
+              'health': null,
+            },
+            {
+              'studentId': '42',
+              'name': 'Ria Sample',
+              'admissionNo': 'A-42',
+              'rollNo': 2,
+              'remark': null,
+              'daysPresent': null,
+              'daysTotal': null,
+              'health': null,
+            },
+          ],
+        };
+      case 'PUT /exams/e2/attendance':
+        attendancePuts.add(c.body!);
+        return {'changed': (c.body!['rows'] as List).length};
+      case 'POST /exams/e2/attendance/from-daily':
+        return {'from': '2026-04-01', 'to': '2026-10-20', 'filled': 1, 'kept': 1, 'noDays': 0};
       case 'GET /exams/entry-status/waiting':
         Map<String, Object?> waiting(String subject, String name) => {
           'examId': 'e1',
@@ -2619,6 +2669,139 @@ void main() {
     await tester.tap(find.text('Exam date sheet'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Exam date sheet');
+  });
+
+  testWidgets('Marks by Excel in the app: a closed line; the sheet; an upload checked then saved', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2600), overrides: pickers);
+    await tester.tap(find.byKey(const Key('figToEnter')));
+    await tester.pumpAndSettle();
+    // one closed line above the sheet
+    expect(find.byKey(const Key('xlFold')), findsOneWidget);
+    expect(find.byKey(const Key('xlUpload')), findsNothing);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('xlCard'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('mkSheet'))).dy),
+    );
+    await tester.tap(find.byKey(const Key('xlFold')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('xlDownload')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e1/marks/excel').query, {
+      'classSectionId': '300',
+      'subjectId': '91',
+    });
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('xlUpload')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 rows read · 2 ready to save'), findsOneWidget);
+    final checked = t.calls.lastWhere((c) => c.path == '/exams/e1/marks/upload').body!;
+    expect(checked, {
+      'classSectionId': '300',
+      'subjectId': '91',
+      'file': 'UEsDBAEC',
+      'apply': false,
+    });
+    await tester.tap(find.byKey(const Key('xlSave')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e1/marks/upload').body!['apply'], true);
+    expect(find.text('Saved (2).'), findsOneWidget);
+    expect(school.marksSheetChecks, 2);
+  });
+
+  testWidgets('Exam attendance in the app: days present of total, saved; counted from daily', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2600));
+    final s = S(false);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exam attendance'));
+    await tester.pumpAndSettle();
+    // no web page
+    expect(find.byKey(const Key('eaScreen')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-exam-register')), findsNothing);
+    expect(find.text(s.eaOf('VI-A')), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const Key('eaPresent-41'))).controller!.text, '40');
+    expect(tester.widget<TextField>(find.byKey(const Key('eaTotal-41'))).controller!.text, '45');
+    // more days present than the total is refused first
+    await tester.enterText(find.byKey(const Key('eaPresent-42')), '50');
+    await tester.enterText(find.byKey(const Key('eaTotal-42')), '45');
+    await tester.tap(find.byKey(const Key('eaSave')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.eaOver('Ria Sample')), findsOneWidget);
+    expect(school.attendancePuts, isEmpty);
+    await tester.enterText(find.byKey(const Key('eaPresent-42')), '43');
+    await tester.tap(find.byKey(const Key('eaSave')));
+    await tester.pumpAndSettle();
+    expect(school.attendancePuts.single, {
+      'classSectionId': '300',
+      'rows': [
+        {'studentId': '41', 'daysPresent': 40, 'daysTotal': 45},
+        {'studentId': '42', 'daysPresent': 43, 'daysTotal': 45},
+      ],
+    });
+    expect(find.text(s.eaSaved(2)), findsOneWidget);
+    // counted from daily attendance, replacing what is entered
+    await tester.tap(find.byKey(const Key('eaOverwrite')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('eaCount')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e2/attendance/from-daily').body, {
+      'classSectionId': '300',
+      'overwrite': true,
+    });
+    expect(find.text(s.eaCounted(1, '1 Apr 2026', '20 Oct 2026', 1)), findsOneWidget);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Exam attendance: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600));
+        final s = S(hindi);
+        await tester.tap(find.text(s.classes).last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.menu('Exam attendance')));
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: 'Exam attendance: ${g.description}');
+        }
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Exam attendance: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Exam attendance'));
+    await tester.tap(find.text('Exam attendance'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Exam attendance');
+    final list = find
+        .descendant(of: find.byKey(const Key('eaScreen')), matching: find.byType(Scrollable))
+        .first;
+    await tester.scrollUntilVisible(find.byKey(const Key('eaCount')), 300, scrollable: list);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Exam attendance, scrolled');
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

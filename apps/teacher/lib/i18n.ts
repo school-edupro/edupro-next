@@ -137,6 +137,8 @@ const DICT: Record<string, string> = {
   'Only the indicators given to you are shown; the class teacher sees them all.':
     'केवल आपको दिए गए संकेतक दिखाए गए हैं; कक्षा अध्यापक सभी देखते हैं।',
   'Also entered by': 'इन्हें भी भरते हैं',
+  'The sheet lists the section’s pupils for this subject, filled with what is entered; write the marks (or a code such as AB, ML, EX) and upload it. Every row is checked before anything is saved.':
+    'शीट में इस विषय के लिए वर्ग के विद्यार्थी हैं, भरे हुए अंकों सहित; अंक (या AB, ML, EX जैसा कोड) लिखें और अपलोड करें। सहेजने से पहले हर पंक्ति जाँची जाती है।',
   'The sheet holds the indicators you rate in this section, filled with what is entered; a level from its list, or your words for a written item.':
     'शीट में इस अनुभाग के आपके संकेतक हैं, जो भरा जा चुका है उसके साथ; सूची से स्तर, या लिखित मद के लिए अपने शब्द।',
   'Some of these indicators are not given to you in this section.':

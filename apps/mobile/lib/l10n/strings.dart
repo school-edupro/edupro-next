@@ -1759,6 +1759,57 @@ class S {
     'डेट शीट: हर तारीख एक पंक्ति, हर कक्षा एक कॉलम',
   );
 
+  // ---- Marks by Excel; Exam attendance as on the staff website (docs/design/96 part 17) ----
+  String get xlMarksHelp => _t(
+    'The sheet lists the section’s pupils for this subject, filled with what is entered; write the marks (or a code such as AB, ML, EX) and upload it. Every row is checked before anything is saved.',
+    'शीट में इस विषय के लिए वर्ग के विद्यार्थी हैं, भरे हुए अंकों सहित; अंक (या AB, ML, EX जैसा कोड) लिखें और अपलोड करें। सहेजने से पहले हर पंक्ति जाँची जाती है।',
+  );
+  String get eaIntro => _t(
+    'Class teachers fill the register for their section.',
+    'कक्षा-अध्यापक अपने वर्ग का रजिस्टर भरते हैं।',
+  );
+  String eaOf(String section) => _t('$section · exam attendance', '$section · परीक्षा उपस्थिति');
+  String get eaPresent => _t('Days present', 'उपस्थित दिन');
+  String get eaTotal => _t('Total days', 'कुल दिन');
+  String get eaSave => _t('Save exam attendance', 'परीक्षा उपस्थिति सहेजें');
+  String eaSaved(int n) =>
+      _t('Saved ($n attendance rows changed).', 'सहेजा गया ($n पंक्तियाँ बदलीं)।');
+  String get eaNothing => _t('No attendance entered.', 'कोई उपस्थिति नहीं भरी।');
+  String eaOver(String name) => _t(
+    '$name: days present cannot exceed the total days.',
+    '$name: उपस्थित दिन कुल दिनों से ज़्यादा नहीं हो सकते।',
+  );
+  String eaNotNumber(String name) => _t('$name: write whole days.', '$name: पूरे दिन लिखें।');
+  String get eaLocked => _t(
+    'The exam is locked; the coordinator can reopen it.',
+    'परीक्षा बंद है; समन्वयक इसे फिर खोल सकते हैं।',
+  );
+  String get eaFromDailyHelp => _t(
+    'Count exam attendance from daily attendance (empty dates: from the start of the session to the last day of the exam).',
+    'दैनिक उपस्थिति से परीक्षा उपस्थिति गिनें (तारीखें खाली: सत्र की शुरुआत से परीक्षा के अंतिम दिन तक)।',
+  );
+  String get eaReplace => _t('Replace what is entered', 'भरी हुई को बदलें');
+  String get eaCount => _t('Count from daily attendance', 'दैनिक उपस्थिति से गिनें');
+  String eaCounted(int filled, String from, String to, int kept) => _t(
+    '$filled counted ($from to $to), $kept kept as entered.',
+    '$filled गिने गए ($from से $to), $kept जैसे भरे थे वैसे रहे।',
+  );
+  String? eaError(String type) => switch (type) {
+    'exams.entry_locked' => _t(
+      'The exam is locked; ask the coordinator to reopen it.',
+      'परीक्षा बंद है; समन्वयक से फिर खुलवाएँ।',
+    ),
+    'exams.not_assigned' => _t(
+      'Only the class teacher of this section can fill the register.',
+      'इस वर्ग का रजिस्टर केवल कक्षा-अध्यापक भर सकते हैं।',
+    ),
+    'exams.attendance_invalid' => _t(
+      'Days present cannot exceed the total days.',
+      'उपस्थित दिन कुल दिनों से ज़्यादा नहीं हो सकते।',
+    ),
+    _ => null,
+  };
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

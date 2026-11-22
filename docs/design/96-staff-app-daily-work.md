@@ -371,3 +371,29 @@ class, each paper with its time ("09:00–12:00") — sliding sideways when wide
 short "Date sheet" is theirs). Call added: `ExamDateSheetsController_staff`. No API change. Tests:
 `staff_test.dart` (the coming exam, classes as columns, papers and times, the day, another exam with its note;
 light, dark, Hindi, twice the text; Indicators' closed fold); 269 app tests; the web preview rebuilt.
+
+## Part 17: Marks by Excel (website and app); Exam attendance (22 Nov 2026)
+
+"Staff app: the Exam attendance section the same as the staff website; on `/marks?exam=437` add a By Excel section,
+and in the staff app too."
+
+**Marks by Excel.** The API already had a section's subject sheet (`GET exams/:id/marks/excel`, the parts as
+columns; `POST …/marks/upload`, checked first, saved with `apply`), used by the admin app's Marks page. The staff
+website's Marks page now has the **By Excel** card under the sheet (`SheetCard kind="marks"` with the subject; the
+`/api/sheet` route takes `kind=marks&subject=…`; `uploadMarksSheet` in `lib/sheet-actions.ts`): Download the sheet,
+and — while the sheet is open — Upload the filled sheet (.xlsx), every row checked before anything is saved; Hindi
+words added. Checked in a browser on Alpha as the demo teacher (desktop and phone, axe clean; the download is the
+.xlsx; no upload on Alpha). The app's Marks has the same as one closed line above the sheet (`SheetByExcel(folded:
+true)`; calls `ExamEntryController_marksExcel !file`, `_marksUpload`).
+
+**Exam attendance** — `lib/staff/exam_attendance.dart`, `ExamAttendanceScreen`: the staff menu's
+`/exam-register?only=attendance` opens it (`nativeScreen` checks the query; the whole Exam register stays the
+website's page). As the website's view: the line, **Exam** (those taking attendance), **Section** (the class
+teacher's), "VI-A · exam attendance", Locked or the pupils; each pupil's **Days present** / **Total days**; **Save
+exam attendance** sends the pupils with both filled (`PUT exams/:id/attendance`; more present than total is refused
+first; "Saved (n attendance rows changed)."); **Count from daily attendance** — From, To (empty: the session's start
+to the exam's last day), **Replace what is entered** (`POST …/attendance/from-daily`; "n counted (from to to), k
+kept as entered."); locked: read only. Calls added: `ExamEntryController_register`, `_putAttendance`,
+`_attendanceFromDaily`. No API change. Tests: `staff_test.dart` (the marks sheet's closed line, download, upload
+checked then saved; exam attendance: the days, over the total refused, Save's rows, counted from daily; light,
+dark, Hindi, twice the text); 275 app tests; the web preview rebuilt.

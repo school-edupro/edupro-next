@@ -2,6 +2,7 @@ import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { SheetCard } from '@/components/SheetCard';
 import { currentLang, t } from '@/lib/i18n';
 import { entryStep, saveMarks, savePartMarks } from './actions';
 
@@ -452,6 +453,21 @@ export default async function MarksPage({
             ) : null}
           </div>
         </Card>
+      ) : null}
+      {sheet && exam && chosen ? (
+        // the section's marks of the subject by Excel (its parts as columns; docs/design/96 part 17)
+        <SheetCard
+          kind="marks"
+          examId={exam.id}
+          sectionId={chosen.classSectionId}
+          subjectId={chosen.subjectId}
+          lang={lang}
+          canUpload={!locked}
+          help={t(
+            lang,
+            'The sheet lists the section’s pupils for this subject, filled with what is entered; write the marks (or a code such as AB, ML, EX) and upload it. Every row is checked before anything is saved.',
+          )}
+        />
       ) : null}
     </main>
   );

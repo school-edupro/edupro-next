@@ -376,6 +376,26 @@ class EduProApi {
   Future<dynamic> examDateSheetsStaff() =>
       _t.send('GET', '/exams/date-sheets');
 
+  /// GET /exams/{id}/marks/excel — A section's marks of one subject as an Excel sheet to fill (base64)
+  Future<ApiFile> examEntryMarksExcel({required String id, required String classSectionId, String? subjectId}) =>
+      _t.file('GET', '/exams/${Uri.encodeComponent(id)}/marks/excel', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// POST /exams/{id}/marks/upload — A filled marks sheet: preview, then save with apply
+  Future<dynamic> examEntryMarksUpload({required MarksUploadDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/marks/upload', body: body.toJson());
+
+  /// GET /exams/{id}/register — Class register of the exam: remarks, exam attendance, latest health
+  Future<dynamic> examEntryRegister({required String id, required String classSectionId, String? subjectId}) =>
+      _t.send('GET', '/exams/${Uri.encodeComponent(id)}/register', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// PUT /exams/{id}/attendance
+  Future<dynamic> examEntryPutAttendance({required PutExamAttendanceDto body, required String id}) =>
+      _t.send('PUT', '/exams/${Uri.encodeComponent(id)}/attendance', body: body.toJson());
+
+  /// POST /exams/{id}/attendance/from-daily — Count exam attendance from daily attendance between two dates
+  Future<dynamic> examEntryAttendanceFromDaily({required AttendanceFromDailyDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/attendance/from-daily', body: body.toJson());
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');
@@ -1454,6 +1474,60 @@ class SubjectChoicesQueryDto {
   final String classSectionId;
   Map<String, Object?> toJson() => {
         'classSectionId': classSectionId,
+      };
+}
+
+/** The MarksUploadDto the API takes. */
+class MarksUploadDto {
+  const MarksUploadDto({required this.classSectionId, required this.subjectId, required this.file, this.apply});
+  final String classSectionId;
+  final String subjectId;
+  final String file;
+  final bool? apply;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'subjectId': subjectId,
+        'file': file,
+        if (apply != null) 'apply': apply,
+      };
+}
+
+/** The PutExamAttendanceDto the API takes. */
+class PutExamAttendanceDto {
+  const PutExamAttendanceDto({required this.classSectionId, required this.rows});
+  final String classSectionId;
+  final List<PutExamAttendanceDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutExamAttendanceDtoRowsItem the API takes. */
+class PutExamAttendanceDtoRowsItem {
+  const PutExamAttendanceDtoRowsItem({required this.studentId, required this.daysPresent, required this.daysTotal});
+  final String studentId;
+  final int daysPresent;
+  final int daysTotal;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'daysPresent': daysPresent,
+        'daysTotal': daysTotal,
+      };
+}
+
+/** The AttendanceFromDailyDto the API takes. */
+class AttendanceFromDailyDto {
+  const AttendanceFromDailyDto({required this.classSectionId, this.from, this.to, this.overwrite});
+  final String classSectionId;
+  final String? from;
+  final String? to;
+  final bool? overwrite;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+        if (overwrite != null) 'overwrite': overwrite,
       };
 }
 

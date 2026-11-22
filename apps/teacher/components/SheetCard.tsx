@@ -1,6 +1,6 @@
 import { Card } from '@edupro/ui';
 import { t, type Lang } from '@/lib/i18n';
-import { uploadSheet } from '@/lib/sheet-actions';
+import { uploadMarksSheet, uploadSheet } from '@/lib/sheet-actions';
 import { SheetUpload } from './SheetUpload';
 
 /**
@@ -14,10 +14,13 @@ export function SheetCard({
   lang,
   canUpload,
   help,
+  subjectId,
 }: {
-  kind: 'indicators' | 'remarks' | 'health';
+  kind: 'indicators' | 'remarks' | 'health' | 'marks';
   examId: string;
   sectionId: string;
+  /** the marks sheet is a subject's */
+  subjectId?: string;
   lang: Lang;
   canUpload: boolean;
   help: string;
@@ -30,14 +33,18 @@ export function SheetCard({
       <p>
         <a
           className="ep-btn ep-btn--secondary ep-btn--sm"
-          href={`/api/sheet?kind=${kind}&exam=${examId}&section=${sectionId}`}
+          href={`/api/sheet?kind=${kind}&exam=${examId}&section=${sectionId}${subjectId ? `&subject=${subjectId}` : ''}`}
         >
           {t(lang, 'Download the sheet')}
         </a>
       </p>
       {canUpload ? (
         <SheetUpload
-          upload={uploadSheet.bind(null, kind, examId, sectionId)}
+          upload={
+            kind === 'marks'
+              ? uploadMarksSheet.bind(null, examId, sectionId, subjectId ?? '')
+              : uploadSheet.bind(null, kind, examId, sectionId)
+          }
           words={{
             file: t(lang, 'Upload the filled sheet (.xlsx)'),
             checking: t(lang, 'Checking the sheet…'),
