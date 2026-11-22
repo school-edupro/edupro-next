@@ -39,9 +39,11 @@ class DioTransport implements ApiTransport {
     required this.onSignedOut,
     Dio? dio,
     Dio? refreshDio,
+    Dio? plainDio,
   }) : _base = baseUrl,
        _dio = dio ?? Dio(),
-       _refreshDio = refreshDio ?? Dio() {
+       _refreshDio = refreshDio ?? Dio(),
+       _plain = plainDio ?? Dio() {
     for (final d in [_dio, _refreshDio]) {
       d.options
         ..baseUrl = '$baseUrl/api/v1'
@@ -59,6 +61,9 @@ class DioTransport implements ApiTransport {
   final void Function() onSignedOut;
   final Dio _dio;
   final Dio _refreshDio;
+
+  /// Signed file links (no session): a file's bytes up and down.
+  final Dio _plain;
   Future<bool>? _renewing;
 
   /// The access token is renewed this long before it ends.
@@ -116,7 +121,7 @@ class DioTransport implements ApiTransport {
   @override
   Future<ApiFile> download(String url, {String? name, String? contentType}) async {
     try {
-      final f = await Dio().get<List<int>>(
+      final f = await _plain.get<List<int>>(
         viaApiBase(url, _base),
         options: Options(responseType: ResponseType.bytes),
       );
@@ -145,8 +150,10 @@ class DioTransport implements ApiTransport {
     Map<String, String>? headers,
   }) async {
     try {
-      await Dio().request<void>(
-        url,
+      // the local store's link through the app's own API address, as downloads go: the address the API names
+      // (localhost:4000) is not how a phone or the web preview reaches it — the browser refused the upload
+      await _plain.request<void>(
+        viaApiBase(url, _base),
         data: Stream.fromIterable([bytes]),
         options: Options(
           method: method,

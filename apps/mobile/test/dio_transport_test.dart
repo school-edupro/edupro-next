@@ -142,6 +142,36 @@ void main() {
     );
   });
 
+  test(
+    "a file's bytes go up through the app's own API address (the web preview, a phone)",
+    () async {
+      final plain = FakeAdapter((_) => (200, null));
+      final t = DioTransport(
+        baseUrl: 'http://api.test',
+        session: session,
+        deviceId: () async => 'phone-123456',
+        appVersion: '1.0.0',
+        profile: () => const ProfileHeaders(schoolId: '7', actingAs: 'staff'),
+        onSignedOut: () => signedOut++,
+        dio: Dio()..httpClientAdapter = FakeAdapter((_) => (200, null)),
+        refreshDio: Dio()..httpClientAdapter = FakeAdapter((_) => (200, null)),
+        plainDio: Dio()..httpClientAdapter = plain,
+      );
+      await t.upload(
+        'http://localhost:4000/api/v1/platform/files/local?token=abc',
+        [1, 2, 3],
+        headers: {'Content-Type': 'image/jpeg'},
+      );
+      final o = plain.requests.single;
+      expect(o.uri.toString(), 'http://api.test/api/v1/platform/files/local?token=abc');
+      expect(o.method, 'PUT');
+      expect(o.headers['Content-Type'] ?? o.headers['content-type'], 'image/jpeg');
+      // a storage service's own link is left as it is
+      await t.upload('https://bucket.example.test/school-1/x.png?X-Sig=1', [1]);
+      expect(plain.requests.last.uri.host, 'bucket.example.test');
+    },
+  );
+
   test("a school file's signed link goes through the app's own API address", () {
     const api = 'http://localhost:3010';
     expect(
