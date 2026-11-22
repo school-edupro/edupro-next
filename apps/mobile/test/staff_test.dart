@@ -68,6 +68,9 @@ class School {
   /// marks saved by pupil (docs/design/96, part 10), and the sheet's stage
   final marksSaved = <String, Map<String, Object?>>{};
   String marksStage = 'open';
+
+  /// the sheets waiting to be verified that were verified or sent back (part 11)
+  final marksDone = <String>{};
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -213,6 +216,7 @@ class School {
       entry('/documents', 'Session plan, curriculum, date sheet', 'file'),
       entry('/lesson-plans', 'Lesson plans', 'book'),
       entry('/syllabus', 'My syllabus', 'book'),
+      entry('/verify-marks', 'Verify marks', 'check'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -621,6 +625,29 @@ class School {
         return {'inserted': (c.body!['rows'] as List).length, 'updated': 0};
       case 'PUT /exams/e1/part-marks':
         return {'saved': (c.body!['rows'] as List).length};
+      case 'GET /exams/entry-status/waiting':
+        Map<String, Object?> waiting(String subject, String name) => {
+          'examId': 'e1',
+          'examCode': 'T1',
+          'subjectId': subject,
+          'subjectCode': name.substring(0, 2).toUpperCase(),
+          'subjectName': name,
+          'classSectionId': '300',
+          'section': 'VI-A',
+          'takers': 2,
+          'entered': 2,
+          'submittedBy': 'Ravi Sample',
+          'submittedAt': '2026-11-20T05:00:00.000Z',
+        };
+        return {
+          'data': [
+            if (!marksDone.contains('91')) waiting('91', 'Mathematics'),
+            if (!marksDone.contains('92')) waiting('92', 'Science'),
+          ],
+        };
+      case 'POST /exams/e1/entry-status/verify' || 'POST /exams/e1/entry-status/send-back':
+        marksDone.add('${c.body!['subjectId']}');
+        return {'status': c.path.endsWith('verify') ? 'verified' : 'open'};
       case 'POST /exams/e1/entry-status/submit':
         marksStage = 'submitted';
         return {'status': 'submitted'};
@@ -1437,6 +1464,127 @@ void main() {
     await tester.tap(find.text('Practical test (PT)').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('mkNoSheet')), findsOneWidget);
+  });
+
+  testWidgets('Verify marks in the app: what waits, open the sheet, send back, verify', (
+    tester,
+  ) async {
+    final school = School()..marksStage = 'submitted';
+    final (t, _) = await pumpStaff(tester, size: const Size(420, 2600), with_: school);
+    final s = S(false);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Verify marks'));
+    await tester.pumpAndSettle();
+    // no web page: the app's own list
+    expect(find.byKey(const Key('vmList')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-verify-marks')), findsNothing);
+    final maths = find.byKey(const Key('vm-e1-300-91'));
+    expect(find.descendant(of: maths, matching: find.text('VI-A · Mathematics')), findsOneWidget);
+    expect(find.descendant(of: maths, matching: find.text('T1')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: maths,
+        matching: find.textContaining('2 of 2 entered · submitted by Ravi Sample'),
+      ),
+      findsOneWidget,
+    );
+    // the sheet opens in the app, read only (it is submitted)
+    await tester.tap(find.byKey(const Key('vmOpen-e1-300-91')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('vmSheet')), findsOneWidget);
+    expect(find.byKey(const Key('mkSheet')), findsOneWidget);
+    expect(find.text('Submitted'), findsOneWidget);
+    expect(find.byKey(const Key('saveMarksSheet')), findsNothing);
+    expect(find.byKey(const Key('mkLockedNote')), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    // send back needs what to correct
+    await tester.tap(find.byKey(const Key('vmSendBack-e1-300-92')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.vmNeedNote), findsOneWidget);
+    expect(t.calls.where((c) => c.path.endsWith('/send-back')), isEmpty);
+    await tester.enterText(find.byKey(const Key('vmNote-e1-300-92')), 'Check the totals');
+    await tester.tap(find.byKey(const Key('vmSendBack-e1-300-92')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e1/entry-status/send-back').body, {
+      'classSectionId': '300',
+      'subjectId': '92',
+      'note': 'Check the totals',
+    });
+    expect(find.text(s.vmSentBack), findsOneWidget);
+    expect(find.byKey(const Key('vm-e1-300-92')), findsNothing);
+    // verify
+    await tester.tap(find.byKey(const Key('vmVerify-e1-300-91')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e1/entry-status/verify').body, {
+      'classSectionId': '300',
+      'subjectId': '91',
+    });
+    expect(find.text(s.vmVerified), findsOneWidget);
+    expect(find.byKey(const Key('vmNone')), findsOneWidget);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Verify marks: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(
+          tester,
+          hindi: hindi,
+          size: const Size(420, 2600),
+          with_: School()..marksStage = 'submitted',
+        );
+        final s = S(hindi);
+        Future<void> check(String where) async {
+          await tester.pumpAndSettle();
+          for (final g in [
+            androidTapTargetGuideline,
+            iOSTapTargetGuideline,
+            labeledTapTargetGuideline,
+            textContrastGuideline,
+          ]) {
+            await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+          }
+        }
+
+        await tester.tap(find.text(s.classes).last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.menu('Verify marks')));
+        await check('Verify marks');
+        await tester.tap(find.byKey(const Key('vmOpen-e1-300-91')));
+        await check('The sheet');
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Verify marks: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Verify marks'));
+    await tester.tap(find.text('Verify marks'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Verify marks');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('vmSendBack-e1-300-92')),
+      200,
+      scrollable: find
+          .descendant(of: find.byKey(const Key('vmList')), matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Verify marks, scrolled');
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

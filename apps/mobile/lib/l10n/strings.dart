@@ -1484,6 +1484,25 @@ class S {
   );
   String mkNotNumber(String name) => _t('$name: write a number.', '$name: संख्या लिखें।');
 
+  // ---- Verify marks as on the staff website (docs/design/96 part 11) ----
+  String get vmSubtitle => _t(
+    'Marks your sections’ teachers submitted. Open the sheet to check it, then verify (the marks lock) or send them back with what to correct.',
+    'आपके वर्गों के शिक्षकों द्वारा जमा किए गए अंक। शीट खोलकर जाँचें, फिर सत्यापित करें (अंक बंद हो जाते हैं) या सुधार लिखकर वापस भेजें।',
+  );
+  String get vmNone => _t('Nothing waits for you to verify.', 'सत्यापन के लिए कुछ बाकी नहीं।');
+  String vmSubmittedBy(String who, String when) =>
+      _t('submitted by $who, $when', '$who ने जमा किया, $when');
+  String get vmOpenSheet => _t('Open the sheet', 'शीट खोलें');
+  String get vmVerify => _t('Verify', 'सत्यापित करें');
+  String get vmWhatToCorrect => _t('What to correct', 'क्या सुधारना है');
+  String get vmSendBack => _t('Send back', 'वापस भेजें');
+  String get vmNeedNote => _t(
+    'Write what to correct (at least 3 letters).',
+    'लिखें कि क्या सुधारना है (कम से कम 3 अक्षर)।',
+  );
+  String get vmVerified => _t('Verified and locked.', 'सत्यापित और बंद।');
+  String get vmSentBack => _t('Sent back to the teacher.', 'शिक्षक को वापस भेजा गया।');
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

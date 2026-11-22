@@ -35,6 +35,7 @@ import '../staff/daily_work.dart';
 import '../staff/documents.dart';
 import '../staff/lesson_plans.dart';
 import '../staff/syllabus.dart';
+import '../staff/verify_marks.dart';
 import '../staff/marks.dart';
 import '../staff/my_attendance.dart';
 import '../staff/my_leave.dart';
@@ -93,6 +94,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       // the session's holidays and almanac for staff, as the families' calendar shows them (docs/design/96 part 4)
       '/holidays' => CalendarScreen(profile: p),
       '/marks' => MarksHome(profile: p),
+      // the sheets submitted for the person's sections: open, verify, send back (docs/design/96 part 11)
+      '/verify-marks' => VerifyMarksScreen(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       // upload a lesson for approval, the lesson report, a lesson in full (docs/design/96 part 7)
       '/lesson-plans' => LessonPlansScreen(profile: p),

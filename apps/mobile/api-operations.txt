@@ -80,6 +80,10 @@ ExamStatusController_submit
 # marks as on the staff website (docs/design/96 part 10): the exams that take marks, a part's marks
 ExamsController_list
 ExamEntryController_putPartMarks
+# verify marks as on the staff website (docs/design/96 part 11): what waits, verify, send back
+ExamStatusController_waiting
+ExamStatusController_verify
+ExamStatusController_sendBack
 DailyWorkController_sheetOptions
 DailyWorkController_sheet
 DailyWorkController_saveSheet

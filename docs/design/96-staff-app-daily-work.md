@@ -241,3 +241,18 @@ reopen it"). Calls added: `ExamsController_list`, `ExamEntryController_putPartMa
 `staff_test.dart` (the exams that take marks, the sheet, not taken, over the maximum, a code, saved, submit and the
 read-only sheet with its remark; a part with its total and AB only; a grade; an exam with nothing given); light, dark,
 Hindi, twice the text; 239 app tests; the web preview rebuilt.
+
+## Part 11: Verify marks (22 Nov 2026)
+
+"Staff app: the Verify marks section the same as the staff website."
+
+The app opened the website's page. As built: `lib/staff/verify_marks.dart` — `VerifyMarksScreen`
+(`nativeScreen('/verify-marks')`, from Classes and More) as the website's page: the line on what it is for; each sheet
+the teachers of the person's sections submitted (`GET exams/entry-status/waiting`) — section · subject, the exam's
+code, "n of m entered · submitted by …, when" — with **Open the sheet** (the Marks sheet in the app, read only while
+it is submitted, with its status and remark), **Verify** (`POST exams/:id/entry-status/verify`; "Verified and
+locked.") and **What to correct** + **Send back** (`…/send-back` with the note, at least 3 letters; "Sent back to the
+teacher."); the list reads again after each; "Nothing waits for you to verify." Calls added:
+`ExamStatusController_waiting`, `_verify`, `_sendBack`. No API change. Tests: `staff_test.dart` (the list, the sheet
+read only, send back refused without a note then sent, verify; light, dark, Hindi, twice the text); 244 app tests;
+the web preview rebuilt.
