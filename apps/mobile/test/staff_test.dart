@@ -64,6 +64,10 @@ class School {
   bool lessonDeleted = false;
   Map<String, Object?>? ruleSaved;
   final topicsMarked = <Map<String, Object?>>[];
+
+  /// marks saved by pupil (docs/design/96, part 10), and the sheet's stage
+  final marksSaved = <String, Map<String, Object?>>{};
+  String marksStage = 'open';
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -480,6 +484,32 @@ class School {
             },
           ],
         };
+      case 'GET /exams':
+        return {
+          'data': [
+            {
+              'id': 'e1',
+              'code': 'T1',
+              'name': 'Term 1',
+              'marksLocked': false,
+              'areas': ['marks'],
+            },
+            {
+              'id': 'e2',
+              'code': 'IND',
+              'name': 'Indicators',
+              'areas': ['indicators'],
+            },
+            {
+              'id': 'e3',
+              'code': 'PT',
+              'name': 'Practical test',
+              'areas': ['marks'],
+            },
+          ],
+        };
+      case 'GET /exams/e3/entry/sections':
+        return {'data': []};
       case 'GET /exams/e1/entry/sections':
         return {
           'data': [
@@ -491,26 +521,108 @@ class School {
                   'examSubjectId': 'es1',
                   'subjectId': '91',
                   'name': 'Mathematics',
-                  'maxMarks': 80,
+                  'maxMarks': '80',
                   'entryLocked': false,
+                  'entered': marksSaved.length,
+                  'parts': [],
+                },
+                {
+                  'examSubjectId': 'es2',
+                  'subjectId': '92',
+                  'name': 'Science',
+                  'maxMarks': '80',
+                  'entryLocked': false,
+                  'entered': 0,
+                  'parts': [
+                    {'id': 'p1', 'name': 'Theory', 'maxMarks': '60.00', 'mine': true},
+                    {'id': 'p2', 'name': 'Practical', 'maxMarks': '20.00', 'mine': false},
+                  ],
+                },
+                {
+                  'examSubjectId': 'es3',
+                  'subjectId': '93',
+                  'name': 'Art',
+                  'maxMarks': '0',
+                  'entryLocked': false,
+                  'entered': 0,
+                  'parts': [],
                 },
               ],
             },
           ],
         };
       case 'GET /exams/e1/marks':
+        final subject = c.query?['subjectId'];
+        Map<String, Object?> row(String id, String name, int roll, {String? taken = 'compulsory'}) {
+          final saved = subject == '91' ? marksSaved[id] : null;
+          return {
+            'studentId': id,
+            'name': name,
+            'admissionNo': 'A-$id',
+            'rollNo': roll,
+            'marks': subject == '92' && id == '41' ? '70.00' : saved?['marks']?.toString(),
+            'absent': false,
+            'exempt': false,
+            'code': saved?['code'],
+            'grade': null,
+            'taken': taken,
+            'parts': subject == '92' && id == '41'
+                ? {
+                    'p1': {'marks': '52.00', 'absent': false},
+                    'p2': {'marks': '18.00', 'absent': false},
+                  }
+                : <String, Object?>{},
+          };
+        }
         return {
-          'exam': {'id': 'e1', 'marksLocked': false},
-          'examSubject': {'id': 'es1', 'maxMarks': 80, 'entryLocked': false},
-          'status': {'status': 'open'},
+          'exam': {'id': 'e1', 'code': 'T1', 'name': 'Term 1', 'marksLocked': false},
+          'examSubject': {
+            'id': 'es$subject',
+            'code': 'X',
+            'name': switch (subject) {
+              '92' => 'Science',
+              '93' => 'Art',
+              _ => 'Mathematics',
+            },
+            'maxMarks': subject == '93' ? '0' : '80.00',
+            'passMarks': subject == '91' ? '27.00' : null,
+            'entryLocked': false,
+            'gradeOnly': subject == '93',
+            'parts': subject == '92'
+                ? [
+                    {'id': 'p1', 'name': 'Theory', 'maxMarks': '60.00', 'mine': true},
+                    {'id': 'p2', 'name': 'Practical', 'maxMarks': '20.00', 'mine': false},
+                  ]
+                : [],
+          },
+          'section': {'id': '300', 'code': 'VI-A'},
+          'codes': [
+            {'code': 'AB', 'name': 'Absent'},
+            {'code': 'ML', 'name': 'Medical'},
+            {'code': 'EX', 'name': 'Exempt'},
+          ],
+          'grades': subject == '93' ? ['A', 'B', 'C'] : <String>[],
+          'status': {
+            'status': subject == '91' ? marksStage : 'open',
+            'remark': subject == '91' && marksStage == 'submitted'
+                ? 'Waiting for the class teacher'
+                : null,
+          },
           'rows': [
-            {'studentId': '41', 'name': 'Kid Sample', 'rollNo': 1, 'marks': null, 'absent': false},
-            {'studentId': '42', 'name': 'Ria Sample', 'rollNo': 2, 'marks': null, 'absent': false},
+            row('41', 'Kid Sample', 1),
+            row('42', 'Ria Sample', 2),
+            row('43', 'Dev Sample', 3, taken: null),
           ],
         };
       case 'PUT /exams/e1/marks':
-        return {'inserted': 2, 'updated': 0};
+        for (final r in (c.body!['rows'] as List).cast<Map<String, Object?>>()) {
+          marksSaved['${r['studentId']}'] = r;
+        }
+        return {'inserted': (c.body!['rows'] as List).length, 'updated': 0};
+      case 'PUT /exams/e1/part-marks':
+        return {'saved': (c.body!['rows'] as List).length};
       case 'POST /exams/e1/entry-status/submit':
+        marksStage = 'submitted';
         return {'status': 'submitted'};
       case 'GET /approvals/inbox':
         final items = [
@@ -1211,33 +1323,168 @@ void main() {
     expect(find.text('Correction asked for.'), findsOneWidget);
   });
 
-  testWidgets('marks: over the maximum is refused; saved, then sent for checking', (tester) async {
-    final (t, _) = await pumpStaff(tester);
+  testWidgets('Marks as on the website: the exam and sheet, codes, not taken, save, submit', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2600));
+    final s = S(false);
     await tester.tap(find.byKey(const Key('figToEnter')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('exam-e1')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('sheet-300-91')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('marksScreen')), findsOneWidget);
+    // the exams that take marks; the first sheet open
+    expect(t.calls.any((c) => c.path == '/exams'), isTrue);
+    expect(find.text('Term 1 (T1)'), findsWidgets);
+    expect(find.text('VI-A · Mathematics'), findsOneWidget);
+    expect(find.text('out of 80 (pass 27) · 0 of 2 entered'), findsOneWidget);
+    expect(find.text('3 pupils'), findsOneWidget);
+    // who does not take the subject has no boxes
+    expect(find.byKey(const Key('mkNotTaken-43')), findsOneWidget);
+    expect(find.byKey(const Key('marks-43')), findsNothing);
+    // submit waits until every pupil has marks or a code
+    expect(find.byKey(const Key('submitMarks')), findsNothing);
+    expect(find.text(s.mkSubmitHint), findsOneWidget);
+    // over the maximum is refused before sending
     await tester.enterText(find.byKey(const Key('marks-41')), '95');
     await tester.tap(find.byKey(const Key('saveMarksSheet')));
     await tester.pumpAndSettle();
     expect(find.text('Marks can be at most 80.'), findsOneWidget);
+    expect(t.calls.where((c) => c.method == 'PUT'), isEmpty);
+    // marks for one, the school's code for the other
     await tester.enterText(find.byKey(const Key('marks-41')), '72');
-    await tester.tap(find.byKey(const Key('absent-42')));
+    await tester.tap(find.byKey(const Key('code-42')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('submitMarks')));
+    await tester.tap(find.text('AB · Absent').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('saveMarksSheet')));
     await tester.pumpAndSettle();
     expect(t.calls.lastWhere((c) => c.method == 'PUT' && c.path == '/exams/e1/marks').body, {
       'classSectionId': '300',
       'subjectId': '91',
       'rows': [
-        {'studentId': '41', 'marks': 72, 'absent': false},
+        {'studentId': '41', 'marks': 72},
+        {'studentId': '42', 'code': 'AB'},
+      ],
+    });
+    expect(find.text('Marks saved (2 new, 0 changed).'), findsOneWidget);
+    // read again: all entered, so it can be submitted
+    expect(find.text('out of 80 (pass 27) · 2 of 2 entered'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('submitMarks')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/exams/e1/entry-status/submit'), isTrue);
+    expect(find.text(s.mkSubmitted), findsOneWidget);
+    expect(find.text('Submitted'), findsOneWidget);
+    expect(find.text('Waiting for the class teacher'), findsOneWidget);
+    expect(find.byKey(const Key('mkLockedNote')), findsOneWidget);
+    expect(find.byKey(const Key('saveMarksSheet')), findsNothing);
+
+    // a subject entered in parts: only the part the teacher enters, with the total and the other part
+    await tester.tap(find.byKey(const Key('mkPick')));
+    await tester.pumpAndSettle();
+    expect(find.text('VI-A · Science · Practical (20)'), findsNothing);
+    await tester.tap(find.text('VI-A · Science · Theory (60)').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Science is entered in parts: Theory 60 + Practical 20 = 80. The total is worked out from the parts.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Total: 70 / 80 · Practical 18'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const Key('marks-41'))).controller!.text, '52');
+    await tester.enterText(find.byKey(const Key('marks-41')), '50');
+    await tester.tap(find.byKey(const Key('code-42')));
+    await tester.pumpAndSettle();
+    // a part takes only AB
+    expect(find.text('ML · Medical'), findsNothing);
+    await tester.tap(find.text('AB · Absent').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('saveMarksSheet')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e1/part-marks').body, {
+      'classSectionId': '300',
+      'partId': 'p1',
+      'rows': [
+        {'studentId': '41', 'marks': 50, 'absent': false},
         {'studentId': '42', 'absent': true},
       ],
     });
-    expect(t.calls.any((c) => c.path == '/exams/e1/entry-status/submit'), isTrue);
-    expect(find.text('Sent for checking.'), findsOneWidget);
+    expect(find.text(s.mkSavedPlain), findsOneWidget);
+
+    // a subject graded on a scale: a grade, not marks
+    await tester.tap(find.byKey(const Key('mkPick')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('VI-A · Art · 0 entered').last);
+    await tester.pumpAndSettle();
+    expect(find.text('graded · 0 of 2 entered'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('grade-41')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('A').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('saveMarksSheet')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.method == 'PUT' && c.path == '/exams/e1/marks').body, {
+      'classSectionId': '300',
+      'subjectId': '93',
+      'rows': [
+        {'studentId': '41', 'grade': 'A'},
+      ],
+    });
+
+    // another exam with nothing given to the teacher
+    await tester.tap(find.byKey(const Key('mkExam')));
+    await tester.pumpAndSettle();
+    expect(find.text('Indicators (IND)'), findsNothing);
+    await tester.tap(find.text('Practical test (PT)').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('mkNoSheet')), findsOneWidget);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets('Marks: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})', (
+      tester,
+    ) async {
+      tester.platformDispatcher.platformBrightnessTestValue = dark
+          ? Brightness.dark
+          : Brightness.light;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      final handle = tester.ensureSemantics();
+      await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600));
+      Future<void> check(String where) async {
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+        }
+      }
+
+      await tester.tap(find.byKey(const Key('figToEnter')));
+      await check('Marks');
+      await tester.tap(find.byKey(const Key('mkPick')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Theory (60)').last);
+      await check('A part');
+      handle.dispose();
+    });
+  }
+
+  testWidgets('Marks: large text (twice the size) lays out without overflow', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    await scrollTo(tester, find.byKey(const Key('figToEnter')));
+    await tester.tap(find.byKey(const Key('figToEnter')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Marks');
+    final list = find
+        .descendant(of: find.byKey(const Key('marksScreen')), matching: find.byType(Scrollable))
+        .first;
+    await tester.scrollUntilVisible(find.byKey(const Key('saveMarksSheet')), 200, scrollable: list);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Marks, the sheet');
   });
 
   testWidgets(

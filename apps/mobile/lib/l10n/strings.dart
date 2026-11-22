@@ -1421,6 +1421,118 @@ class S {
   String get syNeedReason =>
       _t('Write why the topic was not done.', 'लिखें कि यह विषय-बिंदु क्यों नहीं हुआ।');
 
+  // ---- Marks as on the staff website (docs/design/96 part 10) ----
+  String get mkExam => _t('Exam', 'परीक्षा');
+  String get mkPick => _t('Section · subject', 'वर्ग · विषय');
+  String get mkLockedWord => _t('locked', 'बंद');
+  String mkEnteredN(int n) => _t('$n entered', '$n भरे');
+  String get mkHelp => _t(
+    'Leave a mark empty to skip a pupil; pick a code (AB absent, ML medical, EX exempt …) instead of marks. Marks are checked against the maximum and the lock before they are saved.',
+    'किसी विद्यार्थी को छोड़ने के लिए अंक खाली रखें; अंकों के बजाय कोड चुनें (AB अनुपस्थित, ML चिकित्सा, EX छूट …)। सहेजने से पहले अंक अधिकतम और लॉक से जाँचे जाते हैं।',
+  );
+  String get mkNoExam =>
+      _t('No exam is set up for this year yet.', 'इस वर्ष के लिए अभी कोई परीक्षा तय नहीं है।');
+  String get mkNotAllowed => _t(
+    'You are not allowed to enter marks in this school.',
+    'आप इस विद्यालय में अंक नहीं भर सकते।',
+  );
+  String get mkNoSheet => _t(
+    'No section or subject of this exam is given to you.',
+    'इस परीक्षा का कोई वर्ग या विषय आपको नहीं दिया गया है।',
+  );
+  String mkOutOf(String max, String? pass) => _t(
+    'out of $max${pass == null ? '' : ' (pass $pass)'}',
+    '$max में से${pass == null ? '' : ' (उत्तीर्ण $pass)'}',
+  );
+  String get mkGraded => _t('graded', 'ग्रेड से');
+  String mkEnteredOf(int a, int b) => _t('$a of $b entered', '$b में से $a भरे');
+  String get mkLocked => _t('Locked', 'बंद');
+  String mkPupils(int n) => _t('$n pupils', '$n विद्यार्थी');
+  String mkInParts(String subject, String parts, String total) => _t(
+    '$subject is entered in parts: $parts = $total. The total is worked out from the parts.',
+    '$subject भागों में भरा जाता है: $parts = $total। कुल अंक भागों से बनते हैं।',
+  );
+  String get mkNotTaken => _t('Does not take the subject', 'यह विषय नहीं लेता/लेती');
+  String get mkMarks => _t('Marks', 'अंक');
+  String get mkGrade => _t('Grade', 'ग्रेड');
+  String get mkCode => _t('Code', 'कोड');
+  String get mkTotal => _t('Total', 'कुल');
+  String get mkSave => _t('Save marks', 'अंक सहेजें');
+  String mkSaved(int inserted, int updated) => _t(
+    'Marks saved ($inserted new, $updated changed).',
+    'अंक सहेजे गए ($inserted नए, $updated बदले)।',
+  );
+  String get mkSavedPlain => _t('Marks saved.', 'अंक सहेजे गए।');
+  String get mkNothing => _t(
+    'Nothing to save: enter marks, a grade or a code.',
+    'सहेजने को कुछ नहीं: अंक, ग्रेड या कोड भरें।',
+  );
+  String get mkLockedNote => _t(
+    'This sheet is locked; the coordinator can reopen it.',
+    'यह शीट बंद है; समन्वयक इसे फिर खोल सकते हैं।',
+  );
+  String mkStage(String v) => switch (v) {
+    'submitted' => _t('Submitted', 'जमा'),
+    'verified' => _t('Verified', 'सत्यापित'),
+    _ => _t('Open', 'खुला'),
+  };
+  String get mkSubmit => _t('Submit for verification', 'सत्यापन के लिए जमा करें');
+  String get mkSubmitted => _t('Submitted for verification.', 'सत्यापन के लिए जमा किया गया।');
+  String get mkSubmitHint => _t(
+    'Submit once every pupil has marks or a code.',
+    'हर विद्यार्थी के अंक या कोड भरने के बाद जमा करें।',
+  );
+  String mkNotNumber(String name) => _t('$name: write a number.', '$name: संख्या लिखें।');
+
+  /// The API's marks refusals in words (as the website's).
+  String? mkError(String type) => switch (type) {
+    'exams.entered_in_parts' => _t(
+      'This subject is entered in parts; choose the part.',
+      'यह विषय भागों में भरा जाता है; भाग चुनें।',
+    ),
+    'exams.entry_locked' => _t(
+      'Entry for this subject is locked; ask the coordinator to reopen it.',
+      'इस विषय की प्रविष्टि बंद है; समन्वयक से फिर खुलवाएँ।',
+    ),
+    'exams.marks_out_of_range' => _t(
+      'A mark is above the maximum for this subject.',
+      'कोई अंक इस विषय के अधिकतम से ज़्यादा है।',
+    ),
+    'exams.not_assigned' => _t(
+      'You are not assigned to this section or subject.',
+      'आपको यह वर्ग या विषय नहीं दिया गया है।',
+    ),
+    'exams.student_not_in_section' => _t(
+      'A student in the sheet is no longer in this section; reload.',
+      'शीट का कोई विद्यार्थी अब इस वर्ग में नहीं है; फिर से खोलें।',
+    ),
+    'exams.subject_not_taken' => _t(
+      'A pupil does not take this subject; leave the row empty.',
+      'कोई विद्यार्थी यह विषय नहीं लेता; वह पंक्ति खाली रखें।',
+    ),
+    'exams.unknown_code' => _t(
+      'That is not a marks code of the school.',
+      'यह विद्यालय का अंक-कोड नहीं है।',
+    ),
+    'exams.grade_not_allowed' => _t(
+      "That grade is not on the subject's scale.",
+      'यह ग्रेड विषय के पैमाने में नहीं है।',
+    ),
+    'exams.entry_submitted' => _t(
+      'The marks are submitted or verified; they change only after they are sent back.',
+      'अंक जमा या सत्यापित हैं; वापस भेजे जाने के बाद ही बदलेंगे।',
+    ),
+    'exams.marks_missing' => _t(
+      'Some pupils have no marks or code yet.',
+      'कुछ विद्यार्थियों के अंक या कोड अभी नहीं भरे।',
+    ),
+    'scope-denied' => _t(
+      'You are not allowed to enter marks for this section.',
+      'आप इस वर्ग के अंक नहीं भर सकते।',
+    ),
+    _ => null,
+  };
+
   // ---- phase D
   String get phones => _t('Phones signed in', 'साइन-इन फ़ोन');
   String get thisPhone => _t('This phone', 'यह फ़ोन');

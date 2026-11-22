@@ -77,6 +77,9 @@ ExamEntryController_sections
 ExamEntryController_marks
 ExamEntryController_putMarks
 ExamStatusController_submit
+# marks as on the staff website (docs/design/96 part 10): the exams that take marks, a part's marks
+ExamsController_list
+ExamEntryController_putPartMarks
 DailyWorkController_sheetOptions
 DailyWorkController_sheet
 DailyWorkController_saveSheet

@@ -268,6 +268,14 @@ class EduProApi {
   Future<dynamic> examStatusSubmit({required EntryStatusActionDto body, required String id}) =>
       _t.send('POST', '/exams/${Uri.encodeComponent(id)}/entry-status/submit', body: body.toJson());
 
+  /// GET /exams — Exams of the working year with their classes
+  Future<dynamic> examsList() =>
+      _t.send('GET', '/exams');
+
+  /// PUT /exams/{id}/part-marks — Enter one part of a subject (Theory, Practical, Physics …); the subject total follows
+  Future<dynamic> examEntryPutPartMarks({required PutPartMarksDto body, required String id}) =>
+      _t.send('PUT', '/exams/${Uri.encodeComponent(id)}/part-marks', body: body.toJson());
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');
@@ -1106,6 +1114,32 @@ class EntryStatusActionDto {
         'classSectionId': classSectionId,
         'subjectId': subjectId,
         if (remark != null) 'remark': remark,
+      };
+}
+
+/** The PutPartMarksDto the API takes. */
+class PutPartMarksDto {
+  const PutPartMarksDto({required this.classSectionId, required this.partId, required this.rows});
+  final String classSectionId;
+  final String partId;
+  final List<PutPartMarksDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'partId': partId,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutPartMarksDtoRowsItem the API takes. */
+class PutPartMarksDtoRowsItem {
+  const PutPartMarksDtoRowsItem({required this.studentId, this.marks, this.absent});
+  final String studentId;
+  final num? marks;
+  final bool? absent;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        if (marks != null) 'marks': marks,
+        if (absent != null) 'absent': absent,
       };
 }
 

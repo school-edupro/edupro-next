@@ -216,3 +216,28 @@ topics — number, name, periods, Done / Partly done / Not done with the day, or
 `_tree`, `_mark`. No API change. Tests: `staff_test.dart` (the list, behind and on track, the subject's chapters and
 topics, Not done refused without a remark, Partly with the day and remark sent, Done; light, dark, Hindi, twice the
 text); 235 app tests, analyze and the generated calls pass; the web preview rebuilt.
+
+## Part 10: Marks (22 Nov 2026)
+
+"Staff app: the Marks section the same as the staff website."
+
+The app had three steps (the exams with sheets waiting, an exam's sections and subjects, a sheet with a box and an
+Absent tick a pupil); a subject entered in parts sent the teacher to the web page. The website is one page: the exam
+(every exam of the year that takes marks), the section · subject (a part, for a subject entered in parts, when the
+teacher enters it), how codes work, and the sheet.
+
+As built: `lib/staff/marks.dart` — `MarksHome` as the website's page (from Classes, More and Home's "Marks to
+enter"): **Exam** (`GET exams`, those taking marks), **Section · subject** (type to find; "VI-A · Mathematics · 2
+entered", "(locked)", "VI-A · Science · Theory (60)" for the parts the teacher enters), the codes help, then the
+sheet — section · subject (· part), **Locked** or the number of pupils, "out of 80 (pass 27) · n of m entered" (or
+"graded"), the parts line ("Theory 60 + Practical 20 = 80 …"); each pupil (roll, name, admission number) with the
+marks box (or the grade, for a subject on a grade scale) and the school's **Code** (AB, ML, EX …; a part takes AB
+only); "Does not take the subject" with no boxes; for a part, the total and the other parts. **Save marks** sends
+what is written (`PUT exams/:id/marks` — marks, a code or a grade; a part: `PUT exams/:id/part-marks`, an empty box
+clears it), "Marks saved (n new, m changed)."; over the maximum is refused first; the API's refusals in words. Then
+**Open / Submitted / Verified** with the remark, and **Submit for verification** only once every pupil has marks or a
+code ("Submit once every pupil has marks or a code."); a locked or submitted sheet is read only ("the coordinator can
+reopen it"). Calls added: `ExamsController_list`, `ExamEntryController_putPartMarks`. No API change. Tests:
+`staff_test.dart` (the exams that take marks, the sheet, not taken, over the maximum, a code, saved, submit and the
+read-only sheet with its remark; a part with its total and AB only; a grade; an exam with nothing given); light, dark,
+Hindi, twice the text; 239 app tests; the web preview rebuilt.
