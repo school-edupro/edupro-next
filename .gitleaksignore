@@ -1,0 +1,4 @@
+# Lines the secret scan mistakes for keys (gitleaks generic-api-key: a "token"-like name with a long value).
+# Each is ordinary code, already reworded in a later commit (25af867c); listed so the commits that added them pass.
+8ec4e546f25a8d717ad9c4ee9b672b79654bdcbc:apps/api/src/modules/insights/assistant.service.ts:generic-api-key:985
+69dc446fca82a4ddf43e9645c1155fef35f739dc:packages/ai/src/tool-loop.ts:generic-api-key:83
