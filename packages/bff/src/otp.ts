@@ -28,6 +28,11 @@ export interface OtpSessionOut {
   accessToken: string;
   expiresAt: number;
   displayName?: string;
+  /**
+   * How the person signed in: One Auth (then a code), or the code alone. Signing out goes back to One Auth only
+   * after One Auth — a session One Auth never made is not one it can end.
+   */
+  via?: 'oneauth' | 'code';
 }
 export interface OtpOptions {
   /** Cookie prefix, for example "edupro_parent"; the admin app uses "edupro". */
@@ -109,12 +114,14 @@ export function createOtp(o: OtpOptions) {
     req: NextRequest,
     s: OtpSessionOut & { deviceToken?: string },
     returnTo: string,
+    via: 'oneauth' | 'code',
   ) => {
     await o.writeSession({
       sub: s.sub,
       accessToken: s.accessToken,
       expiresAt: s.expiresAt,
       displayName: s.displayName,
+      via,
     });
     if (s.deviceToken)
       (await cookies()).set(DEVICE, s.deviceToken, {
@@ -158,7 +165,8 @@ export function createOtp(o: OtpOptions) {
         oneAuthToken,
       );
       if (r.ok && r.json.notRequired) return null;
-      if (r.ok && r.json.session) return finish(req, r.json.session as OtpSessionOut, returnTo);
+      if (r.ok && r.json.session)
+        return finish(req, r.json.session as OtpSessionOut, returnTo, 'oneauth');
       if (!r.ok) return to(req, `/login?error=${errorOf(r.json)}`);
       await pending.write({
         purpose: 'second_factor',
@@ -189,7 +197,7 @@ export function createOtp(o: OtpOptions) {
           ...meta(req),
         });
         if (!r.ok) return to(req, `/login?otpError=${errorOf(r.json)}`);
-        if (r.json.session) return finish(req, r.json.session as OtpSessionOut, returnTo);
+        if (r.json.session) return finish(req, r.json.session as OtpSessionOut, returnTo, 'code');
         await pending.write({
           purpose: 'login',
           challengeId: String(r.json.challengeId),
@@ -226,6 +234,7 @@ export function createOtp(o: OtpOptions) {
           req,
           r.json as unknown as OtpSessionOut & { deviceToken?: string },
           p.returnTo,
+          p.purpose === 'second_factor' ? 'oneauth' : 'code',
         );
       },
       /** POST /api/auth/otp/resend: a new code (one in 30 seconds) */

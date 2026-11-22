@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     accessToken: `dev:${sub}`,
     expiresAt: Math.floor(Date.now() / 1000) + 12 * 3600,
     displayName: sub,
+    via: 'dev',
   });
   await recordSignIn(req, `dev:${sub}`, 'dev');
   const returnTo = String(form.get('returnTo') ?? '/');

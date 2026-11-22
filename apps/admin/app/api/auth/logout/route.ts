@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
     }).catch(() => undefined);
   }
   await clearSession();
-  const idp =
-    session && !session.sub.startsWith('dev:') ? await logoutUrl().catch(() => null) : null;
+  // One Auth's sign-out only for a session One Auth made: a code or the developer sign-in has none there, and One
+  // Auth refuses such a sign-out (invalid_client); those just end here and go back to the sign-in page
+  const idp = session?.via === 'oneauth' ? await logoutUrl().catch(() => null) : null;
   return NextResponse.redirect(idp ?? new URL('/login', req.url), { status: 303 });
 }

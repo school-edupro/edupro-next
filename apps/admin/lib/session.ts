@@ -14,6 +14,11 @@ export interface Session {
   displayName?: string;
   schoolId?: string;
   academicYearId?: string;
+  /**
+   * How the person signed in: One Auth, a code by e-mail or mobile, or the developer sign-in. Signing out goes to
+   * One Auth's sign-out only after One Auth (it refuses to end a session it never made). Absent: an older session.
+   */
+  via?: 'oneauth' | 'code' | 'dev';
   /** Set while acting as another member (S5-02); the original token is restored when the session ends. */
   impersonation?: {
     sessionId: string;

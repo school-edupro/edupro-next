@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       refreshToken: result.refreshToken,
       expiresAt: result.expiresAt,
       displayName: result.displayName,
+      via: 'oneauth',
     });
     await recordSignIn(req, result.accessToken, 'oidc');
     return NextResponse.redirect(new URL(safeReturn, req.url));
