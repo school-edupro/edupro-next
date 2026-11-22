@@ -17553,3 +17553,75 @@ button.ep-shiftcal__cell:focus-visible {
     animation: none;
   }
 }
+
+/* School settings (docs/design/95): an area's form — each setting a row, its words beside its control; a found
+   setting is marked; the save bar stays at the foot of the screen while there are changes */
+.ep-setform__row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: var(--sp-2) var(--sp-5);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--border-subtle);
+  scroll-margin-top: var(--sp-9);
+}
+.ep-setform__row:first-of-type {
+  border-top: 0;
+}
+.ep-setform__row:target {
+  background: var(--surface-subtle);
+  box-shadow: 0 0 0 var(--sp-2) var(--surface-subtle);
+  border-radius: var(--radius-sm);
+}
+.ep-setform__control {
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+  min-width: 0;
+}
+.ep-setform__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-setform__unit {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-setform__unit .ep-input {
+  max-width: 12rem;
+}
+.ep-setform__choices {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+}
+.ep-setform__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+}
+.ep-setform__bar--sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+@media (max-width: 760px) {
+  .ep-setform__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

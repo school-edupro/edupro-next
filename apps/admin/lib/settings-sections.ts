@@ -802,6 +802,9 @@ export function sectionsFor(rows: SettingRow[]): SettingsSection[] {
   }));
 }
 
+/** The id a setting's row has on its area's page (the search opens the page at it). */
+export const anchorOf = (key: string) => `set-${key.replace(/[^a-z0-9]+/gi, '-')}`;
+
 /** A value as words (cards, own-page fields, search). */
 export function valueText(field: SettingField, value: unknown): string {
   const c = field.control;
@@ -826,7 +829,9 @@ export function valueText(field: SettingField, value: unknown): string {
     return `${w.start ?? ''} to ${w.end ?? ''}`;
   }
   if (c.kind === 'rows' || c.kind === 'lines')
-    return Array.isArray(value) ? `${String(value.length)} rows` : '—';
+    return Array.isArray(value) && value.length
+      ? `${String(value.length)} ${value.length === 1 ? 'entry' : 'entries'}`
+      : 'None';
   if (c.kind === 'json') return 'Set as a list (see its page)';
   return value === '' || value == null ? 'Not set' : String(value);
 }

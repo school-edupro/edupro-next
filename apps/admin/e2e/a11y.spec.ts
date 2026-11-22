@@ -477,6 +477,11 @@ const PAGES = [
   '/system/school',
   // the family app layout kept by the school (0407, docs/design/90)
   '/system/settings',
+  // School settings rebuilt (docs/design/95): an area with every kind of control, one with own-page settings,
+  // and Advanced (rows, JSON)
+  '/system/settings/attendance',
+  '/system/settings/fees',
+  '/system/settings/advanced',
   '/system/settings/family-app-layout',
   '/system/settings/staff-app-layout',
   '/system/settings/family-app-layout?for=parent',

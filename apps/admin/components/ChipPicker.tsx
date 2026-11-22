@@ -19,6 +19,7 @@ export function ChipPicker({
   placeholder = 'Type to search, then pick',
   help,
   required,
+  hideLabel = false,
 }: {
   label: string;
   options: ChipOption[];
@@ -28,6 +29,8 @@ export function ChipPicker({
   placeholder?: string;
   help?: string;
   required?: boolean;
+  /** The label is shown beside the picker already (e.g. a settings row): kept for screen readers only. */
+  hideLabel?: boolean;
 }) {
   const id = useId();
   const [q, setQ] = useState('');
@@ -41,7 +44,7 @@ export function ChipPicker({
   };
   return (
     <div className="ep-field">
-      <label className="ep-field__label" htmlFor={`${id}-q`}>
+      <label className={hideLabel ? 'ep-sr-only' : 'ep-field__label'} htmlFor={`${id}-q`}>
         {label}
         {required ? <span aria-hidden="true"> *</span> : null}
       </label>

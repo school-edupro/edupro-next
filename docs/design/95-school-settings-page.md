@@ -68,3 +68,15 @@ Decided without asking:
   words (money in Indian grouping). `/system/settings`: Find a setting (name, help, area or value; opens the area at
   the setting) and a card per area — its line, three of its values, "N changed" or Standard, how many are on their
   own pages, Open — plus the App layouts card. Checked in a browser on Alpha (desktop and phone) with axe.
+- **C (22 Nov 2026).** `/system/settings/<area>`: the area's settings as rows — name, help (and the key under
+  Advanced) beside the control: Switch for on/off, radios for 2–4 choices, a drop-down beyond, ticks for several
+  (weekdays, code channels, modules), a role picker (`ChipPicker`, now with `hideLabel`), a number with its unit, ₹
+  amounts, times, the arrival window, a date with Clear, rows for the old apps' lists, one-per-line lists, JSON
+  checked as typed. Each row says Standard, Set from <date>, or Changed, not saved, shows the standard value and offers
+  Use the standard value; problems show under the row (the client's checks, then the API's per setting). One save bar
+  (pinned while there are changes): the count, From a later date, Undo changes, Save changes — `saveSettings` sends
+  the changes in one `PUT /platform/settings`; leaving with changes asks first. Settings kept on their own pages are
+  listed with their value and a "Change on …" link; Goes with links related pages; Advanced carries a support note.
+  CSS `.ep-setform*` in `packages/ui/src/app.css`. Checked in a browser: every area on Alpha (desktop and phone, edits
+  tried, saves blocked, axe clean) and a real save on a test school (two settings today, one back to standard, one
+  from a later date — confirmed through the API). The admin a11y list gains three areas.

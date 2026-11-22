@@ -1,5 +1,6 @@
 'use client';
 import { useId, useMemo, useState } from 'react';
+import { anchorOf } from '@/lib/settings-sections';
 
 export interface SearchEntry {
   key: string;
@@ -71,6 +72,3 @@ export function SettingsSearch({ entries }: { entries: SearchEntry[] }) {
     </div>
   );
 }
-
-/** The id a setting's row has on its area's page. */
-export const anchorOf = (key: string) => `set-${key.replace(/[^a-z0-9]+/gi, '-')}`;
