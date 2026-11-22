@@ -417,6 +417,95 @@ class School {
         };
       case 'POST /academics/daily-work':
         return {'id': '601'};
+      // the day's sheet as on the staff website (docs/design/96)
+      case 'GET /academics/daily-work/sheet':
+        final assignment = c.query?['mode'] == 'assignment';
+        return {
+          'date': c.query?['date'] ?? '2026-11-20',
+          'mode': assignment ? 'assignment' : 'daily',
+          'classes': [
+            {'id': '30', 'name': 'Class VI'},
+          ],
+          'classId': '30',
+          'options': [
+            {'classSectionId': '300', 'section': 'VI-A', 'classId': '30'},
+            {'classSectionId': '301', 'section': 'VI-B', 'classId': '30'},
+          ],
+          'chosen': '${c.query?['sections'] ?? '300,301'}'.split(','),
+          'rows': [
+            {
+              'subject': {'id': '91', 'code': 'MAT', 'name': 'Mathematics'},
+              'sections': ['VI-A', 'VI-B'],
+              'homework': assignment
+                  ? null
+                  : {
+                      'text': 'Exercise 4.1',
+                      'files': 1,
+                      'attachments': [
+                        {'workId': '611', 'fileId': '81'},
+                      ],
+                      'dueOn': null,
+                      'sections': ['VI-A'],
+                    },
+              'classwork': null,
+              'assignment': null,
+            },
+            {
+              'subject': {'id': '92', 'code': 'SCI', 'name': 'Science'},
+              'sections': ['VI-A'],
+              'homework': null,
+              'classwork': null,
+              'assignment': null,
+            },
+          ],
+          'publishAt': '2026-11-20T16:00',
+          'publishTime': '16:00',
+          'maxMb': 10,
+        };
+      case 'POST /academics/daily-work/sheet':
+        return {'created': 1, 'updated': 1};
+      case 'GET /academics/daily-work':
+        return {
+          'data': [
+            {
+              'id': '611',
+              'kind': 'homework',
+              'section': 'VI-A',
+              'subjectName': 'Mathematics',
+              'title': 'Homework',
+              'body': 'Exercise 4.1',
+              'assignedOn': '2026-11-20',
+              'dueOn': null,
+              'postedBy': 'Asha Teacher',
+              'files': [
+                {'id': '81'},
+              ],
+              'publishAt': '2026-11-20T10:30:00.000Z',
+              'scheduled': false,
+              'ackRequired': true,
+              'ackCount': 3,
+            },
+            {
+              'id': '612',
+              'kind': 'assignment',
+              'section': 'VI-A',
+              'subjectName': 'Science',
+              'title': 'Assignment',
+              'body': 'Plant cell model',
+              'assignedOn': '2026-11-19',
+              'dueOn': '2026-11-26',
+              'postedBy': 'Asha Teacher',
+              'files': [],
+              'publishAt': '2026-11-19T10:30:00.000Z',
+              'scheduled': false,
+              'ackRequired': false,
+              'ackCount': 0,
+            },
+          ],
+          'page': {'more': false},
+        };
+      case 'GET /academics/daily-work/report':
+        return null;
       case 'GET /payroll/me/payslips':
         return {
           'fy': c.query?['fy'],
@@ -699,50 +788,98 @@ void main() {
     expect(find.text('Sent for checking.'), findsOneWidget);
   });
 
-  testWidgets('homework posted with a key; payslips open; More opens My leave in the app', (
-    tester,
-  ) async {
-    final (t, _) = await pumpStaff(tester);
-    await tester.tap(find.text('Classes').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Post homework'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('postWork')));
-    await tester.pumpAndSettle();
-    expect(find.text('Choose the class.'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('workSection')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('VI-A').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('workTitle')), 'Fractions worksheet');
-    await tester.tap(find.byKey(const Key('postWork')));
-    await tester.pumpAndSettle();
-    final post = t.calls.lastWhere((c) => c.path == '/academics/daily-work');
-    expect(post.body, containsPair('classSectionId', '300'));
-    expect(post.body, containsPair('title', 'Fractions worksheet'));
-    expect(post.headers['Idempotency-Key'], isA<String>());
-    expect(find.text('Posted.'), findsOneWidget);
-    await tester.tap(find.byType(BackButton));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'Daily work as on the website: the sheet saved for the sections; assignments; the report',
+    (tester) async {
+      final (t, _) = await pumpStaff(tester, size: const Size(420, 2400));
+      await tester.tap(find.text('Classes').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Daily work'));
+      await tester.pumpAndSettle();
+      // the day's sheet: the class's sections ticked, a card per subject with what was posted
+      expect(find.byKey(const Key('workSheet-daily')), findsOneWidget);
+      expect(find.byKey(const Key('sheetSection-300')), findsOneWidget);
+      expect(find.text('Mathematics'), findsOneWidget);
+      expect(find.text('VI-A only'), findsOneWidget);
+      expect(find.textContaining('Posted for VI-A · 1 file(s) attached'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('sheet-classwork-91')), 'Fractions on the board');
+      await tester.enterText(find.byKey(const Key('sheet-homework-92')), 'Read chapter 4');
+      await tester.ensureVisible(find.byKey(const Key('saveSheet-daily')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('sheetAck-daily')));
+      await tester.tap(find.byKey(const Key('saveSheet-daily')));
+      await tester.pumpAndSettle();
+      final save = t.calls.lastWhere(
+        (c) => c.path == '/academics/daily-work/sheet' && c.method == 'POST',
+      );
+      expect(save.body, containsPair('classSectionIds', ['300', '301']));
+      expect(save.body, containsPair('mode', 'daily'));
+      expect(save.body, containsPair('ackRequired', true));
+      expect(save.body, containsPair('publishAt', '2026-11-20T16:00'));
+      final rows = (save.body!['rows'] as List).cast<Map<String, Object?>>();
+      expect(
+        rows.firstWhere((r) => r['subjectId'] == '91'),
+        containsPair('classwork', 'Fractions on the board'),
+      );
+      expect(
+        rows.firstWhere((r) => r['subjectId'] == '91'),
+        containsPair('homework', 'Exercise 4.1'),
+      );
+      expect(
+        rows.firstWhere((r) => r['subjectId'] == '92'),
+        containsPair('homework', 'Read chapter 4'),
+      );
+      expect(find.text('Saved: 1 new, 1 updated.'), findsOneWidget);
+      // a section left out: the sheet reloads for the one ticked
+      await tester.ensureVisible(find.byKey(const Key('sheetSection-301')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('sheetSection-301')));
+      await tester.pumpAndSettle();
+      expect(
+        t.calls.lastWhere((c) => c.path == '/academics/daily-work/sheet').query,
+        containsPair('sections', '300'),
+      );
+      // assignments: the same sheet with a due date
+      Finder tab(String label) =>
+          find.descendant(of: find.byKey(const Key('dailyWorkTabs')), matching: find.text(label));
+      await tester.tap(tab('Assignments'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('workSheet-assignment')), findsOneWidget);
+      expect(find.byKey(const Key('sheetDue-91')), findsOneWidget);
+      // the report: by date, class and subject; the acknowledged count; the PDF
+      await tester.tap(tab('Report'));
+      await tester.pumpAndSettle();
+      expect(find.text('Exercise 4.1'), findsOneWidget);
+      expect(find.textContaining('3 acknowledged'), findsOneWidget);
+      expect(find.text('Plant cell model'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('reportPdf')));
+      await tester.pumpAndSettle();
+      final file = t.calls.lastWhere((c) => c.path == '/academics/daily-work/report');
+      expect(file.query, containsPair('format', 'pdf'));
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('My payslips'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('₹45,210'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('payslip-r1')));
-    await tester.pumpAndSettle();
-    expect(t.calls.any((c) => c.path == '/payroll/me/payslips/r1'), isTrue);
-    await tester.tap(find.byType(BackButton));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(BackButton));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('My payslips'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('₹45,210'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('payslip-r1')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/payroll/me/payslips/r1'), isTrue);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('More').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('My leave'));
-    await tester.pumpAndSettle();
-    // the native screen, not a web page
-    expect(find.byKey(const Key('applyStaffLeave')), findsOneWidget);
-  });
+      await tester.tap(find.text('More').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('My leave'));
+      await tester.pumpAndSettle();
+      // the native screen, not a web page
+      expect(find.byKey(const Key('applyStaffLeave')), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'Home like the students’: the greeting, the shortcuts with All, the cards in the school’s order',
@@ -941,7 +1078,7 @@ void main() {
         }
         await tester.tap(find.text(s.classes).last);
         await tester.pumpAndSettle();
-        for (final screen in [s.postWork, s.marksEntry, s.myTimetable, s.payslips]) {
+        for (final screen in [s.dailyWork, s.marksEntry, s.myTimetable, s.payslips]) {
           await tester.tap(find.text(screen));
           await check(screen);
           await tester.tap(find.byType(BackButton));
@@ -988,7 +1125,7 @@ void main() {
     }
     await tester.tap(find.text('Classes').last);
     await tester.pumpAndSettle();
-    for (final screen in ['Post homework', 'Marks entry', 'My timetable', 'My payslips']) {
+    for (final screen in ['Daily work', 'Marks entry', 'My timetable', 'My payslips']) {
       await scrollTo(tester, find.text(screen));
       await tester.tap(find.text(screen));
       await tester.pumpAndSettle();

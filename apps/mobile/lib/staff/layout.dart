@@ -134,7 +134,7 @@ void openStaffScreen(BuildContext context, S s, Profile p, FamilyEntry e) {
 /// A screen's name in a list tab: the words the app's own tabs always used for its screens, else the menu's.
 String staffListLabel(S s, FamilyEntry e) => switch (e.href) {
   '/attendance' => s.markClass,
-  '/daily-work' => s.postWork,
+  '/daily-work' => s.dailyWork,
   '/marks' => s.marksEntry,
   '/timetable' => s.myTimetable,
   '/my-payslips' => s.payslips,

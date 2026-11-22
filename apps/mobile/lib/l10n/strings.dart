@@ -1002,6 +1002,60 @@ class S {
     _ => status,
   };
   String get postWork => _t('Post homework', 'गृहकार्य दें');
+  // Daily work as on the staff website (docs/design/96)
+  String get dailyWork => _t('Daily work', 'दैनिक कार्य');
+  String get workReport => _t('Report', 'रिपोर्ट');
+  String get classwork => _t('Classwork', 'कक्षाकार्य');
+  String get assignmentWord => _t('Assignment', 'असाइनमेंट');
+  String get dateWord => _t('Date', 'तारीख');
+  String get classWord => _t('Class', 'कक्षा');
+  String get selectClass => _t('Select a class', 'कक्षा चुनें');
+  String get sectionsUntick =>
+      _t('Sections (untick one to leave it out)', 'वर्ग (किसी को छोड़ने के लिए उसका निशान हटाएँ)');
+  String get sheetPickClass => _t(
+    'Select the class. Every section of the class you teach comes ticked, and the same entry is posted to each of them.',
+    'कक्षा चुनें। आप जिन वर्गों को पढ़ाते हैं वे सब चुने हुए आते हैं, और वही प्रविष्टि हर वर्ग को भेजी जाती है।',
+  );
+  String get noClassForWork => _t(
+    'No class is assigned to you for daily work.',
+    'दैनिक कार्य के लिए आपको कोई कक्षा नहीं दी गई है।',
+  );
+  String get noSubjectHere => _t(
+    'No subject is assigned to you in this class. A teacher, the class teacher too, posts only for the subjects given in Teacher assignments; ask the office to add yours.',
+    'इस कक्षा में आपको कोई विषय नहीं दिया गया है। शिक्षक (कक्षा शिक्षक भी) केवल शिक्षक नियुक्ति में दिए विषयों के लिए भेजते हैं; कार्यालय से अपना विषय जुड़वाएँ।',
+  );
+  String onlySections(String list) => _t('$list only', 'केवल $list');
+  String enterWork(String what) => _t('Enter ${what.toLowerCase()}…', '$what लिखें…');
+  String postedWork(String? forSections, int files) => _t(
+    'Posted${forSections != null ? ' for $forSections' : ''}${files > 0 ? ' · $files file(s) attached' : ''}',
+    '${forSections != null ? '$forSections के लिए ' : ''}भेजा गया${files > 0 ? ' · $files फ़ाइल संलग्न' : ''}',
+  );
+  String get publishOn => _t('Publish on', 'प्रकाशन');
+  String publishHelp(String? schoolTime) => _t(
+    'Parents and students see it from this time.${schoolTime != null ? " The school's usual time is $schoolTime." : ''}',
+    'अभिभावक और विद्यार्थी इसे इस समय से देखेंगे।${schoolTime != null ? ' विद्यालय का सामान्य समय $schoolTime है।' : ''}',
+  );
+  String get askAckSheet =>
+      _t('Ask the parent / student to acknowledge', 'अभिभावक / विद्यार्थी से पावती माँगें');
+  String sheetHelp(int mb) => _t(
+    'Fill only the subjects you want to post; a box left empty changes nothing. A file can be a PDF or a photo, up to $mb MB each.',
+    'केवल वही विषय भरें जो भेजने हैं; खाली छोड़ा बॉक्स कुछ नहीं बदलता। फ़ाइल PDF या फ़ोटो हो सकती है, हर एक $mb MB तक।',
+  );
+  String get saveAndPublish => _t('Save and publish', 'सहेजें और प्रकाशित करें');
+  String savedCounts(int created, int updated) =>
+      _t('Saved: $created new, $updated updated.', 'सहेजा गया: $created नए, $updated बदले।');
+  String fileTooBig(int mb) => _t('A file can be up to $mb MB.', 'फ़ाइल $mb MB तक हो सकती है।');
+  String get toWord => _t('To', 'तक');
+  String get allMyClasses => _t('All my classes', 'मेरी सभी कक्षाएँ');
+  String get showWord => _t('Show', 'दिखाएँ');
+  String get showBoth => _t('Daily work and assignments', 'दैनिक कार्य और असाइनमेंट');
+  String get showDaily =>
+      _t('Daily work (homework, classwork)', 'दैनिक कार्य (गृहकार्य, कक्षाकार्य)');
+  String get nothingPostedDays =>
+      _t('Nothing was posted in these days.', 'इन दिनों में कुछ नहीं भेजा गया।');
+  String publishesAt(String when) => _t('Publishes $when', '$when को प्रकाशित होगा');
+  String ackCount(int n) => _t('$n acknowledged', '$n ने पावती दी');
+  String get workReportFile => _t('Daily work report', 'दैनिक कार्य रिपोर्ट');
   String get workTitle => _t('Title', 'शीर्षक');
   String get workBody => _t('What to do', 'क्या करना है');
   String get subject => _t('Subject', 'विषय');

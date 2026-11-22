@@ -244,6 +244,18 @@ class EduProApi {
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');
 
+  /// GET /academics/daily-work/sheet — The day's sheet: a row per subject for the chosen sections
+  Future<dynamic> dailyWorkSheet({String? date, String? sections, String? classId, String? mode}) =>
+      _t.send('GET', '/academics/daily-work/sheet', query: {if (date != null) 'date': date, if (sections != null) 'sections': sections, if (classId != null) 'classId': classId, if (mode != null) 'mode': mode});
+
+  /// POST /academics/daily-work/sheet — Save the sheet: homework and classwork (or assignments) of many subjects
+  Future<dynamic> dailyWorkSaveSheet({required SaveSheetDto body}) =>
+      _t.send('POST', '/academics/daily-work/sheet', body: body.toJson());
+
+  /// GET /academics/daily-work/report — What was posted between two dates, as Excel or PDF
+  Future<ApiFile> dailyWorkReportFile({String? classSectionId, String? from, String? to, String? kind, String? format, String? wrap}) =>
+      _t.file('GET', '/academics/daily-work/report', query: {if (classSectionId != null) 'classSectionId': classSectionId, if (from != null) 'from': from, if (to != null) 'to': to, if (kind != null) 'kind': kind, if (format != null) 'format': format, if (wrap != null) 'wrap': wrap});
+
   /// POST /academics/daily-work — Post homework, classwork or an assignment with optional files
   Future<dynamic> dailyWorkCreate({required CreateDailyWorkDto body}) =>
       _t.send('POST', '/academics/daily-work', body: body.toJson());
@@ -993,6 +1005,48 @@ class EntryStatusActionDto {
         'classSectionId': classSectionId,
         'subjectId': subjectId,
         if (remark != null) 'remark': remark,
+      };
+}
+
+/** The SaveSheetDto the API takes. */
+class SaveSheetDto {
+  const SaveSheetDto({required this.date, required this.classSectionIds, this.mode, this.publishAt, this.ackRequired, required this.rows});
+  final String date;
+  final List<String> classSectionIds;
+  final String? mode;
+  final String? publishAt;
+  final bool? ackRequired;
+  final List<SaveSheetDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'date': date,
+        'classSectionIds': classSectionIds,
+        if (mode != null) 'mode': mode,
+        if (publishAt != null) 'publishAt': publishAt,
+        if (ackRequired != null) 'ackRequired': ackRequired,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The SaveSheetDtoRowsItem the API takes. */
+class SaveSheetDtoRowsItem {
+  const SaveSheetDtoRowsItem({required this.subjectId, this.homework, this.classwork, this.assignment, this.dueOn, this.homeworkFileIds, this.classworkFileIds, this.assignmentFileIds});
+  final String subjectId;
+  final String? homework;
+  final String? classwork;
+  final String? assignment;
+  final String? dueOn;
+  final List<String>? homeworkFileIds;
+  final List<String>? classworkFileIds;
+  final List<String>? assignmentFileIds;
+  Map<String, Object?> toJson() => {
+        'subjectId': subjectId,
+        if (homework != null) 'homework': homework,
+        if (classwork != null) 'classwork': classwork,
+        if (assignment != null) 'assignment': assignment,
+        if (dueOn != null) 'dueOn': dueOn,
+        if (homeworkFileIds != null) 'homeworkFileIds': homeworkFileIds,
+        if (classworkFileIds != null) 'classworkFileIds': classworkFileIds,
+        if (assignmentFileIds != null) 'assignmentFileIds': assignmentFileIds,
       };
 }
 

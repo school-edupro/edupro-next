@@ -71,6 +71,9 @@ ExamEntryController_marks
 ExamEntryController_putMarks
 ExamStatusController_submit
 DailyWorkController_sheetOptions
+DailyWorkController_sheet
+DailyWorkController_saveSheet
+DailyWorkController_reportFile !file
 DailyWorkController_create
 FilesController_create
 FilesController_complete
