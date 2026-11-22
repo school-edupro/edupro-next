@@ -226,6 +226,22 @@ class School {
         return {
           'data': [
             {'id': 'p1', 'number': 1, 'name': 'I', 'startsAt': '08:00:00', 'endsAt': '08:40:00'},
+            {
+              'id': 'p2',
+              'number': 2,
+              'name': 'Lunch',
+              'startsAt': '10:00:00',
+              'endsAt': '10:20:00',
+              'kind': 'break',
+            },
+            {
+              'id': 'p3',
+              'number': 3,
+              'name': 'III',
+              'startsAt': '10:20:00',
+              'endsAt': '11:00:00',
+              'kind': 'teaching',
+            },
           ],
         };
       case 'GET /academics/timetable/mine':
@@ -244,7 +260,22 @@ class School {
           ],
         };
       case 'GET /academics/substitutions/mine':
-        return {'data': []};
+        return {
+          'data': [
+            // not today (the Home's periods count only today's)
+            {
+              'id': 'sub1',
+              'onDate': '2026-11-18',
+              'section': 'VIII-C',
+              'periodName': 'III',
+              'absentTeacher': 'Ravi Teacher',
+              'substitute': 'Asha Teacher',
+              'substituteEmployeeId': '7',
+              'subject': 'English',
+              'reason': 'On leave',
+            },
+          ],
+        };
       case 'GET /attendance/summary':
         return {
           'date': c.query?['date'],
@@ -1176,6 +1207,39 @@ void main() {
     expect(tab('कक्षाएँ'), findsOneWidget);
     // no Hindi name given: the name as the school wrote it
     expect(tab('Office'), findsOneWidget);
+  });
+
+  testWidgets('My timetable as on the website: sections, substitutions, the week grid, a day', (
+    tester,
+  ) async {
+    await pumpStaff(tester, size: const Size(420, 2400));
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My timetable'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ttToday')), findsOneWidget);
+    // My sections: the role and what the person can do
+    expect(find.byKey(const Key('ttSection-a1')), findsOneWidget);
+    expect(find.text('Class teacher'), findsOneWidget);
+    expect(find.text('Subject teacher'), findsOneWidget);
+    expect(find.text('Science · Can: attendance'), findsOneWidget);
+    // substitutions this week
+    expect(find.text('Asha Teacher covers for Ravi Teacher (On leave)'), findsOneWidget);
+    // the week grid: Monday to Saturday, the lesson, the break, the free period
+    final week = find.byKey(const Key('ttWeek'));
+    expect(week, findsOneWidget);
+    expect(find.descendant(of: week, matching: find.text('VI-A')), findsNWidgets(6));
+    expect(find.descendant(of: week, matching: find.text('Break')), findsNWidgets(6));
+    expect(find.descendant(of: week, matching: find.text('free')), findsNWidgets(6));
+    // a day at a time
+    await tester.tap(find.byKey(const Key('ttView-day')));
+    await tester.pumpAndSettle();
+    Finder inRow(String id, String text) =>
+        find.descendant(of: find.byKey(Key('ttDay-$id')), matching: find.text(text));
+    expect(inRow('p1', 'VI-A'), findsOneWidget);
+    expect(inRow('p1', 'Mathematics · 12'), findsOneWidget);
+    expect(inRow('p2', 'Lunch'), findsOneWidget);
+    expect(inRow('p3', 'free'), findsOneWidget);
   });
 
   testWidgets('Holidays and almanac: the staff calendar in the app, not a web page', (

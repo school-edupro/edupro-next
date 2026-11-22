@@ -1056,6 +1056,38 @@ class S {
   String publishesAt(String when) => _t('Publishes $when', '$when को प्रकाशित होगा');
   String ackCount(int n) => _t('$n acknowledged', '$n ने पावती दी');
   String get workReportFile => _t('Daily work report', 'दैनिक कार्य रिपोर्ट');
+  // the staff timetable as on the staff website (docs/design/96, part 5)
+  String lessonsToday(int n) => _t('$n lesson${n == 1 ? '' : 's'} today', 'आज $n कालांश');
+  String get noLessonsSunday => _t('No lessons on Sunday', 'रविवार को कोई कालांश नहीं');
+  String get mySectionsTitle => _t('My sections', 'मेरे वर्ग');
+  String assignmentRole(String kind) => switch (kind) {
+    'class_teacher' => _t('Class teacher', 'कक्षा शिक्षक'),
+    'subject_teacher' => _t('Subject teacher', 'विषय शिक्षक'),
+    'coordinator' => _t('Coordinator', 'समन्वयक'),
+    _ => _t('Indicator', 'संकेतक'),
+  };
+  String canDo(bool attendance, bool homework) => [
+    if (attendance) _t('attendance', 'उपस्थिति'),
+    if (homework) _t('homework', 'गृहकार्य'),
+  ].join(', ');
+  String get canWord => _t('Can', 'कर सकते हैं');
+  String get noAssignmentsYear => _t('No assignments in this year.', 'इस वर्ष कोई नियुक्ति नहीं।');
+  String get substitutionsWeek => _t('Substitutions this week', 'इस सप्ताह के प्रतिस्थापन');
+  String coversFor(String substitute, String? absent) => _t(
+    '$substitute covers for ${absent ?? 'the regular teacher'}',
+    '$substitute, ${absent ?? 'नियमित शिक्षक'} के स्थान पर',
+  );
+  String get myWeekTitle => _t('My week', 'मेरा सप्ताह');
+  String get periodFree => _t('free', 'खाली');
+  String periodKindWord(String kind) => switch (kind) {
+    'break' => _t('Break', 'अवकाश'),
+    'assembly' => _t('Assembly', 'प्रार्थना सभा'),
+    'activity' => _t('Activity', 'गतिविधि'),
+    _ => kind,
+  };
+  String get todayMark => _t('today', 'आज');
+  String get noPeriodsDefined =>
+      _t('The school has not defined its periods yet.', 'विद्यालय ने अभी कालांश तय नहीं किए हैं।');
   // Session plan, curriculum, date sheet as on the staff website (docs/design/96, part 3)
   String get docsUploadTab => _t('Upload', 'अपलोड');
   String get docsUploadedTab => _t('Uploaded', 'अपलोड किए गए');

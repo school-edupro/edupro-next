@@ -10,66 +10,6 @@ import '../ui/file_screen.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 
-/// The person's week, a day at a time.
-class StaffTimetable extends ConsumerStatefulWidget {
-  const StaffTimetable({super.key, required this.profile});
-  final Profile profile;
-
-  @override
-  ConsumerState<StaffTimetable> createState() => _StaffTimetableState();
-}
-
-class _StaffTimetableState extends ConsumerState<StaffTimetable> {
-  int _day = schoolToday().weekday == 7 ? 1 : schoolToday().weekday;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ref.watch(stringsProvider);
-    final p = widget.profile;
-    return LoadedList<Json>(
-      value: ref.watch(myWeekProvider(p)),
-      refresh: () => ref.refresh(myWeekProvider(p).future),
-      children: (w) {
-        final periods = {for (final x in asList(w['periods'])) '${x['id']}': x};
-        final slots = asList(w['slots']).where((x) => x['weekday'] == _day).toList()
-          ..sort(
-            (a, b) =>
-                ((a['periodNumber'] as num?) ?? 0).compareTo((b['periodNumber'] as num?) ?? 0),
-          );
-        return [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SegmentedButton<int>(
-              showSelectedIcon: false,
-              segments: [
-                for (var d = 1; d <= 6; d++) ButtonSegment(value: d, label: Text(s.weekday(d))),
-              ],
-              selected: {_day},
-              onSelectionChanged: (v) => setState(() => _day = v.first),
-            ),
-          ),
-          const SizedBox(height: Tokens.sp3),
-          if (slots.isEmpty) EmptyLine(s.noPeriods),
-          for (final x in slots)
-            Card(
-              child: ListTile(
-                leading: CircleAvatar(child: Text('${x['periodNumber'] ?? ''}')),
-                title: Text('${x['classCode']}-${x['section']} · ${x['subjectName'] ?? ''}'),
-                subtitle: Text(
-                  [
-                    if (x['room'] != null) '${x['room']}',
-                    if (periods['${x['periodId']}'] != null)
-                      '${s.time(periods['${x['periodId']}']!['startsAt'] as String?)}–${s.time(periods['${x['periodId']}']!['endsAt'] as String?)}',
-                  ].join(' · '),
-                ),
-              ),
-            ),
-        ];
-      },
-    );
-  }
-}
-
 /// The person's payslips of a financial year; each opens as its PDF (password protected, the hint shown).
 class PayslipsScreen extends ConsumerStatefulWidget {
   const PayslipsScreen({super.key, required this.profile});

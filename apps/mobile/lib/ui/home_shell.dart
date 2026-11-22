@@ -39,6 +39,7 @@ import '../staff/my_leave.dart';
 import '../staff/layout.dart' show staffFallback, staffLayoutProvider, staffTabs;
 import 'brand.dart';
 import 'widgets.dart';
+import '../staff/timetable.dart';
 
 /// A tab of the app's bottom bar.
 class AppTab {

@@ -104,3 +104,17 @@ opens the families' Calendar screen (month, holidays, events) reading the staff 
 the calendar's existing suites, permission coverage; `staff_test.dart` (More → the calendar, the staff read, the
 lists); 221 app tests; the staff website checked in a browser on Alpha as a teacher and an accounts user (desktop,
 phone; axe clean); the staff accessibility list gains `/holidays`; the web preview rebuilt.
+
+## Part 5: My timetable (22 Nov 2026)
+
+"Staff app: the Timetable section the same as http://localhost:3002/timetable."
+
+As built: `lib/staff/timetable.dart` — `StaffTimetable` as the website's "Sections and timetable": the lessons today
+("No lessons on Sunday"), **My sections** (the section, the role as a badge that wraps under it, the subject, Can:
+attendance, homework), **Substitutions this week** (the day, period, section and subject — who covers for whom and
+why) and **My week**: Week (a grid, a row per period with its time, Monday to Saturday, today's column marked; a
+lesson's section, subject code and room; "free"; a break or assembly by its kind; it slides sideways) or Day (each
+period of the chosen day: the lesson, free, or the break). Same data as before (`myWeekProvider`,
+`assignmentsProvider`); the old day-only list in `classes.dart` is gone. Tests: `staff_test.dart` (sections, the
+substitution, the grid's six days with the lesson, the break and the free period, the day view; light, dark, Hindi;
+2× text — the role badge first crowded the line, now it wraps); 222 app tests; the web preview rebuilt.
