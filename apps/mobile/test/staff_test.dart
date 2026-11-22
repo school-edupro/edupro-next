@@ -82,6 +82,7 @@ class School {
   final photosRemoved = <String>[];
   int sheetChecks = 0;
   final remarkPuts = <Map<String, Object?>>[];
+  final healthPuts = <Map<String, Object?>>[];
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -230,6 +231,7 @@ class School {
       entry('/verify-marks', 'Verify marks', 'check'),
       entry('/indicators', 'Indicators and progress card', 'chart'),
       entry('/remarks', 'Remarks', 'message'),
+      entry('/health', 'Height and weight', 'heart'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -515,7 +517,7 @@ class School {
               'id': 'e2',
               'code': 'IND',
               'name': 'Indicators',
-              'areas': ['indicators', 'remarks'],
+              'areas': ['indicators', 'remarks', 'health'],
             },
             {
               'id': 'e3',
@@ -839,6 +841,60 @@ class School {
       case 'GET /exams/e2/remark-items/excel':
         return null;
       case 'POST /exams/e2/remark-items/upload':
+        return {
+          'rows': [
+            {'row': 2, 'admissionNo': 'A-41', 'name': 'Kid Sample', 'error': null},
+          ],
+          'ready': 1,
+          'errors': 0,
+          'applied': c.body!['apply'] == true,
+        };
+      case 'GET /exams/e2/health':
+        return {
+          'exam': {'id': 'e2', 'code': 'IND', 'name': 'Indicators'},
+          'section': {'id': '300', 'code': 'VI-A'},
+          'takes': true,
+          'locked': false,
+          'canEnter': true,
+          'rows': [
+            {
+              'studentId': '41',
+              'name': 'Kid Sample',
+              'admissionNo': 'A-41',
+              'rollNo': 1,
+              'current': {
+                'heightCm': '120.0',
+                'weightKg': '22.5',
+                'bmi': '15.6',
+                'bloodGroup': 'B+',
+                'recordedOn': '2026-11-20',
+                'examName': 'Indicators',
+              },
+              'last': {
+                'heightCm': '116.0',
+                'weightKg': '21.0',
+                'bmi': '15.6',
+                'bloodGroup': 'B+',
+                'recordedOn': '2026-04-10',
+                'examName': 'Term 1',
+              },
+            },
+            {
+              'studentId': '42',
+              'name': 'Ria Sample',
+              'admissionNo': 'A-42',
+              'rollNo': 2,
+              'current': null,
+              'last': null,
+            },
+          ],
+        };
+      case 'PUT /exams/e2/health':
+        healthPuts.add(c.body!);
+        return {'recorded': (c.body!['rows'] as List).length};
+      case 'GET /exams/e2/health/excel':
+        return null;
+      case 'POST /exams/e2/health/upload':
         return {
           'rows': [
             {'row': 2, 'admissionNo': 'A-41', 'name': 'Kid Sample', 'error': null},
@@ -2091,6 +2147,128 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const Key('rmSave')), 300, scrollable: list);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Remarks, scrolled');
+  });
+
+  testWidgets('Height and weight in the app: last reading, what changed is saved, Excel first', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2600), overrides: pickers);
+    final s = S(false);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Height and weight'));
+    await tester.pumpAndSettle();
+    // no web page; only the class teacher's sections
+    expect(find.byKey(const Key('hwScreen')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-health')), findsNothing);
+    expect(find.text('VI-A · 1 of 2 entered'), findsOneWidget);
+    // the sheet by Excel first, with its upload
+    expect(find.byKey(const Key('xlUpload')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('xlCard'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('hwSheet'))).dy),
+    );
+    // the last reading beside this one
+    expect(
+      find.text('Last reading: 116 cm · 21 kg · BMI 15.6 (Term 1, 10 Apr 2026)'),
+      findsOneWidget,
+    );
+    expect(find.text('Last reading: —'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const Key('hwHeight-41'))).controller!.text, '120');
+    expect(tester.widget<TextField>(find.byKey(const Key('hwWeight-41'))).controller!.text, '22.5');
+    expect(find.text('BMI 15.6'), findsOneWidget);
+    // nothing changed: nothing sent
+    await tester.tap(find.byKey(const Key('hwSave')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.hwNothing), findsOneWidget);
+    expect(school.healthPuts, isEmpty);
+    // out of range is refused first
+    await tester.enterText(find.byKey(const Key('hwHeight-42')), '300');
+    await tester.tap(find.byKey(const Key('hwSave')));
+    await tester.pumpAndSettle();
+    expect(find.text('Ria Sample: ${s.hwRange}'), findsOneWidget);
+    // Ria's readings and blood group; Kid's weight emptied (it is cleared)
+    await tester.enterText(find.byKey(const Key('hwHeight-42')), '118');
+    await tester.enterText(find.byKey(const Key('hwWeight-42')), '20');
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('hwPupil-42')),
+        matching: find.byType(DropdownButtonFormField<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('O+').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('hwWeight-41')), '');
+    await tester.tap(find.byKey(const Key('hwSave')));
+    await tester.pumpAndSettle();
+    expect(school.healthPuts.single, {
+      'classSectionId': '300',
+      'rows': [
+        {'studentId': '41', 'weightKg': null},
+        {'studentId': '42', 'heightCm': 118, 'weightKg': 20, 'bloodGroup': 'O+'},
+      ],
+    });
+    expect((school.healthPuts.single['rows'] as List).first, containsPair('weightKg', null));
+    expect(find.text('Saved (2).'), findsOneWidget);
+    // the sheet by Excel
+    await tester.tap(find.byKey(const Key('xlDownload')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e2/health/excel').query, {
+      'classSectionId': '300',
+    });
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Height and weight: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600), overrides: pickers);
+        final s = S(hindi);
+        await tester.tap(find.text(s.classes).last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.menu('Height and weight')));
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(
+            tester,
+            meetsGuideline(g),
+            reason: 'Height and weight: ${g.description}',
+          );
+        }
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Height and weight: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780), overrides: pickers);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Height and weight'));
+    await tester.tap(find.text('Height and weight'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Height and weight');
+    final list = find
+        .descendant(of: find.byKey(const Key('hwScreen')), matching: find.byType(Scrollable))
+        .first;
+    await tester.scrollUntilVisible(find.byKey(const Key('hwSave')), 300, scrollable: list);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Height and weight, scrolled');
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

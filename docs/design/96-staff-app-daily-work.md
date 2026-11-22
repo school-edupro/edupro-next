@@ -310,3 +310,22 @@ empty box clears it); the API's refusals in words; a section with nothing to wri
 `staff_test.dart` (By Excel first on both screens, others' categories, a remark from the list, a list-only remark,
 Save's rows, the sheet and an upload, a section with nothing to write; light, dark, Hindi, twice the text); 254 app
 tests; the web preview rebuilt.
+
+## Part 14: Height and weight (22 Nov 2026)
+
+"Staff app: the Height and weight section the same as the staff website, and the Excel upload option there."
+
+As built: `lib/staff/health.dart` — `StaffHealthScreen` (`nativeScreen('/health')` for staff; the families' Health
+screen keeps its name), as the website's page: the line ("The class teacher enters …"), **Exam** (those taking
+height and weight), **Section** (the class teacher's: "You are not the class teacher of a section in this exam."
+otherwise), "VI-A · n of m entered"; **By Excel** first (`SheetByExcel`: the sheet with each pupil's last reading;
+upload checked then saved — offered while the class teacher may enter and the exam is open); each pupil a card — the
+admission number, **Last reading** ("116 cm · 21 kg · BMI 15.6 (Term 1, 10 Apr 2026)"), **Height cm**, **Weight
+kg**, **Blood group** (this one's, else the last), BMI (worked out on saving); **Save height and weight** sends only
+what changed, an emptied box as null so the API clears it (the generated row drops nulls, so the save writes its own
+row); "Nothing changed." when nothing did; heights 40–250 cm and weights 3–200 kg checked first; locked: read only,
+"The exam is locked …"; not the class teacher: "Only the class teacher …". Calls added:
+`ExamEntryController_health`, `_putHealth`, `_healthExcel !file`, `_healthUpload`. No API change. Tests:
+`staff_test.dart` (By Excel first with its upload, the last reading, nothing changed, out of range, the changed rows
+with a cleared weight, the sheet; light, dark, Hindi, twice the text); 259 app tests; the web preview rebuilt and
+checked to serve the new build (Upload the filled sheet, Save height and weight, Choose a remark).

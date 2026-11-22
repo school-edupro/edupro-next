@@ -1642,6 +1642,64 @@ class S {
     _ => null,
   };
 
+  // ---- Height and weight as on the staff website (docs/design/96 part 14) ----
+  String get hwIntro => _t(
+    'The class teacher enters each pupil’s height and weight in the term exams.',
+    'कक्षा-अध्यापक सत्र परीक्षाओं में हर विद्यार्थी की लंबाई और वज़न भरते हैं।',
+  );
+  String get hwNoExam => _t(
+    'No exam of this year takes height and weight.',
+    'इस वर्ष की कोई परीक्षा लंबाई और वज़न नहीं लेती।',
+  );
+  String get hwNoSection => _t(
+    'You are not the class teacher of a section in this exam.',
+    'आप इस परीक्षा में किसी वर्ग के कक्षा-अध्यापक नहीं हैं।',
+  );
+  String get hwNotTaken =>
+      _t('This exam does not take height and weight.', 'यह परीक्षा लंबाई और वज़न नहीं लेती।');
+  String get hwLast => _t('Last reading', 'पिछली माप');
+  String get hwHealthCheck => _t('health check', 'स्वास्थ्य जाँच');
+  String get hwHeight => _t('Height cm', 'लंबाई सेमी');
+  String get hwWeight => _t('Weight kg', 'वज़न किग्रा');
+  String get hwBlood => _t('Blood group', 'रक्त समूह');
+  String get hwSave => _t('Save height and weight', 'लंबाई और वज़न सहेजें');
+  String hwSaved(int n) => _t('Saved ($n).', 'सहेजा गया ($n)।');
+  String get hwNothing => _t('Nothing changed.', 'कुछ नहीं बदला।');
+  String get hwLockedNote => _t(
+    'The exam is locked; the coordinator can reopen it.',
+    'परीक्षा बंद है; समन्वयक इसे फिर खोल सकते हैं।',
+  );
+  String get hwOnlyClassTeacher => _t(
+    'Only the class teacher of this section enters height and weight.',
+    'इस वर्ग की लंबाई और वज़न केवल कक्षा-अध्यापक भरते हैं।',
+  );
+  String get hwRange =>
+      _t('Height 40 to 250 cm, weight 3 to 200 kg.', 'लंबाई 40 से 250 सेमी, वज़न 3 से 200 किग्रा।');
+  String hwNotNumber(String name) => _t('$name: write a number.', '$name: संख्या लिखें।');
+  String get xlHealthHelp => _t(
+    'The sheet lists the section with each pupil’s last reading; fill height in cm and weight in kg (BMI is worked out).',
+    'शीट में वर्ग के हर विद्यार्थी की पिछली माप है; लंबाई सेमी में और वज़न किग्रा में भरें (BMI अपने आप बनता है)।',
+  );
+  String? hwError(String type) => switch (type) {
+    'exams.entry_locked' => _t(
+      'Height and weight is locked for this class; ask the coordinator to reopen it.',
+      'इस कक्षा की लंबाई और वज़न बंद है; समन्वयक से फिर खुलवाएँ।',
+    ),
+    'exams.not_assigned' => _t(
+      'Only the class teacher of this section enters height and weight.',
+      'इस वर्ग की लंबाई और वज़न केवल कक्षा-अध्यापक भरते हैं।',
+    ),
+    'exams.area_off' => _t(
+      'This exam does not take height and weight.',
+      'यह परीक्षा लंबाई और वज़न नहीं लेती।',
+    ),
+    'validation-failed' => _t(
+      'A value was not accepted: height 40 to 250 cm, weight 3 to 200 kg.',
+      'कोई मान स्वीकार नहीं हुआ: लंबाई 40 से 250 सेमी, वज़न 3 से 200 किग्रा।',
+    ),
+    _ => null,
+  };
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

@@ -33,6 +33,7 @@ import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
 import '../staff/daily_work.dart';
 import '../staff/documents.dart';
+import '../staff/health.dart';
 import '../staff/indicators.dart';
 import '../staff/lesson_plans.dart';
 import '../staff/syllabus.dart';
@@ -102,6 +103,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/indicators' => IndicatorsScreen(profile: p),
       // a remark a pupil and category, the sheet by Excel (docs/design/96 part 13)
       '/remarks' => RemarksScreen(profile: p),
+      // height, weight, blood group a pupil, the sheet by Excel (docs/design/96 part 14)
+      '/health' => StaffHealthScreen(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       // upload a lesson for approval, the lesson report, a lesson in full (docs/design/96 part 7)
       '/lesson-plans' => LessonPlansScreen(profile: p),

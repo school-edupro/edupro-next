@@ -340,6 +340,22 @@ class EduProApi {
   Future<dynamic> examRemarksItemsUpload({required SectionSheetUploadDto body, required String id}) =>
       _t.send('POST', '/exams/${Uri.encodeComponent(id)}/remark-items/upload', body: body.toJson());
 
+  /// GET /exams/{id}/health — A section's height and weight for the exam, with each pupil's last reading
+  Future<dynamic> examEntryHealth({required String id, required String classSectionId, String? subjectId}) =>
+      _t.send('GET', '/exams/${Uri.encodeComponent(id)}/health', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// PUT /exams/{id}/health
+  Future<dynamic> examEntryPutHealth({required PutHealthDto body, required String id}) =>
+      _t.send('PUT', '/exams/${Uri.encodeComponent(id)}/health', body: body.toJson());
+
+  /// GET /exams/{id}/health/excel — A section's height and weight as an Excel sheet to fill (base64)
+  Future<ApiFile> examEntryHealthExcel({required String id, required String classSectionId, String? subjectId}) =>
+      _t.file('GET', '/exams/${Uri.encodeComponent(id)}/health/excel', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// POST /exams/{id}/health/upload — A filled height and weight sheet: preview, then save with apply
+  Future<dynamic> examEntryHealthUpload({required SectionSheetUploadDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/health/upload', body: body.toJson());
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');
@@ -1334,6 +1350,42 @@ class PutRemarkItemsDtoRowsItem {
         'categoryId': categoryId,
         'text': text,
         if (bankCode != null) 'bankCode': bankCode,
+      };
+}
+
+/** The PutHealthDto the API takes. */
+class PutHealthDto {
+  const PutHealthDto({required this.classSectionId, this.recordedOn, required this.rows});
+  final String classSectionId;
+  final String? recordedOn;
+  final List<PutHealthDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        if (recordedOn != null) 'recordedOn': recordedOn,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutHealthDtoRowsItem the API takes. */
+class PutHealthDtoRowsItem {
+  const PutHealthDtoRowsItem({required this.studentId, this.heightCm, this.weightKg, this.bloodGroup, this.visionLeft, this.visionRight, this.dental, this.notes});
+  final String studentId;
+  final num? heightCm;
+  final num? weightKg;
+  final String? bloodGroup;
+  final String? visionLeft;
+  final String? visionRight;
+  final String? dental;
+  final String? notes;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        if (heightCm != null) 'heightCm': heightCm,
+        if (weightKg != null) 'weightKg': weightKg,
+        if (bloodGroup != null) 'bloodGroup': bloodGroup,
+        if (visionLeft != null) 'visionLeft': visionLeft,
+        if (visionRight != null) 'visionRight': visionRight,
+        if (dental != null) 'dental': dental,
+        if (notes != null) 'notes': notes,
       };
 }
 
