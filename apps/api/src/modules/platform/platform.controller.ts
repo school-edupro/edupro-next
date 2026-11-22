@@ -8,6 +8,7 @@ import {
   CreateCampusDto,
   CreateYearDto,
   SetSettingDto,
+  SetSettingsDto,
   StageDto,
   UpdateCampusDto,
   UpdateSchoolDto,
@@ -171,6 +172,15 @@ export class PlatformController {
   @RequirePermission(PLATFORM.settingsView, { description: 'View school settings' })
   async listSettings(@ReqCtx() ctx: RequestContext) {
     return { data: await this.settings.current(requireTenant(ctx)) };
+  }
+
+  @Put('settings')
+  @ApiOperation({
+    summary: 'Set several settings at once from a date (default today); all or none',
+  })
+  @RequirePermission(PLATFORM.settingsEdit, { description: 'Edit school settings' })
+  async setSettings(@ReqCtx() ctx: RequestContext, @Body() body: SetSettingsDto) {
+    return { data: await this.settings.setMany(ctx, body.values, body.validFrom) };
   }
 
   @Get('settings/:key/history')

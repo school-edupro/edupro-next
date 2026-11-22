@@ -13,6 +13,13 @@ export const SetSettingSchema = z.object({
 });
 export class SetSettingDto extends createZodDto(SetSettingSchema) {}
 
+/** Several settings saved together (docs/design/95): key → value, all from one date (default today). */
+export const SetSettingsSchema = z.object({
+  values: z.record(z.string().min(1).max(80), z.unknown()),
+  validFrom: DateSchema.optional(),
+});
+export class SetSettingsDto extends createZodDto(SetSettingsSchema) {}
+
 export const SettingKeyParam = z.enum(SETTING_KEYS as [string, ...string[]]);
 
 // ---- years ---------------------------------------------------------------------------------------
