@@ -29,7 +29,6 @@ const Map<String, String> menuHindi = {
   'Help': 'सहायता',
   'Help desk': 'सहायता केंद्र',
   'Home': 'होम',
-  'Homework': 'गृहकार्य',
   'Hostel': 'छात्रावास',
   'Hostel desk': 'छात्रावास डेस्क',
   'Indicators and progress card': 'संकेतक और प्रगति कार्ड',

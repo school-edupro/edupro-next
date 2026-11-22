@@ -98,7 +98,7 @@ dynamic api(Call c) {
                   'label': 'My child',
                   'icon': 'users',
                   'items': [
-                    {'href': '/homework', 'label': 'Homework', 'help': null, 'icon': 'users'},
+                    {'href': '/homework', 'label': 'Daily work', 'help': null, 'icon': 'users'},
                     {'href': '/assistant', 'label': 'Assistant', 'help': null, 'icon': 'message'},
                   ],
                 },
@@ -223,7 +223,7 @@ void main() {
       // More: the parent's menu, then in Hindi
       await tester.tap(find.text('More'));
       await tester.pumpAndSettle();
-      expect(find.text('Homework'), findsOneWidget);
+      expect(find.text('Daily work'), findsOneWidget);
       // Ask is Home's
       expect(find.byKey(const Key('homeAsk')), findsNothing);
       expect(t.calls.where((c) => c.path == '/me/menu').last.query, {'kind': 'parent'});
@@ -234,7 +234,7 @@ void main() {
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       // the menu's words in Hindi from the web apps' own dictionary
-      expect(find.text('गृहकार्य'), findsOneWidget);
+      expect(find.text('दैनिक कार्य'), findsOneWidget);
     },
   );
 
