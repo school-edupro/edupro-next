@@ -80,3 +80,7 @@ Decided without asking:
   CSS `.ep-setform*` in `packages/ui/src/app.css`. Checked in a browser: every area on Alpha (desktop and phone, edits
   tried, saves blocked, axe clean) and a real save on a test school (two settings today, one back to standard, one
   from a later date — confirmed through the API). The admin a11y list gains three areas.
+- **D (22 Nov 2026).** Closed: type-checks (API, admin, UI), lint and formatting, the API's settings, layout and
+  permission suites (21), the admin accessibility pages for School settings (7, with three areas and both layout
+  pages) and the local secret scan pass. The test school used for the real save is switched off again; nothing was
+  saved on Alpha.
