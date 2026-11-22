@@ -32,6 +32,7 @@ import '../staff/approvals.dart';
 import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
 import '../staff/daily_work.dart';
+import '../staff/date_sheet.dart';
 import '../staff/documents.dart';
 import '../staff/health.dart';
 import '../staff/indicators.dart';
@@ -108,6 +109,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/health' => StaffHealthScreen(profile: p),
       // each student's subjects: the stream, a group's subject, the others, Opt (docs/design/96 part 15)
       '/subject-choices' => SubjectChoicesScreen(profile: p),
+      // the date sheets of the teacher's classes: a row a date, a column a class (docs/design/96 part 16)
+      '/date-sheet' => StaffDateSheetScreen(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       // upload a lesson for approval, the lesson report, a lesson in full (docs/design/96 part 7)
       '/lesson-plans' => LessonPlansScreen(profile: p),

@@ -140,6 +140,8 @@ String staffListLabel(S s, FamilyEntry e) => switch (e.href) {
   '/my-payslips' => s.payslips,
   '/my-attendance' => s.myAttendance,
   '/my-leave' => s.myLeave,
+  // the staff menu's own name (the families' short "Date sheet" is theirs)
+  '/date-sheet' => s.menu(e.label),
   _ => shortLabel(s, e),
 };
 

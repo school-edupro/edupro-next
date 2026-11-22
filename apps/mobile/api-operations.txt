@@ -110,6 +110,8 @@ SubjectChoicesController_sections
 SubjectChoicesController_list
 SubjectChoicesController_put
 SubjectChoicesController_lastYear
+# the exam date sheets of the teacher's classes as on the staff website (docs/design/96 part 16)
+ExamDateSheetsController_staff
 DailyWorkController_sheetOptions
 DailyWorkController_sheet
 DailyWorkController_saveSheet

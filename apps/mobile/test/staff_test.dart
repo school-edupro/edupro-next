@@ -234,6 +234,7 @@ class School {
       entry('/remarks', 'Remarks', 'message'),
       entry('/health', 'Height and weight', 'heart'),
       entry('/subject-choices', 'Subject choices', 'book'),
+      entry('/date-sheet', 'Exam date sheet', 'calendar'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -993,6 +994,49 @@ class School {
         return {'saved': 2};
       case 'POST /exams/subject-choices/last-year':
         return {'copied': 1};
+      case 'GET /exams/date-sheets':
+        Map<String, Object?> paper(String subject, String on, [String? from, String? to]) => {
+          'subject': subject,
+          'examOn': on,
+          'startsAt': from,
+          'endsAt': to,
+        };
+        return {
+          'data': [
+            {
+              'id': 'd1',
+              'name': 'Term 1',
+              'note': 'Reporting time 8:30.',
+              'classes': [
+                {
+                  'classId': '60',
+                  'classCode': 'VI',
+                  'papers': [paper('English', day(-30), '09:00', '12:00')],
+                },
+              ],
+            },
+            {
+              'id': 'd2',
+              'name': 'Term 2',
+              'note': null,
+              'classes': [
+                {
+                  'classId': '60',
+                  'classCode': 'VI',
+                  'papers': [
+                    paper('Mathematics', day(3), '09:00', '12:00'),
+                    paper('Hindi', day(5)),
+                  ],
+                },
+                {
+                  'classId': '70',
+                  'classCode': 'VII',
+                  'papers': [paper('Science', day(3), '09:00')],
+                },
+              ],
+            },
+          ],
+        };
       case 'GET /exams/entry-status/waiting':
         Map<String, Object?> waiting(String subject, String name) => {
           'examId': 'e1',
@@ -1923,12 +1967,16 @@ void main() {
     expect(find.text('Language (1/4)'), findsOneWidget);
     expect(find.text('Numeracy (0/2)'), findsOneWidget);
     expect(find.text('Also entered by: Ravi Sample (E099)'), findsOneWidget);
-    // the sheet by Excel comes first, its upload offered while entry is open (not after every pupil)
-    expect(find.byKey(const Key('xlUpload')), findsOneWidget);
+    // By Excel: one closed line above the pupils (as on Height and weight); opened, its upload while entry is open
+    expect(find.byKey(const Key('xlFold')), findsOneWidget);
+    expect(find.byKey(const Key('xlUpload')), findsNothing);
     expect(
       tester.getTopLeft(find.byKey(const Key('xlCard'))).dy,
       lessThan(tester.getTopLeft(find.byKey(const Key('inRatings'))).dy),
     );
+    await tester.tap(find.byKey(const Key('xlFold')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('xlUpload')), findsOneWidget);
     // a goal's name over its indicators; the level with its words
     final kid = find.byKey(const Key('inPupil-41'));
     expect(find.descendant(of: kid, matching: find.text('Speaking')), findsOneWidget);
@@ -2077,6 +2125,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text(s.menu('Indicators and progress card')));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('xlFold')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('xlUpload')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('inPickPhoto')));
@@ -2098,7 +2148,7 @@ void main() {
     final list = find
         .descendant(of: find.byKey(const Key('inScreen')), matching: find.byType(Scrollable))
         .first;
-    for (final k in ['inSave', 'xlUpload', 'inSaveWords', 'inAddPhoto']) {
+    for (final k in ['xlFold', 'inSave', 'inSaveWords', 'inAddPhoto']) {
       await tester.scrollUntilVisible(find.byKey(Key(k)), 300, scrollable: list);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: k);
@@ -2492,6 +2542,83 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const Key('scLastYear')), 300, scrollable: list);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Subject choices, scrolled');
+  });
+
+  testWidgets('Exam date sheet in the app: the coming exam, a row a date, a column a class', (
+    tester,
+  ) async {
+    final (t, _) = await pumpStaff(tester, size: const Size(420, 2000));
+    final s = S(false);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exam date sheet'));
+    await tester.pumpAndSettle();
+    // no web page; the coming exam first
+    expect(find.byKey(const Key('dsScreen')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-date-sheet')), findsNothing);
+    expect(t.calls.any((c) => c.path == '/exams/date-sheets'), isTrue);
+    expect(find.text('Term 2'), findsWidgets);
+    // a row a date (two papers on day 3 share its row)
+    expect(find.text(s.date(day(3))), findsOneWidget);
+    expect(find.text(s.date(day(5))), findsOneWidget);
+    // the classes as columns; each paper with its time; the day under the date
+    expect(find.text('VI'), findsOneWidget);
+    expect(find.text('VII'), findsOneWidget);
+    expect(find.text('Mathematics'), findsOneWidget);
+    expect(find.text('09:00–12:00'), findsOneWidget);
+    expect(find.text('Science'), findsOneWidget);
+    expect(find.text('09:00'), findsOneWidget);
+    expect(find.text('Hindi'), findsOneWidget);
+    expect(find.text(s.dsDayLong(DateTime.parse(day(3)).weekday)), findsOneWidget);
+    // another exam, with its note
+    await tester.tap(find.byKey(const Key('dsExam')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Term 1').last);
+    await tester.pumpAndSettle();
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('Reporting time 8:30.'), findsOneWidget);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Exam date sheet: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2000));
+        final s = S(hindi);
+        await tester.tap(find.text(s.classes).last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.menu('Exam date sheet')));
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: 'Exam date sheet: ${g.description}');
+        }
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Exam date sheet: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Exam date sheet'));
+    await tester.tap(find.text('Exam date sheet'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Exam date sheet');
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

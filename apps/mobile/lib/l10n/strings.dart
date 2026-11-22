@@ -1737,6 +1737,28 @@ class S {
     '$n विद्यार्थियों को पिछले वर्ष के विषय दिए गए।',
   );
 
+  // ---- Exam date sheet as on the staff website (docs/design/96 part 16) ----
+  String get dsIntro => _t(
+    'The papers of each exam for your classes: date, day and time.',
+    'आपकी कक्षाओं की हर परीक्षा के पेपर: तारीख, दिन और समय।',
+  );
+  String get dsNone => _t('No date sheet yet.', 'अभी कोई डेट शीट नहीं।');
+  String dsDayLong(int weekday) => (hindi
+      ? const ['सोमवार', 'मंगलवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार', 'रविवार']
+      : const [
+          'Monday',
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday',
+          'Sunday',
+        ])[(weekday - 1) % 7];
+  String get dsSheetLabel => _t(
+    'Date sheet: a row a date, a column a class',
+    'डेट शीट: हर तारीख एक पंक्ति, हर कक्षा एक कॉलम',
+  );
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

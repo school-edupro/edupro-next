@@ -372,6 +372,10 @@ class EduProApi {
   Future<dynamic> subjectChoicesLastYear({required SubjectChoicesQueryDto body}) =>
       _t.send('POST', '/exams/subject-choices/last-year', body: body.toJson());
 
+  /// GET /exams/date-sheets — Date sheets of the classes I may read marks of (the working year)
+  Future<dynamic> examDateSheetsStaff() =>
+      _t.send('GET', '/exams/date-sheets');
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');

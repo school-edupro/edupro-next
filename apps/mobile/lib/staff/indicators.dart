@@ -510,8 +510,9 @@ class _IndicatorSheetViewState extends ConsumerState<IndicatorSheetView> {
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: Tokens.sp2),
-        // first, so it is there without going past every pupil (a progress card has many indicators)
+        // folded, closed, as on Height and weight: one line that opens Download and Upload (asked, 22 Nov 2026)
         SheetByExcel(
+          folded: true,
           title: '${section['code']} · ${set['name']}',
           help: s.xlIndicatorsHelp,
           canUpload: open,

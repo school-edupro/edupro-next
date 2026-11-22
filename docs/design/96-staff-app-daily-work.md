@@ -353,3 +353,21 @@ come from exams. Calls added: `SubjectChoicesController_sections`, `_list`, `_pu
 Tests: `staff_test.dart` (the sections, the compulsory line, a marked subject locked, a group pick, ticks, the stream,
 Opt, Save's rows with a stream change, last year, a section to see only; light, dark, Hindi, twice the text; Height
 and weight's closed fold); 264 app tests; the web preview rebuilt.
+
+## Part 16: Exam date sheet; By Excel folded on Indicators (22 Nov 2026)
+
+"Staff app: the Exam date sheet section the same as the staff website; on Indicators and progress card hide By Excel
+the same as on Height and weight."
+
+**By Excel on Indicators** — `SheetByExcel(folded: true)`, as on Height and weight: one closed line above the
+areas; opened, Download and Upload. Remarks keeps it open.
+
+**Exam date sheet** — `lib/staff/date_sheet.dart`, `StaffDateSheetScreen` (`nativeScreen('/date-sheet')` for staff;
+the families keep theirs), as the website's page: the line ("The papers of each exam for your classes: date, day
+and time."), **Exam** (the date sheets of the classes the person may read marks of, `GET exams/date-sheets`; the
+coming one first), then the website's table — a row a date (the date, the day under it; today marked), a column a
+class, each paper with its time ("09:00–12:00") — sliding sideways when wider than the phone, and the sheet's note;
+"No date sheet yet." when none. In a staff list the entry keeps the menu's name "Exam date sheet" (the families'
+short "Date sheet" is theirs). Call added: `ExamDateSheetsController_staff`. No API change. Tests:
+`staff_test.dart` (the coming exam, classes as columns, papers and times, the day, another exam with its note;
+light, dark, Hindi, twice the text; Indicators' closed fold); 269 app tests; the web preview rebuilt.
