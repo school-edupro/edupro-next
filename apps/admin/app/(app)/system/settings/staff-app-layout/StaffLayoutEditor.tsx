@@ -4,14 +4,16 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { when } from '@/lib/family-layout';
 import {
-  CLASSES_TAB,
+  newListKey,
   sameStaffLayout,
   staffHidden,
   staffLayoutProblems,
+  staffShownTabs,
   type StaffLayout,
   type StaffLayoutSetup,
+  type StaffListTab,
 } from '@/lib/staff-layout';
-import { MenuEditor, OrderedList } from '../family-app-layout/FamilyLayoutEditor';
+import { MenuEditor, OrderedList, TabName } from '../family-app-layout/FamilyLayoutEditor';
 import { discardStaffLayout, publishStaffLayout, saveStaffLayoutDraft } from './actions';
 
 /** The staff app's Home as the draft has it: the greeting, the four figures, the tiles, the cards and the tab bar. */
@@ -35,11 +37,7 @@ function Preview({
     const needs = cardNeeds(c);
     return !needs || !hidden.has(needs);
   });
-  const shownTabs = draft.tabs.filter((h) => !hidden.has(h));
-  for (const h of shortcuts) {
-    if (shownTabs.length >= 3) break;
-    if (!shownTabs.includes(h)) shownTabs.push(h);
-  }
+  const shownTabs = staffShownTabs(draft, hidden);
   const tile = (text: string) => (
     <div
       key={text}
@@ -189,8 +187,137 @@ function Preview({
 }
 
 /**
- * The staff app layout editor (docs/design/94): the bottom tabs (Home and More fixed, three between), the Home
- * shortcuts and the Home work cards, with a preview; Save draft, Publish (asks first), Discard the draft, Start again
+ * The list tabs (docs/design/94, part 3): each with its name (and Hindi name) and its screens in order, as the families'
+ * Academics tab; the school adds its own (up to the limit) and removes one that is not a bottom tab.
+ */
+function ListTabs({
+  lists,
+  tabs,
+  max,
+  maxItems,
+  screenOptions,
+  labelOf,
+  isHidden,
+  canEdit,
+  onChange,
+}: {
+  lists: StaffListTab[];
+  tabs: string[];
+  max: number;
+  maxItems: number;
+  screenOptions: Array<{ key: string; label: string }>;
+  labelOf: (key: string) => { label: string; sub?: string };
+  isHidden: (key: string) => boolean;
+  canEdit: boolean;
+  onChange: (next: StaffListTab[]) => void;
+}) {
+  const setList = (i: number, x: StaffListTab) => onChange(lists.map((y, j) => (j === i ? x : y)));
+  return (
+    <>
+      <section
+        className="ep-card"
+        aria-labelledby="sal-lists-h"
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 'var(--sp-2)',
+            flexWrap: 'wrap',
+            alignItems: 'baseline',
+          }}
+        >
+          <h2 id="sal-lists-h" className="ep-cdash__h3" style={{ margin: 0 }}>
+            Tab lists
+          </h2>
+          <span className="ep-field__help" style={{ margin: 0 }}>
+            {`${String(lists.length)} of ${String(max)}`}
+          </span>
+        </div>
+        <p className="ep-field__help" style={{ marginTop: 'var(--sp-1)' }}>
+          A list tab shows the screens you choose, in your order — like the families’ Academics tab.
+          Put a list in the Bottom tabs to use it. Staff who cannot open its first screen do not get
+          the tab; inside, each person sees only the screens they can open.
+        </p>
+        {canEdit ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={lists.length >= max}
+            data-testid="sal-list-add"
+            onClick={() =>
+              onChange([
+                ...lists,
+                { key: newListKey(lists), label: 'New list', labelHi: null, items: [] },
+              ])
+            }
+          >
+            {lists.length >= max ? `Full (${String(max)} lists)` : 'Add a tab list'}
+          </Button>
+        ) : null}
+      </section>
+      {lists.map((x, i) => {
+        const inTabs = tabs.includes(x.key);
+        const name = x.label.trim() || 'New list';
+        return (
+          <OrderedList
+            key={x.key}
+            id={`sal-list-${x.key}`}
+            title={`Tab list: ${name}`}
+            help={
+              inTabs
+                ? 'One of the bottom tabs. Its screens, in this order:'
+                : 'Not a bottom tab yet: add it under Bottom tabs to use it. Its screens, in this order:'
+            }
+            items={x.items}
+            labelOf={labelOf}
+            options={screenOptions}
+            min={1}
+            max={maxItems}
+            addLabel={`Add a screen to ${name}`}
+            canEdit={canEdit}
+            onChange={(items) => setList(i, { ...x, items })}
+            isHidden={isHidden}
+          >
+            <TabName
+              idBase={`sal-list-${x.key}`}
+              label={x.label}
+              labelHi={x.labelHi}
+              required
+              canEdit={canEdit}
+              onChange={(label, labelHi) => setList(i, { ...x, label: label ?? '', labelHi })}
+            />
+            {canEdit ? (
+              <p style={{ margin: '0 0 var(--sp-3)' }}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={inTabs}
+                  aria-label={`Remove the tab list ${name}`}
+                  onClick={() => onChange(lists.filter((y) => y.key !== x.key))}
+                >
+                  Remove this list
+                </Button>
+                {inTabs ? (
+                  <span className="ep-field__help" style={{ marginLeft: 'var(--sp-2)' }}>
+                    Take it out of the Bottom tabs first.
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+          </OrderedList>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * The staff app layout editor (docs/design/94): the bottom tabs (Home and More fixed, three between), the tab lists,
+ * the Home shortcuts and the Home work cards, with a preview; Save draft, Publish (asks first), Discard the draft, Start again
  * from the standard layout; leaving with unsaved changes asks first.
  */
 export function StaffLayoutEditor({
@@ -214,12 +341,24 @@ export function StaffLayoutEditor({
     [catalogue.screens],
   );
   const cardOf = useMemo(() => new Map(catalogue.cards.map((c) => [c.key, c])), [catalogue.cards]);
-  const labelOf = (key: string) => ({
-    label: key === CLASSES_TAB ? 'Classes' : (screenLabel.get(key) ?? key),
-    sub: key === CLASSES_TAB ? 'My sections: homework and marks (for those who teach)' : undefined,
-  });
-  const cardLabel = (key: string) => cardOf.get(key)?.label ?? key;
   const hidden = staffHidden(draft);
+  const lists = draft.lists ?? [];
+  const labelOf = (key: string) => {
+    const x = lists.find((y) => y.key === key);
+    if (!x) return { label: screenLabel.get(key) ?? key };
+    return {
+      label: x.label.trim() || 'New list',
+      sub: x.items.length
+        ? `A list tab: ${x.items.map((h) => screenLabel.get(h) ?? h).join(', ')}`
+        : 'A list tab with no screens yet',
+    };
+  };
+  // a list tab is marked hidden when every screen in it is
+  const isHiddenTab = (key: string) => {
+    const x = lists.find((y) => y.key === key);
+    return x ? x.items.length > 0 && x.items.every((h) => hidden.has(h)) : hidden.has(key);
+  };
+  const cardLabel = (key: string) => cardOf.get(key)?.label ?? key;
   const standardNames = useMemo(
     () => Object.fromEntries(catalogue.groups.map((g) => [g.key, g.label])),
     [catalogue.groups],
@@ -227,7 +366,7 @@ export function StaffLayoutEditor({
   const dirty = !sameStaffLayout(draft, setup.draft);
   const problems = staffLayoutProblems(draft, catalogue);
   const screenOptions = catalogue.screens.map((s) => ({ key: s.href, label: s.label }));
-  const set = (part: keyof StaffLayout) => (next: string[]) => {
+  const set = (part: 'tabs' | 'shortcuts' | 'cards') => (next: string[]) => {
     setMsg(null);
     setDraft({ ...draft, [part]: next });
   };
@@ -377,11 +516,14 @@ export function StaffLayoutEditor({
           <OrderedList
             id="sal-tabs"
             title="Bottom tabs"
-            help="Home is always first and More always last; choose the three in between. A tab someone cannot open gives its place to the next of the shortcuts."
+            help="Home is always first and More always last; choose the three in between: a screen or one of the tab lists below. A tab someone cannot open gives its place to the next of the shortcuts."
             items={draft.tabs}
             labelOf={labelOf}
             options={[
-              { key: CLASSES_TAB, label: 'Classes (my sections: homework and marks)' },
+              ...lists.map((x) => ({
+                key: x.key,
+                label: `${x.label.trim() || 'New list'} (a tab list)`,
+              })),
               ...screenOptions,
             ]}
             min={catalogue.limits.tabs}
@@ -391,7 +533,21 @@ export function StaffLayoutEditor({
             fixedLast="More — always last"
             canEdit={canEdit}
             onChange={set('tabs')}
+            isHidden={isHiddenTab}
+          />
+          <ListTabs
+            lists={lists}
+            tabs={draft.tabs}
+            max={catalogue.limits.lists.max}
+            maxItems={catalogue.limits.lists.items.max}
+            screenOptions={screenOptions}
+            labelOf={labelOf}
             isHidden={(k) => hidden.has(k)}
+            canEdit={canEdit}
+            onChange={(next) => {
+              setMsg(null);
+              setDraft({ ...draft, lists: next });
+            }}
           />
           <OrderedList
             id="sal-shortcuts"

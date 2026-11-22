@@ -133,10 +133,10 @@ the Classes page, Home tiles) and the app's More · **I** close.
 "Staff app layout: the Attendance and Classes tabs cannot be given screens, as the student app's Academics tab can;
 and the admin should rename them."
 
-| Question                   | Answer                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------ |
-| The Attendance and Classes | List tabs the school edits: its screens in order and the tab's name; it may add its own    |
-| The families' Academics    | Gets a name the school can change too (English and Hindi); its list works as before         |
+| Question                   | Answer                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| The Attendance and Classes | List tabs the school edits: its screens in order and the tab's name; it may add its own |
+| The families' Academics    | Gets a name the school can change too (English and Hindi); its list works as before     |
 
 Decided without asking:
 
@@ -163,3 +163,10 @@ Phases: **J** the model and the API · **K** admin's sections · **L** the app a
   `academicsLabelHi` (1–20 letters), the Academics tab and `MyFamilyLayout` carry the name. The API's bodies and
   tidy steps take them (no migration: layouts are JSON). Tests: `staff-layout.e2e-spec.ts` (7),
   `family-layout.e2e-spec.ts` (9); the mobile and permission suites pass.
+- **K (22 Nov 2026).** Admin, Staff app layout: the bottom tabs choose among the screens and the **Tab lists**; the
+  new Tab lists section adds a list (up to five, `list-N`), and each list has its own card — Tab name, Name in Hindi,
+  its screens (add, move, remove; hidden ones marked) and Remove this list (only when it is not a bottom tab). The
+  preview shows the lists' names; the checks match the API's. Family app layout: the Academics tab card gains Tab
+  name and Name in Hindi (empty: Academics); `OrderedList` takes more of a section (`children`) and `TabName` is
+  shared. Checked in a browser on Alpha (desktop and phone; a list added, named, given screens and made a tab, a list
+  renamed — nothing saved) with axe.

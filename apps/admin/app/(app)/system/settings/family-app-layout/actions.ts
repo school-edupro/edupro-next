@@ -48,6 +48,9 @@ export async function saveLayoutDraft(audience: string, layout: FamilyLayout): P
         shortcuts: layout.shortcuts,
         cards: layout.cards,
         academics: layout.academics,
+        // the Academics tab's name (empty: the standard one)
+        academicsLabel: layout.academicsLabel?.trim() ? layout.academicsLabel.trim() : null,
+        academicsLabelHi: layout.academicsLabelHi?.trim() ? layout.academicsLabelHi.trim() : null,
         // the side menu as edited (an empty name: the standard one)
         ...(layout.menu
           ? {

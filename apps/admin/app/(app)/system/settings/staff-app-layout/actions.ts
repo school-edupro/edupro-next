@@ -57,6 +57,17 @@ export async function saveStaffLayoutDraft(layout: StaffLayout): Promise<Result>
             }
           : {}),
         hidden: layout.hidden ?? [],
+        // the list tabs (part 3): a name, a Hindi name (empty: none), the screens in order
+        ...(layout.lists
+          ? {
+              lists: layout.lists.map((x) => ({
+                key: x.key,
+                label: x.label.trim(),
+                labelHi: x.labelHi?.trim() ? x.labelHi.trim() : null,
+                items: x.items,
+              })),
+            }
+          : {}),
       }),
     }),
   );

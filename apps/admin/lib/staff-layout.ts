@@ -3,8 +3,16 @@
  * API checks again on save (`checkStaffLayout` in @edupro/menus — keep these alike).
  */
 
-/** The app's Classes tab (my sections: homework, marks). */
-export const CLASSES_TAB = 'classes';
+/**
+ * A list tab (docs/design/94, part 3): its name (and Hindi name) and the screens it lists, as the families' Academics
+ * tab; the bottom tabs name it by its key.
+ */
+export interface StaffListTab {
+  key: string;
+  label: string;
+  labelHi: string | null;
+  items: string[];
+}
 
 export interface StaffMenuGroup {
   key: string;
@@ -23,6 +31,8 @@ export interface StaffLayout {
   menu?: StaffMenuGroup[];
   /** Screens hidden from staff (left out of every menu; their pages still open from a link). */
   hidden?: string[];
+  /** The list tabs (part 3); the API gives every layout its lists (the two standard ones at first). */
+  lists?: StaffListTab[];
 }
 
 export interface StaffLayoutSetup {
@@ -43,6 +53,7 @@ export interface StaffLayoutSetup {
       tabs: number;
       shortcuts: { min: number; max: number };
       cards: { min: number; max: number };
+      lists: { max: number; items: { min: number; max: number }; name: number };
     };
     defaults: StaffLayout;
   };
@@ -61,6 +72,7 @@ const menuKey = (l: StaffLayout) =>
       hidden: g.hidden === true,
     })),
     hidden: l.hidden ?? [],
+    lists: (l.lists ?? []).map((x) => [x.key, x.label.trim(), x.labelHi?.trim() || null, x.items]),
   });
 
 export const sameStaffLayout = (a: StaffLayout, b: StaffLayout) =>
@@ -79,6 +91,33 @@ export function staffHidden(l: StaffLayout): Set<string> {
 /** The longest name a menu group takes (STAFF_LAYOUT_LIMITS.groupName in @edupro/menus). */
 export const STAFF_GROUP_NAME_MAX = 40;
 
+/** A key for a new list tab the school makes: `list-1`, `list-2`… the first not taken. */
+export function newListKey(lists: StaffListTab[]): string {
+  const taken = new Set(lists.map((x) => x.key));
+  let n = 1;
+  while (taken.has(`list-${String(n)}`)) n += 1;
+  return `list-${String(n)}`;
+}
+
+/**
+ * The tabs staff get as far as the draft decides (rights aside): a hidden screen gives its place, a list shows when it
+ * has a screen the school shows; the places go on to the shortcuts.
+ */
+export function staffShownTabs(l: StaffLayout, hidden: Set<string>): string[] {
+  const lists = new Map((l.lists ?? []).map((x) => [x.key, x]));
+  const tabs: string[] = [];
+  for (const t of l.tabs) {
+    const x = lists.get(t);
+    const ok = x ? x.items.some((h) => !hidden.has(h)) : !hidden.has(t);
+    if (ok && !tabs.includes(t)) tabs.push(t);
+  }
+  for (const h of l.shortcuts) {
+    if (tabs.length >= 3) break;
+    if (!hidden.has(h) && !tabs.includes(h)) tabs.push(h);
+  }
+  return tabs;
+}
+
 /** What is wrong before saving (the API's checks). */
 export function staffLayoutProblems(l: StaffLayout, c: StaffLayoutSetup['catalogue']): string[] {
   const screens = new Set(c.screens.map((s) => s.href));
@@ -87,8 +126,27 @@ export function staffLayoutProblems(l: StaffLayout, c: StaffLayoutSetup['catalog
   const distinct = (xs: string[]) => new Set(xs).size === xs.length;
   if (l.tabs.length !== c.limits.tabs) problems.push('Choose three tabs between Home and More.');
   if (!distinct(l.tabs)) problems.push('A tab is chosen twice.');
+  const lists = l.lists ?? [];
+  const listKeys = new Set(lists.map((x) => x.key));
   for (const t of l.tabs)
-    if (t !== CLASSES_TAB && !screens.has(t)) problems.push(`${t} cannot be a tab here.`);
+    if (!listKeys.has(t) && !screens.has(t)) problems.push(`${t} cannot be a tab here.`);
+  // the list tabs (part 3), as the API checks them
+  const LL = c.limits.lists;
+  if (lists.length > LL.max) problems.push(`Keep at most ${String(LL.max)} tab lists.`);
+  if (!distinct(lists.map((x) => x.label.trim().toLowerCase())))
+    problems.push('Two tab lists have the same name.');
+  for (const x of lists) {
+    const name = x.label.trim() || x.key;
+    if (!x.label.trim()) problems.push('Every tab list needs a name.');
+    for (const [what, v] of [
+      ['name', x.label],
+      ['Hindi name', x.labelHi],
+    ] as const)
+      if (v && v.trim().length > LL.name)
+        problems.push(`A tab list's ${what} takes 1 to ${String(LL.name)} letters.`);
+    if (x.items.length < LL.items.min || x.items.length > LL.items.max)
+      problems.push(`The tab list ${name} takes 1 to ${String(LL.items.max)} screens.`);
+  }
   if (l.shortcuts.length < c.limits.shortcuts.min || l.shortcuts.length > c.limits.shortcuts.max)
     problems.push('Choose 4 to 12 Home shortcuts.');
   if (!distinct(l.shortcuts)) problems.push('A shortcut is chosen twice.');

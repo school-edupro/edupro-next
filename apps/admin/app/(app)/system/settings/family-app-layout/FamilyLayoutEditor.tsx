@@ -1,9 +1,11 @@
 'use client';
 import { Badge, Button, Dialog } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from 'react';
 import {
   ACADEMICS_TAB,
+  TAB_NAME_MAX,
+  academicsName,
   AUDIENCE_NAME,
   GROUP_NAME_MAX,
   MENU_GROUP_NAME,
@@ -19,7 +21,7 @@ import {
 } from '@/lib/family-layout';
 import { discardLayout, publishLayout, saveLayoutDraft } from './actions';
 
-type Part = Exclude<keyof FamilyLayout, 'menu' | 'hidden'>;
+type Part = Exclude<keyof FamilyLayout, 'menu' | 'hidden' | 'academicsLabel' | 'academicsLabelHi'>;
 
 /** One ordered list of the draft: its rows (move up / down, remove) and "Add" from what is not in it yet. */
 export function OrderedList({
@@ -37,10 +39,13 @@ export function OrderedList({
   canEdit,
   onChange,
   isHidden,
+  children,
 }: {
   id: string;
   title: string;
   help: string;
+  /** More of the section under its help line (e.g. the tab's name). */
+  children?: ReactNode;
   items: string[];
   labelOf: (key: string) => { label: string; sub?: string };
   options: Array<{ key: string; label: string }>;
@@ -89,6 +94,7 @@ export function OrderedList({
       <p className="ep-field__help" style={{ marginTop: 'var(--sp-1)' }}>
         {help}
       </p>
+      {children}
       <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 'var(--sp-1)' }}>
         {fixedFirst ? (
           <li className="ep-field__help" style={{ padding: 'var(--sp-1) 0' }}>
@@ -193,6 +199,76 @@ export function OrderedList({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** A tab's name and Hindi name the school gives (docs/design/94, part 3); an empty name: `placeholder`. */
+export function TabName({
+  idBase,
+  label,
+  labelHi,
+  placeholder,
+  placeholderHi,
+  canEdit,
+  required = false,
+  onChange,
+}: {
+  idBase: string;
+  label: string | null;
+  labelHi: string | null;
+  placeholder?: string;
+  placeholderHi?: string;
+  canEdit: boolean;
+  /** The name must be given (a list the school made); else empty keeps the standard name. */
+  required?: boolean;
+  onChange: (label: string | null, labelHi: string | null) => void;
+}) {
+  const val = (v: string) => (v.trim() ? v : null);
+  if (!canEdit)
+    return label || labelHi ? (
+      <p className="ep-field__help" style={{ margin: '0 0 var(--sp-2)' }}>
+        {label ?? placeholder}
+        {labelHi ? <span lang="hi">{` · ${labelHi}`}</span> : null}
+      </p>
+    ) : null;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 'var(--sp-3)',
+        flexWrap: 'wrap',
+        margin: '0 0 var(--sp-3)',
+      }}
+    >
+      <div className="ep-field" style={{ flex: '1 1 12rem', marginBottom: 0 }}>
+        <label className="ep-field__label" htmlFor={`${idBase}-name`}>
+          {required ? 'Tab name' : 'Tab name (empty: the standard name)'}
+        </label>
+        <input
+          id={`${idBase}-name`}
+          className="ep-input"
+          value={label ?? ''}
+          placeholder={placeholder}
+          maxLength={TAB_NAME_MAX}
+          required={required}
+          onChange={(e) => onChange(required ? e.target.value : val(e.target.value), labelHi)}
+        />
+      </div>
+      <div className="ep-field" style={{ flex: '1 1 12rem', marginBottom: 0 }}>
+        <label className="ep-field__label" htmlFor={`${idBase}-hi`}>
+          Name in Hindi (optional)
+        </label>
+        <input
+          id={`${idBase}-hi`}
+          className="ep-input"
+          lang="hi"
+          value={labelHi ?? ''}
+          placeholder={placeholderHi}
+          maxLength={TAB_NAME_MAX}
+          onChange={(e) => onChange(label, val(e.target.value))}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -717,8 +793,8 @@ export function FamilyLayoutEditor({
   const screenLabel = useMemo(() => new Map(screens.map((s) => [s.href, s.label])), [screens]);
   const cardOf = useMemo(() => new Map(catalogue.cards.map((c) => [c.key, c])), [catalogue.cards]);
   const labelOf = (key: string) => ({
-    label: key === ACADEMICS_TAB ? 'Academics' : (screenLabel.get(key) ?? key),
-    sub: key === ACADEMICS_TAB ? 'Lists the screens of the Academics list below' : undefined,
+    label: key === ACADEMICS_TAB ? academicsName(draft) : (screenLabel.get(key) ?? key),
+    sub: key === ACADEMICS_TAB ? 'Lists the screens of the Academics tab below' : undefined,
   });
   const cardLabel = (key: string) => cardOf.get(key)?.label ?? key;
   // what the school hides (one by one and with their groups): marked in every list, left out of the preview
@@ -931,7 +1007,7 @@ export function FamilyLayoutEditor({
             title="Academics tab"
             help={
               draft.tabs.includes(ACADEMICS_TAB)
-                ? 'The screens the Academics tab lists, in this order.'
+                ? 'The tab’s name and the screens it lists, in this order. An empty name keeps Academics.'
                 : 'Used only when Academics is one of the tabs.'
             }
             items={draft.academics}
@@ -943,7 +1019,20 @@ export function FamilyLayoutEditor({
             canEdit={canEdit}
             onChange={set('academics')}
             isHidden={isHiddenScreen}
-          />
+          >
+            <TabName
+              idBase={`fal-${audience}-academics`}
+              label={draft.academicsLabel ?? null}
+              labelHi={draft.academicsLabelHi ?? null}
+              placeholder="Academics"
+              placeholderHi="शैक्षणिक"
+              canEdit={canEdit}
+              onChange={(label, labelHi) => {
+                setMsg(null);
+                setDraft({ ...draft, academicsLabel: label, academicsLabelHi: labelHi });
+              }}
+            />
+          </OrderedList>
           {draft.menu ? (
             <MenuEditor
               idBase={`fal-menu-${audience}`}

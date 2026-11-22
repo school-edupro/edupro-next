@@ -17,7 +17,16 @@ export interface FamilyLayout {
    * More, tabs, shortcuts, cards, Academics, Help). Rights (Access → Roles) still decide data.
    */
   hidden?: string[];
+  /** The Academics tab's name the school gave (docs/design/94, part 3); null or empty: Academics. */
+  academicsLabel?: string | null;
+  academicsLabelHi?: string | null;
 }
+
+/** The longest name of a tab the school names (LAYOUT_LIMITS.tabName in @edupro/menus). */
+export const TAB_NAME_MAX = 20;
+
+/** The Academics tab's name as the draft has it. */
+export const academicsName = (l: FamilyLayout) => l.academicsLabel?.trim() || 'Academics';
 
 /** A group of the side menu: the school's name for it (null: the standard one) and its screens in order. */
 export interface FamilyMenuGroup {
@@ -96,7 +105,13 @@ const menuKey = (m: FamilyMenuGroup[] | undefined) =>
 /** The hidden screens in a fixed order (the order they were saved in does not matter). */
 const hiddenKey = (h: string[] | undefined) => [...(h ?? [])].sort();
 
-/** Two layouts are the same when their four lists, their side menu and what they hide are. */
+/** The Academics tab's names (an empty one is the standard name). */
+const academicsKey = (l: FamilyLayout) => [
+  l.academicsLabel?.trim() || null,
+  l.academicsLabelHi?.trim() || null,
+];
+
+/** Two layouts are the same when their four lists, their side menu, what they hide and the Academics name are. */
 export const sameLayout = (a: FamilyLayout, b: FamilyLayout) =>
   JSON.stringify([
     a.tabs,
@@ -105,8 +120,17 @@ export const sameLayout = (a: FamilyLayout, b: FamilyLayout) =>
     a.academics,
     menuKey(a.menu),
     hiddenKey(a.hidden),
+    academicsKey(a),
   ]) ===
-  JSON.stringify([b.tabs, b.shortcuts, b.cards, b.academics, menuKey(b.menu), hiddenKey(b.hidden)]);
+  JSON.stringify([
+    b.tabs,
+    b.shortcuts,
+    b.cards,
+    b.academics,
+    menuKey(b.menu),
+    hiddenKey(b.hidden),
+    academicsKey(b),
+  ]);
 
 /**
  * The screens a layout hides from families: those hidden one by one and every screen of a hidden group (as
@@ -175,6 +199,12 @@ export function layoutProblems(
     if (!screens.has(a)) problems.push(`${a} cannot be in the Academics list here.`);
   if (l.tabs.includes(ACADEMICS_TAB) && l.academics.length < limits.academics.min)
     problems.push('With an Academics tab, its list needs at least two screens.');
+  for (const [what, v] of [
+    ['name', l.academicsLabel],
+    ['Hindi name', l.academicsLabelHi],
+  ] as const)
+    if (v && v.trim().length > TAB_NAME_MAX)
+      problems.push(`The Academics tab's ${what} takes 1 to ${String(TAB_NAME_MAX)} letters.`);
   if (l.menu) {
     const keys = Object.keys(MENU_GROUP_NAME[audience]);
     const given = l.menu.map((g) => g.key);
