@@ -31,7 +31,7 @@ const staffProfile = {
 };
 
 class School {
-  School({this.webTab = false, this.arranged = false, this.lists = false});
+  School({this.webTab = false, this.arranged = false, this.lists = false, this.register});
 
   /// the school chose a tab that has only a web page (docs/design/94)
   final bool webTab;
@@ -41,6 +41,9 @@ class School {
 
   /// the school's own list tabs (docs/design/94, part 3): Attendance renamed and given more, an Office list
   final bool lists;
+
+  /// a register as the website shows it (docs/design/96, part 6): `open` (saved, a window note) or `closed`
+  final String? register;
   bool offline = false;
   bool marked = false;
   int applies = 0;
@@ -289,6 +292,51 @@ class School {
             {'classSectionId': '999', 'section': 'X-Z', 'strength': 30, 'sessionId': null},
           ],
         };
+      case 'GET /attendance/session' when register != null:
+        return {
+          'id': 's9',
+          'section': 'VI-A',
+          'date': c.query?['date'],
+          'kind': 'day',
+          'locked': false,
+          'markedBy': 'Asha Teacher',
+          'source': 'rfid',
+          'markedLate': true,
+          'window': register == 'open'
+              ? {
+                  'open': true,
+                  'late': true,
+                  'from': '07:00',
+                  'to': '18:00',
+                  'note': 'An earlier day: saved as marked late.',
+                }
+              : {'open': false, 'late': false, 'from': '07:00', 'to': '10:00', 'note': null},
+          'counts': {'P': 1, 'LV': 1, 'strength': 2},
+          'roster': [
+            {
+              'studentId': '41',
+              'name': 'Kid Sample',
+              'admissionNo': 'A-41',
+              'rollNo': 1,
+              'code': 'P',
+              'remarks': 'Fever',
+              'inAt': '2026-11-20T02:35:00.000Z',
+              'hint': {
+                'leave': null,
+                'pass': {'kind': 'early_leave', 'number': 'GP-1', 'atTime': '12:30'},
+              },
+              'locked': false,
+            },
+            {
+              'studentId': '42',
+              'name': 'Ria Sample',
+              'admissionNo': 'A-42',
+              'rollNo': 2,
+              'code': 'LV',
+              'locked': true,
+            },
+          ],
+        };
       case 'GET /attendance/session':
         return {
           'id': null,
@@ -304,6 +352,8 @@ class School {
       case 'POST /attendance/sessions':
         marked = true;
         return {'id': 's1', 'alertsSent': 1};
+      case 'GET /attendance/desk/class-register.pdf':
+        return null;
       case 'GET /exams/my-entry':
         return {
           'data': [
@@ -1207,6 +1257,64 @@ void main() {
     expect(tab('कक्षाएँ'), findsOneWidget);
     // no Hindi name given: the name as the school wrote it
     expect(tab('Office'), findsOneWidget);
+  });
+
+  testWidgets(
+    'marking a class as on the website: saved counts, the window, details, a gate pass, a remark',
+    (tester) async {
+      final (t, _) = await pumpStaff(
+        tester,
+        size: const Size(420, 2400),
+        with_: School(register: 'open'),
+      );
+      await tester.tap(find.byKey(const Key('toMark-300')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          '1 present · 0 absent · 1 leave · 0 late · Marked by Asha Teacher (RFID gate) (late)',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('An earlier day: saved as marked late.'), findsOneWidget);
+      expect(find.textContaining('A-41 · in '), findsOneWidget);
+      expect(find.text('Gate pass: leaves early 12:30'), findsOneWidget);
+      // the remark already there, changed, and sent with the marks
+      await tester.enterText(find.byKey(const Key('remarkBox-41')), 'Fever, sent home');
+      await tester.tap(find.byKey(const Key('saveMarks')));
+      await tester.pumpAndSettle();
+      final sent = t.calls.lastWhere((c) => c.path == '/attendance/sessions');
+      expect((sent.body!['marks'] as List).first, {
+        'studentId': '41',
+        'code': 'P',
+        'remarks': 'Fever, sent home',
+      });
+      // the month's register of the day register
+      await tester.tap(find.byKey(const Key('register-pdf')));
+      await tester.pumpAndSettle();
+      final file = t.calls.lastWhere((c) => c.path == '/attendance/desk/class-register.pdf');
+      expect(file.query, containsPair('classSectionId', '300'));
+    },
+  );
+
+  testWidgets('a register outside the marking window: read only, as the website says', (
+    tester,
+  ) async {
+    await pumpStaff(
+      tester,
+      size: const Size(420, 2400),
+      with_: School(register: 'closed'),
+    );
+    await tester.tap(find.byKey(const Key('toMark-300')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('saveMarks')), findsNothing);
+    expect(find.byKey(const Key('allPresent')), findsNothing);
+    expect(
+      find.text(
+        'Marking is closed for this day; the coordinator can mark it or reopen it for you.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Remark: Fever'), findsOneWidget);
   });
 
   testWidgets('My timetable as on the website: sections, substitutions, the week grid, a day', (

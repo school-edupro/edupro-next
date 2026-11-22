@@ -70,6 +70,8 @@ SubstitutionsController_mine
 AttendanceController_summary
 AttendanceController_session
 AttendanceController_mark
+AttendanceDeskController_classRegisterXlsx !file
+AttendanceDeskController_classRegisterPdf !file
 ExamEntryController_toEnter
 ExamEntryController_sections
 ExamEntryController_marks

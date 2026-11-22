@@ -1056,6 +1056,37 @@ class S {
   String publishesAt(String when) => _t('Publishes $when', '$when को प्रकाशित होगा');
   String ackCount(int n) => _t('$n acknowledged', '$n ने पावती दी');
   String get workReportFile => _t('Daily work report', 'दैनिक कार्य रिपोर्ट');
+  // marking a class as on the staff website (docs/design/96, part 6)
+  String get attCodesHelp => _t(
+    'Codes: P present · A absent · LV leave · L late · SR short leave · H half day · OD on duty · SB stay back. A student on approved leave is marked LV and cannot be changed here (the coordinator can); a student with a gate pass is flagged.',
+    'कोड: P उपस्थित · A अनुपस्थित · LV अवकाश · L देर से · SR अल्प अवकाश · H आधा दिन · OD ड्यूटी पर · SB रुके रहे। स्वीकृत अवकाश वाला विद्यार्थी LV लगता है और यहाँ बदला नहीं जा सकता (समन्वयक बदल सकते हैं); गेट पास वाले विद्यार्थी चिह्नित हैं।',
+  );
+  String get notMarkedYetDate =>
+      _t('Not marked yet for this date.', 'इस तारीख की उपस्थिति अभी नहीं लगी।');
+  String savedCountsLine(int p, int a, int lv, int l) => _t(
+    '$p present · $a absent · $lv leave · $l late',
+    '$p उपस्थित · $a अनुपस्थित · $lv अवकाश · $l देर से',
+  );
+  String get rfidGate => _t('RFID gate', 'RFID गेट');
+  String get markedLateWord => _t('late', 'देर से');
+  String markingOpen(String? from, String? to) => _t(
+    'Marking is open ${from ?? 'from the start of the day'} – ${to ?? 'the end of the day'}.',
+    'उपस्थिति ${from ?? 'दिन की शुरुआत'} – ${to ?? 'दिन के अंत'} तक लगाई जा सकती है।',
+  );
+  String get registerLockedByCoordinator =>
+      _t('This register was locked by the coordinator.', 'यह रजिस्टर समन्वयक ने बंद कर दिया है।');
+  String get markingClosed => _t(
+    'Marking is closed for this day; the coordinator can mark it or reopen it for you.',
+    'इस दिन की उपस्थिति बंद है; समन्वयक इसे लगा सकते हैं या आपके लिए फिर खोल सकते हैं।',
+  );
+  String get onLeaveApproved => _t('On leave (approved)', 'अवकाश पर (स्वीकृत)');
+  String gatePass(bool early, String? at) => _t(
+    '${early ? 'Gate pass: leaves early' : 'Gate pass: comes late'}${at != null ? ' $at' : ''}',
+    '${early ? 'गेट पास: जल्दी जाएगा' : 'गेट पास: देर से आएगा'}${at != null ? ' $at' : ''}',
+  );
+  String inAtWord(String time) => _t('in $time', 'प्रवेश $time');
+  String registerOfMonth(String month) => _t('Register of $month', '$month का रजिस्टर');
+  String get addRemark => _t('Remark', 'टिप्पणी');
   // the staff timetable as on the staff website (docs/design/96, part 5)
   String lessonsToday(int n) => _t('$n lesson${n == 1 ? '' : 's'} today', 'आज $n कालांश');
   String get noLessonsSunday => _t('No lessons on Sunday', 'रविवार को कोई कालांश नहीं');

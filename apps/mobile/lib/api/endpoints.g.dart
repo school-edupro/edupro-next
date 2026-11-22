@@ -240,6 +240,14 @@ class EduProApi {
   Future<dynamic> attendanceMark({required MarkSessionDto body}) =>
       _t.send('POST', '/attendance/sessions', body: body.toJson());
 
+  /// GET /attendance/desk/class-register.xlsx
+  Future<ApiFile> attendanceDeskClassRegisterXlsx({required String classSectionId, required String month}) =>
+      _t.file('GET', '/attendance/desk/class-register.xlsx', query: {'classSectionId': classSectionId, 'month': month});
+
+  /// GET /attendance/desk/class-register.pdf
+  Future<ApiFile> attendanceDeskClassRegisterPdf({required String classSectionId, required String month}) =>
+      _t.file('GET', '/attendance/desk/class-register.pdf', query: {'classSectionId': classSectionId, 'month': month});
+
   /// GET /exams/my-entry — The signed-in teacher's entry not done yet, per open exam (docs/design/71)
   Future<dynamic> examEntryToEnter() =>
       _t.send('GET', '/exams/my-entry');

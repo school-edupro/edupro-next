@@ -118,3 +118,24 @@ period of the chosen day: the lesson, free, or the break). Same data as before (
 `assignmentsProvider`); the old day-only list in `classes.dart` is gone. Tests: `staff_test.dart` (sections, the
 substitution, the grid's six days with the lesson, the break and the free period, the day view; light, dark, Hindi;
 2× text — the role badge first crowded the line, now it wraps); 222 app tests; the web preview rebuilt.
+
+## Part 6: Mark a class (22 Nov 2026)
+
+"Staff app: the Attendance section as on the staff website; a subject teacher of VI-A — how does he mark attendance?
+Only the class teacher marks."
+
+Who marks what (the API's rule, `AttendanceService.assertMayMark`, unchanged): a section's **day attendance** — its
+class teacher or a coordinator with "can mark attendance"; **subject attendance** — the subject teacher for their own
+subject in that section (and the class teacher or a coordinator). The section box (website and app) lists "VI-A · Day
+attendance" for the first and "VI-A · Science" for the second, so a subject teacher marks his subject's register, not
+the day's. To let him mark the day's, Academics → Teacher assignments makes him the section's class teacher (or a
+coordinator marks it).
+
+As built (the app's `MarkClassScreen`, as the website's register): the codes line; for a day register the month's
+register as Excel or PDF (`AttendanceDeskController_classRegisterXlsx` / `_classRegisterPdf`); the day as saved —
+present, absent, leave, late, marked by whom, RFID gate, late — or "Not marked yet for this date"; the marking window's
+note or hours; marking off (no All present, no Save, said why) when the register is locked or the window closed; each
+pupil's admission number and gate tap time, "On leave (approved)" and gate-pass flags; a remark per pupil (Remark
+opens a box; one already there shows; sent with the marks). Tests: `staff_test.dart` (the saved line, the window
+note, the details, the gate pass, a remark changed and sent, the PDF register; a closed window read only); 224 app
+tests; the web preview rebuilt.
