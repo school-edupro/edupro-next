@@ -32,6 +32,7 @@ import type {
 import type { RemoveAccessDto, SchemeAccessDto } from './mark-schemes.dto';
 import { registerPdf, registerXlsx } from './mark-register-file';
 import { MarkSchemesService, REGISTERS, type Rights } from './mark-schemes.service';
+import { teachingSections } from './teaching-sections';
 import { registerGeneratedOn, registerLetterhead, registerLogo } from './register-head';
 
 const REPORT_LABEL: Record<GradeRunQueryDto['report'], string> = {
@@ -115,6 +116,17 @@ export class GradeRegistersService {
       [chainId, ctx.user.id],
     );
     const a = r.rows[0];
+    // not given the register and no role over registers: the person runs it when they teach one of its classes
+    if (!role.run && !a) {
+      const k = await c.query<{ class_ids: string[] }>(
+        `SELECT class_ids::text[] AS class_ids FROM grade_registers WHERE chain_id = $1 AND deleted_at IS NULL
+          ORDER BY version DESC LIMIT 1`,
+        [chainId],
+      );
+      const classes = new Set(k.rows[0]?.class_ids ?? []);
+      if ((await teachingSections(c)).some((x) => classes.has(x.classId)))
+        return { ...NONE, run: true, taught: true };
+    }
     return {
       manage: false,
       run: role.run || Boolean(a && (a.run || a.edit || a.del)),
@@ -204,9 +216,16 @@ export class GradeRegistersService {
                 (SELECT max(o.version) FROM grade_registers o WHERE o.chain_id = g.chain_id AND o.id <> g.id AND o.status = 'locked' AND o.deleted_at IS NULL) AS in_use
            ${FROM}
           WHERE g.academic_year_id = $1 AND g.deleted_at IS NULL AND g.status <> 'superseded'
-            AND ($2::boolean OR EXISTS (SELECT 1 FROM grade_register_access a WHERE a.chain_id = g.chain_id AND a.user_id = $3))
+            AND ($2::boolean OR EXISTS (SELECT 1 FROM grade_register_access a WHERE a.chain_id = g.chain_id AND a.user_id = $3)
+                 OR g.class_ids && $4::bigint[])
           ORDER BY g.chain_id, g.version DESC`,
-        [yearId, role.run, ctx.user.id],
+        // a class or subject teacher sees the registers of the classes they teach (docs/design/96 part 19)
+        [
+          yearId,
+          role.run,
+          ctx.user.id,
+          role.run ? [] : (await teachingSections(c)).map((x) => x.classId),
+        ],
       );
       const access = await c.query<{
         chain_id: string;
@@ -960,15 +979,18 @@ export class GradeRegistersService {
     const role = this.roleRights(ctx);
     const out = await this.db.tenant(requireTenant(ctx), async (c) => {
       const reg = await this.find(c, id);
-      await this.must(c, ctx, reg.chain_id, 'run');
+      const rights = await this.must(c, ctx, reg.chain_id, 'run');
+      // a teacher not given the register runs it for the sections they teach
+      const only = rights.taught ? (await teachingSections(c)).map((x) => x.id) : null;
       const secs = (
         await c.query<{ id: string; class_id: string; code: string; class_name: string }>(
           `SELECT cs.id::text, cs.class_id::text, k.code || '-' || cs.name AS code, k.name AS class_name
              FROM class_sections cs JOIN classes k ON k.id = cs.class_id
             WHERE cs.class_id = ANY($1::bigint[]) AND cs.academic_year_id = $2 AND cs.deleted_at IS NULL
               AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active')
+              AND ($3::bigint[] IS NULL OR cs.id = ANY($3::bigint[]))
             ORDER BY k.display_order, cs.name`,
-          [reg.class_ids, yearId],
+          [reg.class_ids, yearId, only],
         )
       ).rows;
       const exRows = (

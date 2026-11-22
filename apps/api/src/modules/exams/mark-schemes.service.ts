@@ -32,6 +32,7 @@ import { STORAGE_DRIVER } from '../files/storage';
 import { registerPdf, registerXlsx, type RegisterFileMeta } from './mark-register-file';
 import { buildSheet, byDivision, type Sheet } from './mark-register-sheet';
 import { registerGeneratedOn, registerLetterhead, registerLogo } from './register-head';
+import { teachingSections } from './teaching-sections';
 import type {
   CopySchemeDto,
   CreateSchemeDto,
@@ -82,6 +83,11 @@ export interface Rights {
   edit: boolean;
   delete: boolean;
   assign: boolean;
+  /**
+   * run only because the person teaches a class of the register (docs/design/96 part 19): they see the register and
+   * run it for the sections they teach
+   */
+  taught?: boolean;
 }
 const NONE: Rights = { manage: false, run: false, edit: false, delete: false, assign: false };
 
@@ -154,6 +160,17 @@ export class MarkSchemesService {
       [chainId, ctx.user.id],
     );
     const a = r.rows[0];
+    // not given the register and no role over registers: the person runs it when they teach one of its classes
+    if (!role.run && !a) {
+      const k = await c.query<{ class_ids: string[] }>(
+        `SELECT class_ids::text[] AS class_ids FROM mark_schemes WHERE chain_id = $1 AND deleted_at IS NULL
+          ORDER BY version DESC LIMIT 1`,
+        [chainId],
+      );
+      const classes = new Set(k.rows[0]?.class_ids ?? []);
+      if ((await teachingSections(c)).some((x) => classes.has(x.classId)))
+        return { ...NONE, run: true, taught: true };
+    }
     return {
       manage: false,
       run: role.run || Boolean(a && (a.run || a.edit || a.del)),
@@ -349,9 +366,16 @@ export class MarkSchemesService {
                 (SELECT max(o.version) FROM mark_schemes o WHERE o.chain_id = m.chain_id AND o.id <> m.id AND o.status = 'locked' AND o.deleted_at IS NULL) AS in_use
            ${FROM}
           WHERE m.academic_year_id = $1 AND m.deleted_at IS NULL AND m.status <> 'superseded'
-            AND ($2::boolean OR EXISTS (SELECT 1 FROM mark_scheme_access a WHERE a.chain_id = m.chain_id AND a.user_id = $3))
+            AND ($2::boolean OR EXISTS (SELECT 1 FROM mark_scheme_access a WHERE a.chain_id = m.chain_id AND a.user_id = $3)
+                 OR m.class_ids && $4::bigint[])
           ORDER BY m.chain_id, m.version DESC`,
-        [yearId, role.run, ctx.user.id],
+        // a class or subject teacher sees the registers of the classes they teach (docs/design/96 part 19)
+        [
+          yearId,
+          role.run,
+          ctx.user.id,
+          role.run ? [] : (await teachingSections(c)).map((x) => x.classId),
+        ],
       );
       const access = await c.query<{
         chain_id: string;
@@ -1734,7 +1758,9 @@ export class MarkSchemesService {
     const bare = new WeakSet<Sheet>();
     const out = await this.db.tenant(tenant, async (c) => {
       const s = await this.find(c, id);
-      await this.must(c, ctx, s.chain_id, 'run');
+      const rights = await this.must(c, ctx, s.chain_id, 'run');
+      // a teacher not given the register runs it for the sections they teach
+      const only = rights.taught ? (await teachingSections(c)).map((x) => x.id) : null;
       const def = await this.asRegister(c, yearId, s.def, s.class_ids);
       const sections = await c.query<{
         id: string;
@@ -1746,8 +1772,9 @@ export class MarkSchemesService {
            FROM class_sections cs JOIN classes k ON k.id = cs.class_id
           WHERE cs.class_id = ANY($1::bigint[]) AND cs.academic_year_id = $2 AND cs.deleted_at IS NULL
             AND EXISTS (SELECT 1 FROM enrolments e WHERE e.class_section_id = cs.id AND e.status = 'active')
+            AND ($3::bigint[] IS NULL OR cs.id = ANY($3::bigint[]))
           ORDER BY k.display_order, cs.name`,
-        [s.class_ids, yearId],
+        [s.class_ids, yearId, only],
       );
       if (q.exam && !def.exams.some((e) => e.key === q.exam))
         throw new DomainError('validation-failed', 'Not an exam of this register', { status: 400 });
@@ -1796,7 +1823,10 @@ export class MarkSchemesService {
         places.push({
           place: `${code} · all sections`,
           classId: q.classId,
-          sections: null,
+          // a teacher not given the register ranks only the class's sections they teach (docs/design/96 part 19)
+          sections: only
+            ? sections.rows.filter((x) => x.class_id === q.classId).map((x) => x.id)
+            : null,
           merit: true,
         });
       } else {
@@ -1984,6 +2014,7 @@ export class MarkSchemesService {
       return {
         s,
         def,
+        taught: Boolean(rights.taught),
         sections: sections.rows,
         sheets,
         firstSheets,
@@ -2023,7 +2054,8 @@ export class MarkSchemesService {
         },
         places: [
           ...out.sections.map((x) => ({ value: `s:${x.id}`, label: x.code, classId: x.class_id })),
-          ...out.s.class_ids
+          // the class ranked together: not offered to a teacher who sees only their own sections
+          ...(out.taught ? [] : out.s.class_ids)
             .filter((k) => out.sections.some((x) => x.class_id === k))
             .map((k) => ({
               value: `c:${k}`,

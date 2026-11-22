@@ -800,4 +800,58 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     expect(off.json()).toEqual({ removed: 1 });
     expect((await call(t.t3!, 'GET', run)).statusCode).toBe(403);
   });
+
+  it('a class or subject teacher sees the registers of the classes they teach, run for their sections (docs/design/96 part 19)', async () => {
+    // a class teacher of VI-A, never given a register
+    const taught = await withMigrator(async (c) => {
+      const u = await seedUser(c, school, `${s}-ct`, 'class_teacher');
+      const e = await c.query<{ id: string }>(
+        `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id) VALUES ($1, 'MR-CT', 'Cara', 'Teacher', $2) RETURNING id::text`,
+        [school.id, u.id],
+      );
+      await c.query(
+        `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, kind) VALUES ($1, $2, $3, $4, 'class_teacher')`,
+        [school.id, school.yearId, e.rows[0]!.id, section['VI-A']],
+      );
+      return u;
+    });
+    const list = (await call(taught, 'GET', '/exams/schemes')).json().data as Array<{
+      id: string;
+      classIds: string[];
+      rights: Record<string, boolean>;
+    }>;
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.every((x) => x.classIds.includes(cls.VI!))).toBe(true);
+    const mine = list.find((x) => x.id === ids.reg) ?? list[0]!;
+    expect(mine.rights).toMatchObject({ run: true, edit: false, delete: false, assign: false });
+    // run: only the section they teach
+    const r = await call(
+      taught,
+      'GET',
+      `/exams/schemes/${mine.id}/register?classSectionId=${section['VI-A']!}`,
+    );
+    expect(r.statusCode).toBe(200);
+    const places = (r.json().places as Array<{ value: string }>).map((p) => p.value);
+    expect(places.filter((v) => v.startsWith('s:'))).toEqual([`s:${section['VI-A']!}`]);
+    // no class ranked together on offer; asked for, it holds only their section (not VI-B's Dev)
+    expect(places.some((v) => v.startsWith('c:'))).toBe(false);
+    const merit = await call(
+      taught,
+      'GET',
+      `/exams/schemes/${mine.id}/register?classId=${cls.VI!}&view=merit`,
+    );
+    expect(merit.statusCode).toBe(200);
+    const pupils = (merit.json().rows as Array<{ studentId: string }>).map((x) => x.studentId);
+    expect(pupils).not.toContain(student.Dev);
+    expect(pupils).toContain(student.Asha);
+    // the office still ranks the whole class
+    const whole = await call(
+      office,
+      'GET',
+      `/exams/schemes/${mine.id}/register?classId=${cls.VI!}&view=merit`,
+    );
+    expect((whole.json().rows as Array<{ studentId: string }>).map((x) => x.studentId)).toContain(
+      student.Dev,
+    );
+  });
 });

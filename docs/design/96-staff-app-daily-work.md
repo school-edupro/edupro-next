@@ -430,3 +430,25 @@ attendance. Remarks' By Excel is now one closed line too. Calls added: `ExamEntr
 `_registerExcel !file`, `_registerUpload`. Tests: `staff_test.dart` (the register's boxes and last health, a remark
 from the list, Save remarks' rows with nulls, Save height and weight's rows, the closed By Excel, download and upload;
 Remarks' closed fold; light, dark, Hindi, twice the text); 280 app tests; the web preview rebuilt.
+
+## Part 19: A teacher sees the mark and grade registers of their classes (22 Nov 2026)
+
+"Exams → Registers (Grade Register): not every register shows; a class teacher or subject teacher should see every
+register of the classes assigned to them." (Atharv Iyer, a class and subject teacher of IV, VI, VIII and IX, saw "No
+grade register yet".)
+
+The cause: Remark, Attendance and Height & Weight registers already show a teacher the sections they teach, but mark
+and grade registers showed only those a manager had given the person (Run / Edit / Delete / Assign), or every one to
+a manager or assigner.
+
+Now (`teaching-sections.ts`, the same rule as the student registers: class or subject teacher, indicator, remarks —
+a coordinator every section of the class): a person neither managing nor given a register **sees every mark and
+grade register of a class they teach** with the **Run** right only (`rights.taught`), and **runs it for the sections
+they teach** — the section list, "every section" files and the grade register's every-section analysis are theirs
+only; a mark register's "class ranked together" is not offered and, asked for, ranks only their sections (no other
+section's pupils). Edit, Delete and Assign stay with those given them; managers and those given a register are as
+before. On Alpha (read only): Atharv Iyer now sees Grade Register 1 and the four mark registers of VI and VIII,
+running VI-A, VIII-A and VIII-B; not the class III register. Tests: `grade-registers.e2e-spec.ts` and
+`mark-registers.e2e-spec.ts` (a class teacher never given a register sees those of the class, Run only, their
+section only; the class ranked together without another section's pupil, the office's with it); the register
+suites (41 tests) pass; the admin Registers pages checked as a teacher (axe clean).

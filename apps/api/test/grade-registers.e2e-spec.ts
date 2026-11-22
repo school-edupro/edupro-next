@@ -571,4 +571,44 @@ describe('grade registers like the legacy Grade Register (e2e)', () => {
     // the manager sees every area
     expect((await run(admin, runId, `classSectionId=${sec.a}`)).areas).toHaveLength(2);
   });
+
+  it('a class or subject teacher sees the registers of the classes they teach, run for their sections (docs/design/96 part 19)', async () => {
+    // a class teacher of VI-B, never given the register
+    const taught = await withMigrator(async (c) => {
+      const u = await seedUser(c, school, `${s}-ct`, 'class_teacher');
+      const e = await c.query<{ id: string }>(
+        `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id) VALUES ($1, 'GR-CT', 'Cara', 'Teacher', $2) RETURNING id::text`,
+        [school.id, u.id],
+      );
+      await c.query(
+        `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, kind) VALUES ($1, $2, $3, $4, 'class_teacher')`,
+        [school.id, school.yearId, e.rows[0]!.id, sec.b],
+      );
+      return u;
+    });
+    const list = (await call(taught, 'GET', '')).json().data as Array<{
+      id: string;
+      classIds: string[];
+      rights: Record<string, boolean>;
+    }>;
+    // the registers of class VI, to run (not to change)
+    expect(list.map((x) => x.id)).toContain(runId);
+    expect(list.every((x) => x.classIds.includes(ids.vi))).toBe(true);
+    expect(list.find((x) => x.id === runId)!.rights).toMatchObject({
+      run: true,
+      edit: false,
+      delete: false,
+      assign: false,
+    });
+    expect((await call(taught, 'PUT', `/${runId}`, { name: 'Changed' })).statusCode).toBe(403);
+    // run: only the section they teach
+    const own = await run(taught, runId, `classSectionId=${sec.b}`);
+    expect(own.places.map((p) => p.value)).toEqual([sec.b]);
+    const asked = await run(taught, runId, `classSectionId=${sec.a}`);
+    expect(asked.places.map((p) => p.value)).toEqual([sec.b]);
+    // a teacher of no class of the register still sees none
+    expect(
+      (await call(teacher, 'GET', '')).json().data.some((x: { id: string }) => x.id === runId),
+    ).toBe(false);
+  });
 });
