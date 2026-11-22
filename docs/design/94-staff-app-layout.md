@@ -51,3 +51,12 @@ each person gets); the staff website's own Home and side menu stay as they are.
   the app and the website now list the same screens for all nine staff demo logins (the coordinator 39, the principal
   45). Tests: `apps/api/test/staff-menu.e2e-spec.ts` (a manager with a reportee gets My team's attendance, a colleague
   does not; the menu equals the shared list with the counts).
+- **B (22 Nov 2026).** `@edupro/menus` `staff-layout.ts`: `StaffLayout` (tabs, shortcuts, cards), `STAFF_CARDS` (classes
+  to mark, today's periods, marks to enter, approvals waiting, my leave, latest messages — each with the screen it
+  needs), `DEFAULT_STAFF_LAYOUT` (tabs Attendance, Classes, Messages as the app had them; twelve common shortcuts; all
+  six cards), `checkStaffLayout`, `myStaffLayout(permissions, waiting, layout, own)` (only what the person opens; the
+  Classes tab only with daily work or marks; a tab they cannot open gives its place). Migration **0413**: the layouts
+  table takes `staff`. API (`platform/staff-layout.*`, in the platform module with `StaffWaitingService`):
+  `GET / PUT platform/staff-app-layout`, `POST …/publish`, `POST …/discard` (settings rights, audited);
+  `GET me/staff-layout`, `PUT / DELETE me/staff-layout/shortcuts` (own shortcuts in `user_preferences`
+  `staff.shortcuts`). Tests: `apps/api/test/staff-layout.e2e-spec.ts` (5).
