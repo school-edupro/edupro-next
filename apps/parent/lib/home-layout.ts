@@ -11,6 +11,8 @@ export interface LayoutEntry {
   href: string;
   label: string;
   icon: string;
+  /** The Academics tab's Hindi name the school gave (docs/design/94, part 3). */
+  labelHi?: string | null;
 }
 export interface HomeLayout {
   audience: Audience;
@@ -25,6 +27,9 @@ export interface HomeLayout {
   tabs: LayoutEntry[];
   /** The screens of the Academics tab (the website's /academics page). */
   academics: LayoutEntry[];
+  /** The Academics tab's name (the school's, else Academics) and its Hindi name (null: the dictionary's). */
+  academicsLabel?: string;
+  academicsLabelHi?: string | null;
   /**
    * The side menu: the school's groups in its order with their names (`labelHi` only when the school gave one; else
    * the name goes through t()), each with the screens the person may open.

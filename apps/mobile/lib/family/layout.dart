@@ -53,12 +53,43 @@ extension LayoutWords on S {
 
 /// A screen of the layout: its path, name (English, put in Hindi by `s.menu`) and the web apps' icon name.
 class FamilyEntry {
-  const FamilyEntry(this.href, this.label, this.icon);
-  factory FamilyEntry.fromJson(Json j) =>
-      FamilyEntry('${j['href']}', '${j['label']}', '${j['icon'] ?? ''}');
+  const FamilyEntry(this.href, this.label, this.icon, [this.labelHi]);
+  factory FamilyEntry.fromJson(Json j) => FamilyEntry(
+    '${j['href']}',
+    '${j['label']}',
+    '${j['icon'] ?? ''}',
+    j['labelHi'] is String ? j['labelHi'] as String : null,
+  );
   final String href;
   final String label;
   final String icon;
+
+  /// A tab's Hindi name the school gave (a list tab, the Academics tab); null: the app's word.
+  final String? labelHi;
+}
+
+/// A list tab the school keeps (docs/design/94, part 3): its name, its icon and the screens the person can open.
+class LayoutList {
+  const LayoutList(this.key, this.label, this.labelHi, this.icon, this.items);
+  factory LayoutList.fromJson(Json j) => LayoutList(
+    '${j['key']}',
+    '${j['label']}',
+    j['labelHi'] is String ? j['labelHi'] as String : null,
+    '${j['icon'] ?? ''}',
+    [for (final x in asList(j['items'])) FamilyEntry.fromJson(x)],
+  );
+  final String key;
+  final String label;
+  final String? labelHi;
+  final String icon;
+  final List<FamilyEntry> items;
+}
+
+/// A tab's name: the school's for a list or Academics tab (its Hindi name in Hindi), else the app's word.
+String tabLabel(S s, FamilyEntry t) {
+  if (t.href == 'academics' && t.label == 'Academics' && t.labelHi == null) return s.academics;
+  if (t.href.startsWith('/') || t.href == 'more') return shortLabel(s, t);
+  return s.hindi ? (t.labelHi ?? s.menu(t.label)) : t.label;
 }
 
 /// A Home card of the layout (a key of the catalogue, its name in both languages).
@@ -79,6 +110,7 @@ class FamilyLayoutView {
     required this.academics,
     required this.screens,
     this.hidden = const {},
+    this.lists = const [],
   });
 
   factory FamilyLayoutView.fromJson(Json j) {
@@ -94,6 +126,7 @@ class FamilyLayoutView {
       academics: list('academics'),
       screens: list('screens'),
       hidden: {for (final h in (j['hidden'] as List?) ?? const []) '$h'},
+      lists: [for (final x in asList(j['lists'])) LayoutList.fromJson(x)],
     );
   }
 
@@ -165,6 +198,9 @@ class FamilyLayoutView {
 
   /// The screens the school hides from families (left out everywhere, Home's figures too).
   final Set<String> hidden;
+
+  /// The list tabs the person got (staff, docs/design/94 part 3), in tab order.
+  final List<LayoutList> lists;
 }
 
 /// The family layout of a profile, kept for offline use; the app as it was when none has come (or the call fails

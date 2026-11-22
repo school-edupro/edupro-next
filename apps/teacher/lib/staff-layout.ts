@@ -9,13 +9,21 @@ import { staffMenu, type StaffWaiting } from '@/lib/staff-menu';
  * and names with hidden screens left out, and the counts behind the frame (unread, waiting work). Read once per page
  * load: the frame and the page share it (React `cache`).
  */
-/** The menu group the Classes tab opens (the app's Classes tab). */
-export const CLASSES_GROUP = 'classes';
-
 export interface StaffEntry {
   href: string;
   label: string;
   icon: string;
+  /** A list tab's Hindi name the school gave. */
+  labelHi?: string | null;
+}
+
+/** A list tab the person got (docs/design/94, part 3): its name and the screens they can open, in the school's order. */
+export interface StaffListView {
+  key: string;
+  label: string;
+  labelHi: string | null;
+  icon: string;
+  items: StaffEntry[];
 }
 export interface StaffLayoutView {
   tabs: StaffEntry[];
@@ -29,6 +37,8 @@ export interface StaffLayoutView {
     icon: string;
     items: StaffEntry[];
   }>;
+  /** The list tabs the person got, in tab order. */
+  lists: StaffListView[];
   /** never published: the menu and the phone bar as built */
   published: boolean;
   waiting: StaffWaiting;

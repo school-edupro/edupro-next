@@ -429,8 +429,9 @@ const DICT: Record<string, string> = {
   'Main menu': 'मुख्य मेनू',
   'Quick menu': 'त्वरित मेनू',
   Classes: 'कक्षाएँ',
-  'The screens of my classes, one tap each.': 'मेरी कक्षाओं की स्क्रीन, एक टैप में।',
+  'The screens of this tab, one tap each.': 'इस टैब की स्क्रीन, एक टैप में।',
   'Nothing here is open to you.': 'यहाँ आपके लिए कुछ खुला नहीं है।',
+  'Not available': 'उपलब्ध नहीं',
   'Leave & attendance': 'अवकाश और उपस्थिति',
   'Your sections, subjects and this week’s timetable':
     'आपके अनुभाग, विषय और इस सप्ताह की समय-सारणी',

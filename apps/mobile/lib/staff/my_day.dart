@@ -16,7 +16,6 @@ import 'approvals.dart';
 import 'class_attendance.dart';
 import 'data.dart';
 import 'marks.dart';
-import 'my_attendance.dart';
 import 'my_leave.dart';
 
 /// The day sections the person marks (class teacher or coordinator) that have no attendance yet.
@@ -451,39 +450,6 @@ class _ToMarkCard extends ConsumerWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// A staff member's Attendance tab: mark a class, their own attendance and leave.
-class StaffAttendanceTab extends ConsumerWidget {
-  const StaffAttendanceTab({super.key, required this.profile});
-  final Profile profile;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(stringsProvider);
-    final items = <(String, IconData, Widget)>[
-      (s.markClass, Icons.fact_check_outlined, MarkClassScreen(profile: profile)),
-      (s.myAttendance, Icons.badge_outlined, MyAttendanceScreen(profile: profile)),
-      (s.myLeave, Icons.beach_access_outlined, MyLeaveScreen(profile: profile)),
-    ];
-    return ListView(
-      key: const Key('staffAttendanceTab'),
-      padding: const EdgeInsets.symmetric(vertical: Tokens.sp2),
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: Tokens.sp4),
-          child: OutboxBanner(),
-        ),
-        for (final (title, icon, screen) in items)
-          ListTile(
-            leading: Icon(icon),
-            title: Text(title),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => pushPage(context, title, screen),
-          ),
-      ],
     );
   }
 }

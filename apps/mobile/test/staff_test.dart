@@ -31,13 +31,16 @@ const staffProfile = {
 };
 
 class School {
-  School({this.webTab = false, this.arranged = false});
+  School({this.webTab = false, this.arranged = false, this.lists = false});
 
   /// the school chose a tab that has only a web page (docs/design/94)
   final bool webTab;
 
   /// the school arranged the staff menu (docs/design/94, part 2): its order and names; hidden screens left out
   final bool arranged;
+
+  /// the school's own list tabs (docs/design/94, part 3): Attendance renamed and given more, an Office list
+  final bool lists;
   bool offline = false;
   bool marked = false;
   int applies = 0;
@@ -66,14 +69,48 @@ class School {
     ];
     Map<String, Object?> by(String h) => screens.firstWhere((x) => x['href'] == h);
     final school = ['/attendance', '/daily-work', '/timetable', '/my-leave', '/leave-approvals'];
+    Map<String, Object?> list(
+      String key,
+      String label,
+      String? hi,
+      String icon,
+      List<Object?> items,
+    ) => {'key': key, 'label': label, 'labelHi': hi, 'icon': icon, 'items': items};
+    final attendance = lists
+        ? list('attendance', 'Attendance & leave', 'उपस्थिति और अवकाश', 'check', [
+            by('/attendance'),
+            by('/my-attendance'),
+            by('/my-leave'),
+            by('/leave-approvals'),
+          ])
+        : list('attendance', 'Attendance', 'उपस्थिति', 'check', [
+            by('/attendance'),
+            by('/my-attendance'),
+            by('/my-leave'),
+          ]);
+    final classes = list('classes', 'Classes', 'कक्षाएँ', 'book', [
+      by('/daily-work'),
+      entry('/marks', 'Marks', 'clipboard'),
+      by('/timetable'),
+      entry('/my-payslips', 'My payslips', 'wallet'),
+    ]);
+    final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
+    Map<String, Object?> tabOf(Map<String, Object?> l) => {
+      'href': l['key'],
+      'label': l['label'],
+      'labelHi': l['labelHi'],
+      'icon': l['icon'],
+    };
     return {
       'tabs': [
         entry('/', 'Home', 'home'),
-        if (webTab) by('/leave-approvals') else by('/attendance'),
-        entry('classes', 'Classes', 'book'),
-        by('/messages'),
+        if (webTab) by('/leave-approvals') else tabOf(attendance),
+        if (lists) tabOf(office),
+        tabOf(classes),
+        if (!lists) by('/messages'),
         entry('more', 'More', 'grid'),
       ],
+      'lists': [if (!webTab) attendance, if (lists) office, classes],
       'shortcuts': [for (final h in own ?? school) by(h)],
       'ownShortcuts': own != null,
       'cards': [
@@ -801,6 +838,52 @@ void main() {
       find.descendant(of: find.byKey(const Key('moreList')), matching: find.text('Timetable')),
       findsNothing,
     );
+  });
+
+  testWidgets('list tabs: the school’s names and screens, its own list; Hindi names (part 3)', (
+    tester,
+  ) async {
+    await pumpStaff(tester, with_: School(lists: true));
+    Finder tab(String label) =>
+        find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+    expect(tab('Attendance & leave'), findsOneWidget);
+    expect(tab('Office'), findsOneWidget);
+    expect(tab('Classes'), findsOneWidget);
+    await tester.tap(tab('Attendance & leave'));
+    await tester.pumpAndSettle();
+    final list = find.byKey(const Key('listTab-attendance'));
+    expect(list, findsOneWidget);
+    // the school's screens in its order, the app's own words for its own screens
+    final s = S(false);
+    final rows = [s.markClass, s.myAttendance, s.myLeave, 'Leave to approve'];
+    for (var i = 1; i < rows.length; i++) {
+      expect(
+        tester.getTopLeft(find.descendant(of: list, matching: find.text(rows[i]))).dy,
+        greaterThan(
+          tester.getTopLeft(find.descendant(of: list, matching: find.text(rows[i - 1]))).dy,
+        ),
+      );
+    }
+    await tester.tap(tab('Office'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('list-list-1-messages')), findsOneWidget);
+    expect(find.byKey(const Key('list-list-1-help')), findsOneWidget);
+    // the app's own screen opens from a list
+    await tester.tap(tab('Attendance & leave'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('list-attendance-myLeave')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('applyStaffLeave')), findsOneWidget);
+  });
+
+  testWidgets('list tabs in Hindi: the school’s Hindi names', (tester) async {
+    await pumpStaff(tester, hindi: true, with_: School(lists: true));
+    Finder tab(String label) =>
+        find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+    expect(tab('उपस्थिति और अवकाश'), findsOneWidget);
+    expect(tab('कक्षाएँ'), findsOneWidget);
+    // no Hindi name given: the name as the school wrote it
+    expect(tab('Office'), findsOneWidget);
   });
 
   testWidgets('More in Hindi: the school’s Hindi group name', (tester) async {

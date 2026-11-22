@@ -11,18 +11,34 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/home_shell.dart' show AppTab, MoreList, nativeScreen;
-import 'classes.dart';
+import '../ui/outbox_view.dart';
 import 'my_day.dart';
 
-/// The app's Classes tab (my sections: homework, marks) in the school's staff layout (docs/design/94).
+/// The standard list tabs (docs/design/94, part 3): the app's Attendance and Classes tabs as they were.
+const attendanceList = 'attendance';
 const classesTab = 'classes';
+
+/// The two standard lists (the app as it was; a layout from before the lists).
+const standardStaffLists = [
+  LayoutList(attendanceList, 'Attendance', 'उपस्थिति', 'check', [
+    FamilyEntry('/attendance', 'Attendance', 'check'),
+    FamilyEntry('/my-attendance', 'My attendance', 'clock'),
+    FamilyEntry('/my-leave', 'My leave', 'calendar'),
+  ]),
+  LayoutList(classesTab, 'Classes', 'कक्षाएँ', 'book', [
+    FamilyEntry('/daily-work', 'Daily work', 'book'),
+    FamilyEntry('/marks', 'Marks', 'clipboard'),
+    FamilyEntry('/timetable', 'Timetable', 'calendar'),
+    FamilyEntry('/my-payslips', 'My payslips', 'wallet'),
+  ]),
+];
 
 /// The staff app as it was before the school arranged it (no layout has come yet, offline the first time).
 FamilyLayoutView staffFallback() => const FamilyLayoutView(
   tabs: [
     FamilyEntry('/', 'Home', 'home'),
-    FamilyEntry('/attendance', 'Attendance', 'check'),
-    FamilyEntry(classesTab, 'Classes', 'book'),
+    FamilyEntry(attendanceList, 'Attendance', 'check', 'उपस्थिति'),
+    FamilyEntry(classesTab, 'Classes', 'book', 'कक्षाएँ'),
     FamilyEntry('/messages', 'Messages', 'message'),
     FamilyEntry('more', 'More', 'grid'),
   ],
@@ -43,6 +59,7 @@ FamilyLayoutView staffFallback() => const FamilyLayoutView(
   ],
   academics: [],
   screens: [],
+  lists: standardStaffLists,
 );
 
 /// The staff layout of a profile (`GET me/staff-layout`), kept for offline use; the app as it was when none has
@@ -58,24 +75,33 @@ final staffLayoutProvider = FutureProvider.family<FamilyLayoutView, Profile>((re
   return staffFallback();
 });
 
-/// A staff member's tabs from the school's layout: Home, the three the school chose (a screen, or Classes), More.
+/// A list tab of the layout by its key; a layout kept from before the lists has the two standard ones.
+LayoutList? staffList(FamilyLayoutView layout, String key) {
+  for (final l in [...layout.lists, ...standardStaffLists]) {
+    if (l.key == key) return l;
+  }
+  return null;
+}
+
+/// A staff member's tabs from the school's layout: Home, the three the school chose (a screen, or a list tab with the
+/// school's name and screens — docs/design/94, part 3), More.
 List<AppTab> staffTabs(Profile p, S s, FamilyLayoutView layout) => [
   for (final t in layout.tabs)
     switch (t.href) {
       '/' => AppTab(Icons.home_outlined, s.home, (p) => MyDayScreen(profile: p), href: '/'),
       'more' => AppTab(Icons.apps, s.more, (p) => MoreList(profile: p), href: 'more'),
-      classesTab => AppTab(
-        Icons.class_outlined,
-        s.classes,
-        (p) => ClassesTab(profile: p),
-        href: classesTab,
-      ),
-      // the Attendance tab: mark a class, my attendance, my leave (as the app had it)
-      '/attendance' => AppTab(
-        Icons.fact_check_outlined,
-        s.attendance,
-        (p) => StaffAttendanceTab(profile: p),
-        href: '/attendance',
+      final key when !key.startsWith('/') => AppTab(
+        switch (key) {
+          attendanceList => Icons.fact_check_outlined,
+          classesTab => Icons.class_outlined,
+          _ => screenIcon(staffList(layout, key)?.items.firstOrNull?.href ?? key, t.icon),
+        },
+        tabLabel(s, t),
+        (p) {
+          final list = staffList(layout, key);
+          return list == null ? MoreList(profile: p) : StaffListTab(profile: p, list: list);
+        },
+        href: key,
       ),
       _ => AppTab(
         screenIcon(t.href, t.icon),
@@ -103,6 +129,58 @@ void openStaffScreen(BuildContext context, S s, Profile p, FamilyEntry e) {
       queryParameters: {'app': 'teacher', 'to': e.href, 'title': shortLabel(s, e)},
     ).toString(),
   );
+}
+
+/// A screen's name in a list tab: the words the app's own tabs always used for its screens, else the menu's.
+String staffListLabel(S s, FamilyEntry e) => switch (e.href) {
+  '/attendance' => s.markClass,
+  '/daily-work' => s.postWork,
+  '/marks' => s.marksEntry,
+  '/timetable' => s.myTimetable,
+  '/my-payslips' => s.payslips,
+  '/my-attendance' => s.myAttendance,
+  '/my-leave' => s.myLeave,
+  _ => shortLabel(s, e),
+};
+
+/// A list tab (docs/design/94, part 3): the screens the school put in it that the person can open, in its order; the
+/// app's own screen where it has one, else the staff website's page in the app. With Mark a class in it, the offline
+/// marks waiting to be sent show on top (as the Attendance tab had them).
+class StaffListTab extends ConsumerWidget {
+  const StaffListTab({super.key, required this.profile, required this.list});
+  final Profile profile;
+  final LayoutList list;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    return ListView(
+      key: Key('listTab-${list.key}'),
+      padding: const EdgeInsets.symmetric(vertical: Tokens.sp2),
+      children: [
+        if (list.items.any((e) => e.href == '/attendance'))
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: Tokens.sp4),
+            child: OutboxBanner(),
+          ),
+        for (final e in list.items)
+          ListTile(
+            key: Key('list-${list.key}-${screenKey(e.href)}'),
+            leading: Icon(screenIcon(e.href, e.icon)),
+            title: Text(staffListLabel(s, e)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              final screen = nativeScreen(profile, e.href, s);
+              if (screen != null) {
+                pushPage(context, staffListLabel(s, e), screen);
+              } else {
+                openStaffScreen(context, s, profile, e);
+              }
+            },
+          ),
+      ],
+    );
+  }
 }
 
 /// A tab the school chose that has only a web page: what it is and a button that opens it in the app.

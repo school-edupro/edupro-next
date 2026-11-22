@@ -36,17 +36,21 @@ export function StaffShell({
   const isCurrent = (href: string) =>
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
   const groups = staffGroups(me, lang, layout, waiting);
-  // the phone bar: the app's tabs from the layout (Classes opens the Classes page), else as built
+  // the phone bar: the app's tabs from the layout (a list tab opens its page, under the school's name), else as built
   const tabs: Array<{ href: string; label: string; icon: IconName }> = layout
     ? layout.tabs
         .filter((x) => x.href !== 'more')
         .map((x) =>
-          x.href === 'classes'
-            ? { href: '/classes', label: 'Classes', icon: 'book' as IconName }
-            : {
+          x.href.startsWith('/')
+            ? {
                 href: x.href,
                 label: x.label,
                 icon: (x.href === '/' ? 'home' : x.icon) as IconName,
+              }
+            : {
+                href: `/tabs/${x.href}`,
+                label: lang === 'hi' && x.labelHi ? x.labelHi : x.label,
+                icon: x.icon as IconName,
               },
         )
     : staffTabs(me, waiting);

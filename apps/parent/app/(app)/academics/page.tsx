@@ -37,17 +37,22 @@ export default async function AcademicsPage() {
   const items = (layout?.academics?.length ? layout.academics : STANDARD).filter(
     (x) => canOpen(me, x.href) && !isHidden(layout, x.href),
   );
+  // the school's name for the tab (docs/design/94, part 3); its Hindi name in Hindi
+  const name =
+    lang === 'hi' && layout?.academicsLabelHi
+      ? layout.academicsLabelHi
+      : t(lang, layout?.academicsLabel ?? 'Academics');
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
         kicker="EduPro"
-        title={t(lang, 'Academics')}
+        title={name}
         description={t(lang, 'The screens of the school day, one tap each.')}
       />
       <ul
         className="ep-card"
         style={{ listStyle: 'none', margin: 0, padding: 0 }}
-        aria-label={t(lang, 'Academics')}
+        aria-label={name}
       >
         {items.map((x, i) => (
           <li key={x.href} style={{ borderTop: i ? '1px solid var(--border-default)' : undefined }}>

@@ -90,7 +90,12 @@ export function FamilyShell({
           x.href === '/'
             ? { href: '/', label: 'Home', icon: 'home' as IconName }
             : x.href === 'academics'
-              ? { href: '/academics', label: 'Academics', icon: 'book' as IconName }
+              ? {
+                  href: '/academics',
+                  // the school's name for it (docs/design/94, part 3); its Hindi name in Hindi
+                  label: lang === 'hi' && x.labelHi ? x.labelHi : x.label,
+                  icon: 'book' as IconName,
+                }
               : { href: x.href, label: SHORT[x.href] ?? x.label, icon: iconOf(x.icon) },
         )
         .filter((x) => x.href === '/academics' || canOpen(me, x.href))

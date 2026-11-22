@@ -170,3 +170,13 @@ Phases: **J** the model and the API · **K** admin's sections · **L** the app a
   name and Name in Hindi (empty: Academics); `OrderedList` takes more of a section (`children`) and `TabName` is
   shared. Checked in a browser on Alpha (desktop and phone; a list added, named, given screens and made a tab, a list
   renamed — nothing saved) with axe.
+- **L (22 Nov 2026).** App: `FamilyEntry.labelHi`, `LayoutList` and `FamilyLayoutView.lists`; `tabLabel` gives a list
+  or Academics tab the school's name (its Hindi name in Hindi; none: the dictionary's, else the name as written);
+  `staffTabs` turns a list key into `StaffListTab` — the list's screens in order, the app's own words and screens
+  for those it has (Mark a class, Post homework, Marks entry, My timetable, Payslips, My attendance, My leave), the
+  offline-marks banner when Mark a class is in it; a layout from before the lists uses the two standard ones. The
+  fixed `ClassesTab` and `StaffAttendanceTab` are gone. Staff website: the phone bar's list tabs open
+  `/tabs/<key>` (replacing `/classes`) under the school's names; an unknown key says it is not available. Parent
+  website: the Academics tab and page carry the school's name. Tests: `staff_test.dart` (list tabs, Hindi names),
+  `family_test.dart` (the Academics name). Checked in a browser on a test school with published lists (phone bar,
+  the Office list page, Hindi, an unknown list; axe clean) and the parent website on Alpha (Academics unchanged).

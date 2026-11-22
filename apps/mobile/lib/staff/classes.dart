@@ -14,36 +14,6 @@ import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
-import 'marks.dart';
-
-/// A staff member's Classes tab: post homework, enter marks, the week's timetable, payslips.
-class ClassesTab extends ConsumerWidget {
-  const ClassesTab({super.key, required this.profile});
-  final Profile profile;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(stringsProvider);
-    final items = <(String, IconData, Widget)>[
-      (s.postWork, Icons.menu_book_outlined, PostWorkScreen(profile: profile)),
-      (s.marksEntry, Icons.edit_note, MarksHome(profile: profile)),
-      (s.myTimetable, Icons.view_week_outlined, StaffTimetable(profile: profile)),
-      (s.payslips, Icons.receipt_long_outlined, PayslipsScreen(profile: profile)),
-    ];
-    return ListView(
-      key: const Key('classesTab'),
-      children: [
-        for (final (title, icon, screen) in items)
-          ListTile(
-            leading: Icon(icon),
-            title: Text(title),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => pushPage(context, title, screen),
-          ),
-      ],
-    );
-  }
-}
 
 /// Homework, classwork or an assignment for one class: what to do, the due date, photos or files.
 class PostWorkScreen extends ConsumerStatefulWidget {

@@ -58,7 +58,8 @@ List<AppTab> familyTabs(Profile p, S s, FamilyLayoutView layout) => [
       'more' => AppTab(Icons.apps, s.more, (p) => MoreList(profile: p), href: 'more'),
       'academics' => AppTab(
         screenIcon('academics'),
-        s.academics,
+        // the school's name for it (docs/design/94, part 3), else Academics
+        tabLabel(s, t),
         (p) => AcademicsScreen(profile: p, items: layout.academics),
         href: 'academics',
       ),

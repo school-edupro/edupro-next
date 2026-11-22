@@ -1534,6 +1534,25 @@ void main() {
     Finder tab(String label) =>
         find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
 
+    testWidgets('the Academics tab under the school’s name, its Hindi name in Hindi (part 3)', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final named = studentLayout();
+      named['tabs'] = [
+        for (final t in named['tabs']! as List)
+          (t as Map)['href'] == 'academics' ? {...t, 'label': 'Studies', 'labelHi': 'पढ़ाई'} : t,
+      ];
+      final school = School()..layout = named;
+      await pumpFamily(tester, kind: 'student', school: school);
+      expect(tab('Studies'), findsOneWidget);
+      expect(tab('Academics'), findsNothing);
+      await tester.tap(tab('Studies'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('academicsList')), findsOneWidget);
+    });
+
     testWidgets('its tabs, its shortcuts (with All), its cards in order, its Academics list', (
       tester,
     ) async {
