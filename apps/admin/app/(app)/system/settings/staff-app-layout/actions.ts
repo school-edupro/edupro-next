@@ -40,7 +40,24 @@ export async function saveStaffLayoutDraft(layout: StaffLayout): Promise<Result>
   return result(() =>
     apiFetch('/platform/staff-app-layout', {
       method: 'PUT',
-      body: JSON.stringify({ tabs: layout.tabs, shortcuts: layout.shortcuts, cards: layout.cards }),
+      body: JSON.stringify({
+        tabs: layout.tabs,
+        shortcuts: layout.shortcuts,
+        cards: layout.cards,
+        // the menu as edited (an empty name: the standard one) and the hidden screens
+        ...(layout.menu
+          ? {
+              menu: layout.menu.map((g) => ({
+                key: g.key,
+                label: g.label?.trim() ? g.label : null,
+                labelHi: g.labelHi?.trim() ? g.labelHi : null,
+                items: g.items,
+                hidden: g.hidden === true,
+              })),
+            }
+          : {}),
+        hidden: layout.hidden ?? [],
+      }),
     }),
   );
 }

@@ -201,8 +201,11 @@ export function OrderedList({
  * the school's name for it in English and Hindi (empty: the standard name) and its screens in order — moved up / down
  * inside the group or to another group. Every screen stays in one group.
  */
-function MenuEditor({
-  audience,
+export function MenuEditor({
+  idBase,
+  standard,
+  who,
+  whereHidden,
   menu,
   hidden,
   labelOf,
@@ -210,7 +213,14 @@ function MenuEditor({
   onChange,
   onHidden,
 }: {
-  audience: FamilyAudience;
+  /** The ids of the section's parts (the family page keeps `fal-menu-<audience>`). */
+  idBase: string;
+  /** The groups' standard names (an empty name keeps it). */
+  standard: Record<string, string>;
+  /** Whom hiding leaves the screens out for: "families", "staff". */
+  who: string;
+  /** Where a hidden screen is left out, as a list for the help line. */
+  whereHidden: string;
   menu: FamilyMenuGroup[];
   /** The screens hidden one by one (a hidden group hides its screens itself). */
   hidden: string[];
@@ -227,7 +237,6 @@ function MenuEditor({
     menu,
     hidden,
   });
-  const standard = MENU_GROUP_NAME[audience];
   const nameOf = (g: FamilyMenuGroup) => g.label?.trim() || standard[g.key] || g.key;
   const swap = <T,>(xs: T[], i: number, j: number) => {
     const next = [...xs];
@@ -250,23 +259,22 @@ function MenuEditor({
   return (
     <section
       className="ep-card"
-      aria-labelledby={`fal-menu-${audience}-h`}
+      aria-labelledby={`${idBase}-h`}
       style={{ marginBottom: 'var(--sp-4)' }}
     >
-      <h2 id={`fal-menu-${audience}-h`} className="ep-cdash__h3" style={{ margin: 0 }}>
+      <h2 id={`${idBase}-h`} className="ep-cdash__h3" style={{ margin: 0 }}>
         Website menu and app More
       </h2>
       <p
-        data-testid={`fal-menu-${audience}-hidden-count`}
+        data-testid={`${idBase}-hidden-count`}
         style={{ margin: 'var(--sp-1) 0 0', fontWeight: 'var(--fw-semibold)' }}
       >
-        {`Hidden from families: ${String(allHidden.size)} ${allHidden.size === 1 ? 'screen' : 'screens'}`}
+        {`Hidden from ${who}: ${String(allHidden.size)} ${allHidden.size === 1 ? 'screen' : 'screens'}`}
       </p>
       <p className="ep-field__help" style={{ marginTop: 'var(--sp-1)' }}>
         The groups of the website&apos;s side menu and of the app&apos;s More list, in this order,
         with their screens. Home stays first. Every screen is in one group. Hidden screens are left
-        out everywhere for families (menu, More, tabs, shortcuts, cards, Academics, Help). To stop
-        someone reading data, use Access → Roles.
+        out for {who} ({whereHidden}). To stop someone reading data, use Access → Roles.
       </p>
       <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 'var(--sp-3)' }}>
         {menu.map((g, gi) => {
@@ -302,7 +310,7 @@ function MenuEditor({
                 >
                   {groupName}
                 </strong>
-                {g.hidden ? <Badge tone="warning">Hidden from families</Badge> : null}
+                {g.hidden ? <Badge tone="warning">{`Hidden from ${who}`}</Badge> : null}
                 {canEdit ? (
                   <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
                     <Button
@@ -348,14 +356,11 @@ function MenuEditor({
                   }}
                 >
                   <div className="ep-field" style={{ flex: '1 1 12rem', marginBottom: 0 }}>
-                    <label
-                      className="ep-field__label"
-                      htmlFor={`fal-menu-${audience}-${g.key}-name`}
-                    >
+                    <label className="ep-field__label" htmlFor={`${idBase}-${g.key}-name`}>
                       Name
                     </label>
                     <input
-                      id={`fal-menu-${audience}-${g.key}-name`}
+                      id={`${idBase}-${g.key}-name`}
                       className="ep-input"
                       value={g.label ?? ''}
                       placeholder={standard[g.key]}
@@ -364,11 +369,11 @@ function MenuEditor({
                     />
                   </div>
                   <div className="ep-field" style={{ flex: '1 1 12rem', marginBottom: 0 }}>
-                    <label className="ep-field__label" htmlFor={`fal-menu-${audience}-${g.key}-hi`}>
+                    <label className="ep-field__label" htmlFor={`${idBase}-${g.key}-hi`}>
                       Name in Hindi (optional)
                     </label>
                     <input
-                      id={`fal-menu-${audience}-${g.key}-hi`}
+                      id={`${idBase}-${g.key}-hi`}
                       className="ep-input"
                       lang="hi"
                       value={g.labelHi ?? ''}
@@ -941,7 +946,10 @@ export function FamilyLayoutEditor({
           />
           {draft.menu ? (
             <MenuEditor
-              audience={audience}
+              idBase={`fal-menu-${audience}`}
+              standard={MENU_GROUP_NAME[audience]}
+              who="families"
+              whereHidden="everywhere: menu, More, tabs, shortcuts, cards, Academics, Help"
               menu={draft.menu}
               hidden={draft.hidden ?? []}
               labelOf={labelOf}

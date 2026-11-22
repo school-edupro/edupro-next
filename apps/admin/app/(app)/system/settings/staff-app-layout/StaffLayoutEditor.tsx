@@ -6,11 +6,12 @@ import { when } from '@/lib/family-layout';
 import {
   CLASSES_TAB,
   sameStaffLayout,
+  staffHidden,
   staffLayoutProblems,
   type StaffLayout,
   type StaffLayoutSetup,
 } from '@/lib/staff-layout';
-import { OrderedList } from '../family-app-layout/FamilyLayoutEditor';
+import { MenuEditor, OrderedList } from '../family-app-layout/FamilyLayoutEditor';
 import { discardStaffLayout, publishStaffLayout, saveStaffLayoutDraft } from './actions';
 
 /** The staff app's Home as the draft has it: the greeting, the four figures, the tiles, the cards and the tab bar. */
@@ -19,12 +20,26 @@ function Preview({
   firstName,
   labelOf,
   cardLabel,
+  cardNeeds,
 }: {
   draft: StaffLayout;
   firstName: string;
   labelOf: (key: string) => { label: string };
   cardLabel: (key: string) => string;
+  cardNeeds: (key: string) => string | null | undefined;
 }) {
+  // what staff get: hidden screens left out (a hidden tab's place goes to the next shortcut)
+  const hidden = staffHidden(draft);
+  const shortcuts = draft.shortcuts.filter((h) => !hidden.has(h));
+  const cards = draft.cards.filter((c) => {
+    const needs = cardNeeds(c);
+    return !needs || !hidden.has(needs);
+  });
+  const shownTabs = draft.tabs.filter((h) => !hidden.has(h));
+  for (const h of shortcuts) {
+    if (shownTabs.length >= 3) break;
+    if (!shownTabs.includes(h)) shownTabs.push(h);
+  }
   const tile = (text: string) => (
     <div
       key={text}
@@ -55,7 +70,7 @@ function Preview({
       <span style={{ lineHeight: 1.2 }}>{text}</span>
     </div>
   );
-  const tabs = ['Home', ...draft.tabs.map((t) => labelOf(t).label), 'More'];
+  const tabs = ['Home', ...shownTabs.map((t) => labelOf(t).label), 'More'];
   return (
     <figure style={{ margin: 0 }} aria-labelledby="sal-preview-cap">
       <figcaption
@@ -121,7 +136,7 @@ function Preview({
               gap: 'var(--sp-3) var(--sp-2)',
             }}
           >
-            {draft.shortcuts.map((h) => tile(labelOf(h).label))}
+            {shortcuts.map((h) => tile(labelOf(h).label))}
             {tile('All')}
           </div>
           <ol
@@ -134,7 +149,7 @@ function Preview({
               gap: 'var(--sp-2)',
             }}
           >
-            {draft.cards.map((c) => (
+            {cards.map((c) => (
               <li
                 key={c}
                 style={{
@@ -204,6 +219,11 @@ export function StaffLayoutEditor({
     sub: key === CLASSES_TAB ? 'My sections: homework and marks (for those who teach)' : undefined,
   });
   const cardLabel = (key: string) => cardOf.get(key)?.label ?? key;
+  const hidden = staffHidden(draft);
+  const standardNames = useMemo(
+    () => Object.fromEntries(catalogue.groups.map((g) => [g.key, g.label])),
+    [catalogue.groups],
+  );
   const dirty = !sameStaffLayout(draft, setup.draft);
   const problems = staffLayoutProblems(draft, catalogue);
   const screenOptions = catalogue.screens.map((s) => ({ key: s.href, label: s.label }));
@@ -371,6 +391,7 @@ export function StaffLayoutEditor({
             fixedLast="More — always last"
             canEdit={canEdit}
             onChange={set('tabs')}
+            isHidden={(k) => hidden.has(k)}
           />
           <OrderedList
             id="sal-shortcuts"
@@ -384,6 +405,7 @@ export function StaffLayoutEditor({
             addLabel="Add a shortcut"
             canEdit={canEdit}
             onChange={set('shortcuts')}
+            isHidden={(k) => hidden.has(k)}
           />
           <OrderedList
             id="sal-cards"
@@ -400,10 +422,42 @@ export function StaffLayoutEditor({
             addLabel="Add a card"
             canEdit={canEdit}
             onChange={set('cards')}
+            isHidden={(k) => {
+              const needs = cardOf.get(k)?.needs;
+              return !!needs && hidden.has(needs);
+            }}
           />
+          {draft.menu ? (
+            <MenuEditor
+              idBase="sal-menu"
+              standard={standardNames}
+              who="staff"
+              whereHidden="the website's side menu, the app's More, tabs, shortcuts, Home tiles and cards — the page itself still opens from a link"
+              menu={draft.menu}
+              hidden={draft.hidden ?? []}
+              labelOf={labelOf}
+              canEdit={canEdit}
+              onChange={(menu) => {
+                setMsg(null);
+                setDraft({ ...draft, menu });
+              }}
+              onHidden={(next) => {
+                setMsg(null);
+                // in the menu's order, as it is saved
+                const order = (draft.menu ?? []).flatMap((g) => g.items);
+                setDraft({ ...draft, hidden: order.filter((h) => next.includes(h)) });
+              }}
+            />
+          ) : null}
         </div>
         <div style={{ flex: '0 1 22rem', minWidth: 0 }}>
-          <Preview draft={draft} firstName={firstName} labelOf={labelOf} cardLabel={cardLabel} />
+          <Preview
+            draft={draft}
+            firstName={firstName}
+            labelOf={labelOf}
+            cardLabel={cardLabel}
+            cardNeeds={(k) => cardOf.get(k)?.needs}
+          />
         </div>
       </div>
       {ask === 'publish' ? (

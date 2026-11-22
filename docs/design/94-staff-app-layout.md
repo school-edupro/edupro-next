@@ -105,3 +105,9 @@ the Classes page, Home tiles) and the app's More · **I** close.
   and `hidden`. API: the draft and publish carry `menu` and `hidden`; the catalogue gives the groups' standard names;
   `me/staff-layout` also returns `waiting` and `unread` (one call for the staff website's frame); `/me/menu?kind=staff`
   follows the published menu. Tests: `staff-layout.e2e-spec.ts` (6).
+- **G (22 Nov 2026).** Admin: Staff app layout gains **Website menu and app More** — the family page's editor made
+  reusable (`MenuEditor` in `FamilyLayoutEditor.tsx`: ids, standard names, whom and where) — "Hidden from staff: N
+  screens", groups moved up / down, renamed in English and Hindi, hidden as a group; each screen moved, moved to another
+  group, hidden or shown. Hidden screens are marked in the tabs, shortcuts and cards lists and left out of the preview;
+  the save sends the menu and the hidden screens. Checked in a browser on Alpha (save caught, nothing saved) with axe;
+  the family page keeps its words.
