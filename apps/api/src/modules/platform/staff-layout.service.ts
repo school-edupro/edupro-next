@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import {
   DEFAULT_STAFF_LAYOUT,
   STAFF_CARDS,
+  STAFF_MENU,
+  staffMenuOf,
   STAFF_LAYOUT_LIMITS,
   checkStaffLayout,
   myStaffLayout,
@@ -33,11 +35,14 @@ interface LayoutRow {
 const AUDIENCE = 'staff';
 const PREF = 'staff.shortcuts';
 
-/** The three lists in a fixed order (so two layouts compare by their JSON). */
+/** The lists in a fixed order (so two layouts compare by their JSON). */
 const tidy = (l: StaffLayout): StaffLayout => ({
   tabs: [...l.tabs],
   shortcuts: [...l.shortcuts],
   cards: [...l.cards],
+  // a layout kept before the menu was arranged has none: the menu as built
+  menu: staffMenuOf(l),
+  hidden: [...(l.hidden ?? [])],
 });
 const same = (x: StaffLayout, y: StaffLayout) =>
   JSON.stringify(tidy(x)) === JSON.stringify(tidy(y));
@@ -76,6 +81,8 @@ export class StaffLayoutService {
         catalogue: {
           screens: staffLayoutScreens(),
           cards: STAFF_CARDS,
+          // the menu groups' standard names (Home stays first and is not one)
+          groups: STAFF_MENU.map((g) => ({ key: g.id, label: g.label })),
           limits: STAFF_LAYOUT_LIMITS,
           defaults: DEFAULT_STAFF_LAYOUT,
         },
@@ -159,10 +166,13 @@ export class StaffLayoutService {
 
   // ------------------------------------------------------------------------------------------ staff
 
-  /** The layout a staff member gets: the published one (else the standard), their rights and work applied. */
+  /**
+   * The layout a staff member gets: the published one (else the standard), their rights and work applied — with the
+   * counts behind it (unread messages, the work waiting), so the staff website reads its frame in one call.
+   */
   async mine(ctx: RequestContext, req: ContextualRequest) {
     const tenant = requireTenant(ctx);
-    const [permissions, { waiting }] = await Promise.all([
+    const [permissions, { waiting, unread }] = await Promise.all([
       this.access.effectivePermissions(tenant).then((p) => [...p]),
       this.waiting.count(req),
     ]);
@@ -171,9 +181,17 @@ export class StaffLayoutService {
       const own = await this.own(c);
       return {
         ...myStaffLayout(permissions, waiting, r?.published ?? DEFAULT_STAFF_LAYOUT, own),
+        // never published: the staff website keeps its menu and phone bar as built
         published: !!r?.published,
+        waiting,
+        unread,
       };
     });
+  }
+
+  /** The published staff layout (null: never published — the menu as built). */
+  async published(ctx: RequestContext): Promise<StaffLayout | null> {
+    return this.db.tenant(requireTenant(ctx), async (c) => (await this.row(c))?.published ?? null);
   }
 
   /** A staff member's own Home shortcuts (4 to 12 screens they can open), kept for them in this school. */

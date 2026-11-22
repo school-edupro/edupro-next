@@ -30,6 +30,13 @@ import { YearsService } from './years.service';
     InternalCalls,
     AuditService,
   ],
-  exports: [SettingsService, YearsService, SchoolService, FamilyLayoutService, StaffWaitingService],
+  exports: [
+    SettingsService,
+    YearsService,
+    SchoolService,
+    FamilyLayoutService,
+    StaffWaitingService,
+    StaffLayoutService,
+  ],
 })
 export class PlatformModule {}

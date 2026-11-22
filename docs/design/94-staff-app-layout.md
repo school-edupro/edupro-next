@@ -81,3 +81,27 @@ each person gets); the staff website's own Home and side menu stay as they are.
   suites (32), the database security and permission-coverage tests, the app (213 tests, analyze, the generated calls)
   and the local secret scan pass. The staff website's own Home and side menu are unchanged (its menu now counts work
   with the same route as the app).
+
+## Part 2: the staff menu (asked 22 Nov 2026)
+
+"Website menu and app More — Hidden from families: 0 screens: add this section in the staff mobile and web app."
+
+| Question                | Answer                                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| A hidden screen         | Left out of the menus, More, tabs, shortcuts, Home tiles and cards; its page still opens from a link |
+| The website's phone bar | Follows the staff app's tabs + Menu (as the families' website)                                       |
+
+Decided without asking (as for families): the school orders the groups, moves screens between them and renames them
+(English and Hindi); Home stays first; hiding is per screen or per group; rights stay with Access → Roles; nothing
+changes until the school publishes.
+
+Phases: **F** the model and the API · **G** admin's section · **H** the staff website (side menu, phone bar + Menu,
+the Classes page, Home tiles) and the app's More · **I** close.
+
+- **F (22 Nov 2026).** `staff-layout.ts`: `StaffLayout.menu` / `hidden`, `defaultStaffMenu`, `staffMenuOf` (the
+  school's groups made whole), `staffHiddenScreens`, `staffGroupLabel`, the checks (every group once, every screen in
+  one group, names 1–40 letters, hidden screens known); `myStaffLayout` leaves hidden screens out of the tabs,
+  shortcuts, cards and the screens to pin, and gives the `menu` (the school's order and names, the person's screens)
+  and `hidden`. API: the draft and publish carry `menu` and `hidden`; the catalogue gives the groups' standard names;
+  `me/staff-layout` also returns `waiting` and `unread` (one call for the staff website's frame); `/me/menu?kind=staff`
+  follows the published menu. Tests: `staff-layout.e2e-spec.ts` (6).

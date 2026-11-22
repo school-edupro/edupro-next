@@ -10,7 +10,14 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { familyIcon, familyScreens, myFamilyLayout, screenIcon, staffScreens } from '@edupro/menus';
+import {
+  familyIcon,
+  familyScreens,
+  myFamilyLayout,
+  myStaffLayout,
+  screenIcon,
+  staffScreens,
+} from '@edupro/menus';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { DomainError } from '../../common/errors/domain-error';
@@ -26,6 +33,7 @@ import { AccessService } from '../access/access.service';
 import { DbService } from '../../common/db/db.service';
 import { ProfilesService } from './profiles.service';
 import { FamilyLayoutService } from '../platform/family-layout.service';
+import { StaffLayoutService } from '../platform/staff-layout.service';
 import { StaffWaitingService } from './staff-waiting.service';
 
 /** How and where a sign-in happened (the web apps' BFF and the mobile app send it). */
@@ -62,6 +70,7 @@ export class MeController {
     private readonly profilesOf: ProfilesService,
     private readonly layouts: FamilyLayoutService,
     private readonly staffWaiting: StaffWaitingService,
+    private readonly staffLayouts: StaffLayoutService,
   ) {}
 
   /**
@@ -107,6 +116,24 @@ export class MeController {
     if (kind === 'staff') {
       // docs/design/94: with the work waiting on the person, as the staff website shows it
       const { waiting } = await this.staffWaiting.count(req);
+      // the school's published staff menu (part 2): its groups, names and order, hidden screens left out
+      const published = await this.staffLayouts.published(ctx);
+      if (published)
+        return {
+          app: 'teacher',
+          groups: myStaffLayout(permissions, waiting, published, null).menu.map((g) => ({
+            id: g.key,
+            label: g.label,
+            labelHi: g.labelHi,
+            icon: g.icon,
+            items: g.items.map((i) => ({
+              href: i.href,
+              label: i.label,
+              help: null,
+              icon: i.icon,
+            })),
+          })),
+        };
       return {
         app: 'teacher',
         groups: staffScreens(permissions, waiting).map((g) => ({
