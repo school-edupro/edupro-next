@@ -287,3 +287,26 @@ Calls added: `ExamEntryController_indicators`, `_putIndicators`, `_indicatorsExc
 a goal over its indicators, levels with words, Save's rows, an indicator's own levels, the sheet downloaded, an upload
 with a problem then saved, the parent's words kept, the words saved, a photo removed, a photo asked for then added, a
 teacher given areas; light, dark, Hindi, twice the text); 249 app tests; the web preview rebuilt.
+
+## Part 13: Remarks; the Excel upload on Indicators (22 Nov 2026)
+
+"Staff app: the Remarks section the same as the staff website; on Indicators and progress card the Excel upload
+option does not show."
+
+**The upload on Indicators.** Nothing on Alpha is locked (every section of both exams that take indicators reads
+`locked: false`), so the upload was offered — but **By Excel** stood after every pupil's card, and Alpha's progress
+card has 72 indicators: a very long way down. It now comes first, under the set's name. The web preview's server now
+sends `cache-control: no-cache`, so a reload always takes the newest build (a phone app built earlier shows today's
+changes only once built again).
+
+**Remarks** — `lib/staff/remarks.dart`, `RemarksScreen` (`nativeScreen('/remarks')`, from Classes and More), as the
+website's page: the line ("One remark per pupil and category; the report card prints them."), **Exam** (those taking
+remarks), **Section** (those the person writes remarks in); **By Excel** first (`SheetByExcel`: the remarks sheet,
+upload checked then saved); "Written by others here: English remarks (…)"; each pupil a card with a box a category
+the person writes — free words, with **Choose a remark** (the school's remarks of the category, put in the box to
+keep or change), or a list-only category's drop-down; **Save** sends every box (`PUT exams/:id/remark-items`; an
+empty box clears it); the API's refusals in words; a section with nothing to write says why. Calls added:
+`ExamRemarksController_items`, `_putItems`, `_itemsExcel !file`, `_itemsUpload`. No API change. Tests:
+`staff_test.dart` (By Excel first on both screens, others' categories, a remark from the list, a list-only remark,
+Save's rows, the sheet and an upload, a section with nothing to write; light, dark, Hindi, twice the text); 254 app
+tests; the web preview rebuilt.

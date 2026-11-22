@@ -81,6 +81,7 @@ class School {
   final photosAdded = <Map<String, Object?>>[];
   final photosRemoved = <String>[];
   int sheetChecks = 0;
+  final remarkPuts = <Map<String, Object?>>[];
   final lessonRules = <Map<String, Object?>>[
     {
       'id': 'r1',
@@ -228,6 +229,7 @@ class School {
       entry('/syllabus', 'My syllabus', 'book'),
       entry('/verify-marks', 'Verify marks', 'check'),
       entry('/indicators', 'Indicators and progress card', 'chart'),
+      entry('/remarks', 'Remarks', 'message'),
     ]);
     final office = list('list-1', 'Office', null, 'message', [by('/messages'), by('/help')]);
     Map<String, Object?> tabOf(Map<String, Object?> l) => {
@@ -513,7 +515,7 @@ class School {
               'id': 'e2',
               'code': 'IND',
               'name': 'Indicators',
-              'areas': ['indicators'],
+              'areas': ['indicators', 'remarks'],
             },
             {
               'id': 'e3',
@@ -644,6 +646,7 @@ class School {
               'code': 'VI-A',
               'register': true,
               'indicators': true,
+              'remarks': true,
               'subjects': [],
             },
             {
@@ -651,6 +654,7 @@ class School {
               'code': 'VI-B',
               'register': false,
               'indicators': true,
+              'remarks': true,
               'subjects': [],
             },
             {
@@ -658,6 +662,7 @@ class School {
               'code': 'VI-C',
               'register': false,
               'indicators': false,
+              'remarks': false,
               'subjects': [],
             },
           ],
@@ -777,6 +782,71 @@ class School {
         return {'ok': true};
       case 'GET /exams/e2/portfolio/pf1/image':
         return null;
+      case 'GET /exams/e2/remark-items':
+        final other = c.query?['classSectionId'] == '301';
+        return {
+          'section': {'id': other ? '301' : '300', 'code': other ? 'VI-B' : 'VI-A'},
+          'locked': false,
+          'reason': other ? 'Only the class teacher writes these here.' : null,
+          'categories': [
+            {
+              'id': 'k1',
+              'name': 'General',
+              'subjectName': null,
+              'freeText': true,
+              'may': !other,
+              'bank': [
+                {'code': 'G1', 'text': 'Works hard'},
+                {'code': 'G2', 'text': 'Helps others'},
+              ],
+            },
+            {
+              'id': 'k2',
+              'name': 'Conduct',
+              'subjectName': null,
+              'freeText': false,
+              'may': !other,
+              'bank': [
+                {'code': 'C1', 'text': 'Very good'},
+                {'code': 'C2', 'text': 'Good'},
+              ],
+            },
+            {
+              'id': 'k3',
+              'name': 'English remarks',
+              'subjectName': 'English',
+              'freeText': true,
+              'may': false,
+              'writtenBy': ['Ravi Sample (E099)'],
+              'bank': [],
+            },
+          ],
+          'rows': [
+            {
+              'studentId': '41',
+              'name': 'Kid Sample',
+              'rollNo': 1,
+              'items': {
+                'k1': {'text': 'Works hard'},
+              },
+            },
+            {'studentId': '42', 'name': 'Ria Sample', 'rollNo': 2, 'items': <String, Object?>{}},
+          ],
+        };
+      case 'PUT /exams/e2/remark-items':
+        remarkPuts.add(c.body!);
+        return {'changed': 3};
+      case 'GET /exams/e2/remark-items/excel':
+        return null;
+      case 'POST /exams/e2/remark-items/upload':
+        return {
+          'rows': [
+            {'row': 2, 'admissionNo': 'A-41', 'name': 'Kid Sample', 'error': null},
+          ],
+          'ready': 1,
+          'errors': 0,
+          'applied': c.body!['apply'] == true,
+        };
       case 'GET /exams/entry-status/waiting':
         Map<String, Object?> waiting(String subject, String name) => {
           'examId': 'e1',
@@ -1707,6 +1777,12 @@ void main() {
     expect(find.text('Language (1/4)'), findsOneWidget);
     expect(find.text('Numeracy (0/2)'), findsOneWidget);
     expect(find.text('Also entered by: Ravi Sample (E099)'), findsOneWidget);
+    // the sheet by Excel comes first, its upload offered while entry is open (not after every pupil)
+    expect(find.byKey(const Key('xlUpload')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('xlCard'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('inRatings'))).dy),
+    );
     // a goal's name over its indicators; the level with its words
     final kid = find.byKey(const Key('inPupil-41'));
     expect(find.descendant(of: kid, matching: find.text('Speaking')), findsOneWidget);
@@ -1881,6 +1957,140 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: k);
     }
+  });
+
+  testWidgets('Remarks in the app: categories, a remark from the list, others, Excel, save', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2600), overrides: pickers);
+    final s = S(false);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remarks'));
+    await tester.pumpAndSettle();
+    // no web page
+    expect(find.byKey(const Key('rmScreen')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-remarks')), findsNothing);
+    expect(find.text(s.rmIntro), findsOneWidget);
+    // the sheet by Excel first, with its upload
+    expect(find.byKey(const Key('xlUpload')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('xlCard'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('rmSheet'))).dy),
+    );
+    // who writes the others
+    expect(
+      find.text('Written by others here: English remarks (Ravi Sample (E099))'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('rmText-41|k3')), findsNothing);
+    // what is written; a remark from the school's list into the free box
+    expect(
+      tester.widget<TextField>(find.byKey(const Key('rmText-41|k1'))).controller!.text,
+      'Works hard',
+    );
+    await tester.tap(find.byKey(const Key('rmPick-42|k1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rmBank-G2')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byKey(const Key('rmText-42|k1'))).controller!.text,
+      'Helps others',
+    );
+    // a list-only category: one of its remarks
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('rmPupil-41')),
+        matching: find.byType(DropdownButtonFormField<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Very good').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rmSave')));
+    await tester.pumpAndSettle();
+    expect(school.remarkPuts.single, {
+      'classSectionId': '300',
+      'rows': [
+        {'studentId': '41', 'categoryId': 'k1', 'text': 'Works hard'},
+        {'studentId': '41', 'categoryId': 'k2', 'text': 'Very good'},
+        {'studentId': '42', 'categoryId': 'k1', 'text': 'Helps others'},
+        {'studentId': '42', 'categoryId': 'k2', 'text': ''},
+      ],
+    });
+    expect(find.text(s.inSaved), findsOneWidget);
+    // the sheet by Excel: download, an upload checked then saved
+    await tester.tap(find.byKey(const Key('xlDownload')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/exams/e2/remark-items/excel').query, {
+      'classSectionId': '300',
+    });
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('xlUpload')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('xlSave')));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved (1).'), findsOneWidget);
+    // a section where the person writes nothing: why
+    await tester.tap(find.byKey(const Key('rmSection')));
+    await tester.pumpAndSettle();
+    expect(find.text('VI-C'), findsNothing);
+    await tester.tap(find.text('VI-B').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Only the class teacher writes these here.'), findsOneWidget);
+    expect(find.byKey(const Key('rmSave')), findsNothing);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets('Remarks: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})', (
+      tester,
+    ) async {
+      tester.platformDispatcher.platformBrightnessTestValue = dark
+          ? Brightness.dark
+          : Brightness.light;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      final handle = tester.ensureSemantics();
+      await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600), overrides: pickers);
+      final s = S(hindi);
+      Future<void> check(String where) async {
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+        }
+      }
+
+      await tester.tap(find.text(s.classes).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(s.menu('Remarks')));
+      await check('Remarks');
+      await tester.tap(find.byKey(const Key('rmPick-42|k1')));
+      await check('The school’s remarks');
+      handle.dispose();
+    });
+  }
+
+  testWidgets('Remarks: large text (twice the size) lays out without overflow', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780), overrides: pickers);
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Remarks'));
+    await tester.tap(find.text('Remarks'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Remarks');
+    final list = find
+        .descendant(of: find.byKey(const Key('rmScreen')), matching: find.byType(Scrollable))
+        .first;
+    await tester.scrollUntilVisible(find.byKey(const Key('rmSave')), 300, scrollable: list);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Remarks, scrolled');
   });
 
   for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {

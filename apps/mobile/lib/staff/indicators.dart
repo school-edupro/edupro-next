@@ -510,6 +510,27 @@ class _IndicatorSheetViewState extends ConsumerState<IndicatorSheetView> {
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: Tokens.sp2),
+        // first, so it is there without going past every pupil (a progress card has many indicators)
+        SheetByExcel(
+          title: '${section['code']} · ${set['name']}',
+          help: s.xlIndicatorsHelp,
+          canUpload: open,
+          download: () => ref
+              .read(apiProvider)
+              .examEntryIndicatorsExcel(id: widget.examId, classSectionId: widget.sectionId),
+          upload: (file, apply) => ref
+              .read(apiProvider)
+              .examEntryIndicatorsUpload(
+                id: widget.examId,
+                body: SectionSheetUploadDto(
+                  classSectionId: widget.sectionId,
+                  file: file,
+                  apply: apply,
+                ),
+              ),
+          onSaved: () => ref.invalidate(indicatorSheetProvider(_key)),
+        ),
+        const SizedBox(height: Tokens.sp3),
         if (areas.length > 1) ...[
           Semantics(
             container: true,
@@ -572,26 +593,6 @@ class _IndicatorSheetViewState extends ConsumerState<IndicatorSheetView> {
               ],
             ),
           ),
-        ),
-        const SizedBox(height: Tokens.sp3),
-        SheetByExcel(
-          title: '${section['code']} · ${set['name']}',
-          help: s.xlIndicatorsHelp,
-          canUpload: open,
-          download: () => ref
-              .read(apiProvider)
-              .examEntryIndicatorsExcel(id: widget.examId, classSectionId: widget.sectionId),
-          upload: (file, apply) => ref
-              .read(apiProvider)
-              .examEntryIndicatorsUpload(
-                id: widget.examId,
-                body: SectionSheetUploadDto(
-                  classSectionId: widget.sectionId,
-                  file: file,
-                  apply: apply,
-                ),
-              ),
-          onSaved: () => ref.invalidate(indicatorSheetProvider(_key)),
         ),
         if (hpc && child != null) ...[
           const SizedBox(height: Tokens.sp3),

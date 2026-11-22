@@ -40,6 +40,7 @@ import '../staff/verify_marks.dart';
 import '../staff/marks.dart';
 import '../staff/my_attendance.dart';
 import '../staff/my_leave.dart';
+import '../staff/remarks.dart';
 import '../staff/layout.dart' show staffFallback, staffLayoutProvider, staffTabs;
 import 'brand.dart';
 import 'widgets.dart';
@@ -99,6 +100,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/verify-marks' => VerifyMarksScreen(profile: p),
       // rate the indicators, the sheet by Excel, the progress card's words and photos (docs/design/96 part 12)
       '/indicators' => IndicatorsScreen(profile: p),
+      // a remark a pupil and category, the sheet by Excel (docs/design/96 part 13)
+      '/remarks' => RemarksScreen(profile: p),
       '/timetable' => StaffTimetable(profile: p),
       // upload a lesson for approval, the lesson report, a lesson in full (docs/design/96 part 7)
       '/lesson-plans' => LessonPlansScreen(profile: p),

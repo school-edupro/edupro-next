@@ -1610,6 +1610,38 @@ class S {
   String get inRemovePhotoAsk =>
       _t('Remove this photo from the portfolio?', 'यह फ़ोटो पोर्टफ़ोलियो से हटाएँ?');
 
+  // ---- Remarks as on the staff website (docs/design/96 part 13) ----
+  String get rmIntro => _t(
+    'One remark per pupil and category; the report card prints them.',
+    'हर विद्यार्थी और श्रेणी के लिए एक टिप्पणी; रिपोर्ट कार्ड पर छपती है।',
+  );
+  String get rmNoCategory => _t(
+    'There is no remark category for you to write in this section.',
+    'इस वर्ग में आपके लिखने के लिए कोई टिप्पणी-श्रेणी नहीं है।',
+  );
+  String rmByOthers(String list) =>
+      _t('Written by others here: $list', 'यहाँ दूसरे लिखते हैं: $list');
+  String get rmChoose => _t('Choose a remark', 'टिप्पणी चुनें');
+  String get xlRemarksHelp => _t(
+    'The sheet holds the categories you write in this section, filled with what is written; a category that takes its list only accepts a listed remark.',
+    'शीट में इस वर्ग की वे श्रेणियाँ हैं जो आप लिखते हैं, लिखी टिप्पणियों सहित; केवल सूची वाली श्रेणी में सूची की टिप्पणी ही चलती है।',
+  );
+  String? rmError(String type) => switch (type) {
+    'exams.entry_locked' => _t(
+      'Remarks are locked; ask the coordinator to reopen them.',
+      'टिप्पणियाँ बंद हैं; समन्वयक से फिर खुलवाएँ।',
+    ),
+    'exams.not_assigned' => _t(
+      'You write only the categories given to you: the class teacher all, a subject teacher their subject’s, others those named in Teacher assignments.',
+      'आप केवल अपनी श्रेणियाँ लिखते हैं: कक्षा-अध्यापक सभी, विषय-शिक्षक अपने विषय की, अन्य शिक्षक-नियुक्ति में दी गई।',
+    ),
+    'exams.remark_list_only' => _t(
+      'This category takes one of its listed remarks only.',
+      'यह श्रेणी केवल अपनी सूची की टिप्पणी लेती है।',
+    ),
+    _ => null,
+  };
+
   /// The API's marks refusals in words (as the website's).
   String? mkError(String type) => switch (type) {
     'exams.entered_in_parts' => _t(

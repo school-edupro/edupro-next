@@ -95,6 +95,11 @@ HpcController_portfolio
 HpcController_addPhoto
 HpcController_removePhoto
 HpcController_photo !file
+# remarks by category as on the staff website (docs/design/96 part 13), and the sheet by Excel
+ExamRemarksController_items
+ExamRemarksController_putItems
+ExamRemarksController_itemsExcel !file
+ExamRemarksController_itemsUpload
 DailyWorkController_sheetOptions
 DailyWorkController_sheet
 DailyWorkController_saveSheet

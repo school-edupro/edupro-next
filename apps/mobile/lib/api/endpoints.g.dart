@@ -324,6 +324,22 @@ class EduProApi {
   Future<ApiFile> hpcPhoto({required String id, required String itemId}) =>
       _t.file('GET', '/exams/${Uri.encodeComponent(id)}/portfolio/${Uri.encodeComponent(itemId)}/image');
 
+  /// GET /exams/{id}/remark-items
+  Future<dynamic> examRemarksItems({required String id, required String classSectionId, String? subjectId}) =>
+      _t.send('GET', '/exams/${Uri.encodeComponent(id)}/remark-items', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// PUT /exams/{id}/remark-items — Remarks by category: the class teacher any category, a subject teacher their subject’s
+  Future<dynamic> examRemarksPutItems({required PutRemarkItemsDto body, required String id}) =>
+      _t.send('PUT', '/exams/${Uri.encodeComponent(id)}/remark-items', body: body.toJson());
+
+  /// GET /exams/{id}/remark-items/excel — The section's remark categories the caller writes, as an Excel sheet
+  Future<ApiFile> examRemarksItemsExcel({required String id, required String classSectionId, String? subjectId}) =>
+      _t.file('GET', '/exams/${Uri.encodeComponent(id)}/remark-items/excel', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
+
+  /// POST /exams/{id}/remark-items/upload — A filled remarks sheet: preview, then save with apply
+  Future<dynamic> examRemarksItemsUpload({required SectionSheetUploadDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/remark-items/upload', body: body.toJson());
+
   /// GET /academics/daily-work/sheet/options — The sections the caller posts for, each with its subjects
   Future<dynamic> dailyWorkSheetOptions() =>
       _t.send('GET', '/academics/daily-work/sheet/options');
@@ -1292,6 +1308,32 @@ class AddPortfolioDtoImage {
   Map<String, Object?> toJson() => {
         'contentType': contentType,
         'base64': base64,
+      };
+}
+
+/** The PutRemarkItemsDto the API takes. */
+class PutRemarkItemsDto {
+  const PutRemarkItemsDto({required this.classSectionId, required this.rows});
+  final String classSectionId;
+  final List<PutRemarkItemsDtoRowsItem> rows;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'rows': rows.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The PutRemarkItemsDtoRowsItem the API takes. */
+class PutRemarkItemsDtoRowsItem {
+  const PutRemarkItemsDtoRowsItem({required this.studentId, required this.categoryId, required this.text, this.bankCode});
+  final String studentId;
+  final String categoryId;
+  final String text;
+  final String? bankCode;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'categoryId': categoryId,
+        'text': text,
+        if (bankCode != null) 'bankCode': bankCode,
       };
 }
 
