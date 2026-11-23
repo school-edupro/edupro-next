@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from '../../common/db/db.service';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { areaEntries, type EntryArea } from './area-entry';
 import { ExamEntryService } from './exam-entry.service';
 
 export interface ToEnterLine {
@@ -8,7 +9,7 @@ export interface ToEnterLine {
   exam: string;
   sectionId: string;
   section: string;
-  area: 'marks' | 'indicators' | 'remarks' | 'health';
+  area: 'marks' | 'indicators' | 'remarks' | 'health' | 'attendance';
   /** the subject, "Indicators", the remark category or "Height and weight" */
   what: string;
   done: number;
@@ -17,6 +18,8 @@ export interface ToEnterLine {
   href: string;
   /** 6 Nov 2026: a sheet reopened for entry by the admin (listed until submitted, however full) */
   reopened?: boolean;
+  /** docs/design/98: a section's area reopened under the lock is open until then (ISO date-time) */
+  until?: string;
 }
 
 /**
@@ -72,7 +75,9 @@ export class MyEntryService {
           WHERE e.academic_year_id = $1 AND e.deleted_at IS NULL
             AND (NOT e.marks_locked OR EXISTS (
                  SELECT 1 FROM exam_entry_status st JOIN exam_subjects es ON es.id = st.exam_subject_id
-                  WHERE es.exam_id = e.id AND st.entry_open AND st.status = 'open'))
+                  WHERE es.exam_id = e.id AND st.entry_open AND st.status = 'open')
+                 OR EXISTS (SELECT 1 FROM exam_area_entry_opens o
+                             WHERE o.exam_id = e.id AND o.closed_at IS NULL AND o.closes_at > now()))
           ORDER BY e.starts_on NULLS LAST, e.id`,
         [yearId],
       );
@@ -145,10 +150,19 @@ export class MyEntryService {
               else push(line);
             }
           }
-          // a wholly locked exam lists only its sheets reopened for entry
-          if (e.locked) continue;
+          // docs/design/98: an area locked here (the whole exam or the class's lock) is left out unless the admin
+          // reopened it for this section — then it is listed while open, however full, with its closing time
+          const st = e.areas.some((a) => a !== 'marks')
+            ? await areaEntries(c, e.id, s.section_id, s.class_id)
+            : null;
+          const takes = (a: EntryArea) => e.areas.includes(a) && !!st && !st[a].locked;
+          const add = (a: EntryArea, l: ToEnterLine) => {
+            const open = st?.[a].open;
+            if (open && l.total > 0) out.push({ ...l, reopened: true, until: open.until });
+            else push(l);
+          };
           // indicators I rate here
-          if (e.areas.includes('indicators')) {
+          if (takes('indicators')) {
             const set = await this.entry.classSet(c, e.id, s.class_id);
             const reach = await this.entry.indicatorReach(c, tenant, yearId, s.section_id);
             if (set && reach.kind !== 'none') {
@@ -161,7 +175,7 @@ export class MyEntryService {
                     WHERE exam_id = $1 AND indicator_id = ANY($2::bigint[]) AND student_id = ANY($3::bigint[])`,
                   [e.id, ids, kids],
                 );
-                push({
+                add('indicators', {
                   ...base,
                   area: 'indicators',
                   what: 'Indicators',
@@ -174,7 +188,7 @@ export class MyEntryService {
           }
           // remark categories I write here: the class teacher all of the class's, a subject teacher their
           // subject's, a Remarks assignment those it names
-          if (e.areas.includes('remarks')) {
+          if (takes('remarks')) {
             const subjects = mineHere
               .filter((m) => m.kind === 'subject_teacher')
               .map((m) => m.subject_id);
@@ -189,7 +203,7 @@ export class MyEntryService {
               [e.id, s.class_id, isClassTeacher, subjects, named, kids],
             );
             for (const k of cats.rows)
-              push({
+              add('remarks', {
                 ...base,
                 area: 'remarks',
                 what: k.name,
@@ -199,19 +213,34 @@ export class MyEntryService {
               });
           }
           // height and weight: the class teacher
-          if (e.areas.includes('health') && mineHere.some((m) => m.kind === 'class_teacher')) {
+          if (takes('health') && mineHere.some((m) => m.kind === 'class_teacher')) {
             const r = await c.query<{ n: number }>(
               `SELECT count(DISTINCT student_id)::int AS n FROM health_records
                 WHERE exam_id = $1 AND student_id = ANY($2::bigint[]) AND (height_cm IS NOT NULL OR weight_kg IS NOT NULL)`,
               [e.id, kids],
             );
-            push({
+            add('health', {
               ...base,
               area: 'health',
               what: 'Height and weight',
               done: r.rows[0]!.n,
               total: kids.length,
               href: `/health?exam=${e.id}&section=${s.section_id}`,
+            });
+          }
+          // exam attendance is listed only when the admin reopened it for this section (docs/design/98)
+          if (takes('attendance') && st?.attendance.open && isClassTeacher) {
+            const r = await c.query<{ n: number }>(
+              `SELECT count(*)::int AS n FROM exam_attendance WHERE exam_id = $1 AND student_id = ANY($2::bigint[])`,
+              [e.id, kids],
+            );
+            add('attendance', {
+              ...base,
+              area: 'attendance',
+              what: 'Exam attendance',
+              done: r.rows[0]!.n,
+              total: kids.length,
+              href: `/exam-register?exam=${e.id}&section=${s.section_id}&only=attendance`,
             });
           }
         }

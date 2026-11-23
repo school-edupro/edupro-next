@@ -197,10 +197,10 @@ export class RemarkCategoriesService {
           ORDER BY sort_order, code`,
         [section.class_id],
       );
-      const lock = await c.query<{ locked: boolean }>(
-        `SELECT remarks_locked AS locked FROM exam_classes WHERE exam_id = $1 AND class_id = $2`,
-        [examId, section.class_id],
-      );
+      // the exam's or the class's lock, unless the admin reopened the section's remarks (docs/design/98)
+      const entry = await this.entry.callerAreas(c, tenant, ctx, yearId, examId, section, [
+        'remarks',
+      ]);
       const roster = await this.entry.roster(c, yearId, section.id);
       const saved = await c.query<{
         student_id: string;
@@ -238,7 +238,8 @@ export class RemarkCategoriesService {
       return {
         exam: { id: exam.id, code: exam.code, name: exam.name },
         section: { id: section.id, code: section.code },
-        locked: exam.marks_locked || Boolean(lock.rows[0]?.locked),
+        locked: entry.remarks.locked,
+        entry,
         /** why the caller has nothing to write here, if so */
         reason: !categories.length
           ? `No remark category is set for ${className ?? 'this class'} (Exams → Set-up → Remark categories and bank)`
@@ -259,11 +260,9 @@ export class RemarkCategoriesService {
     if (!held(EXAMS.remarkEnter) && !held(EXAMS.marksEnter))
       throw new DomainError('forbidden', 'You may not write exam remarks', { status: 403 });
     return this.db.tenant(tenant, async (c) => {
-      const exam = await this.entry.exam(c, examId, yearId);
+      await this.entry.exam(c, examId, yearId);
       const section = await this.entry.section(c, dto.classSectionId, yearId, examId);
-      if (exam.marks_locked)
-        throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
-      await this.entry.assertTypeOpen(c, examId, section.class_id, REMARKS);
+      await this.entry.assertAreaOpen(c, examId, section, REMARKS);
       await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
       this.entry.assertRoster(dto.rows, await this.entry.roster(c, yearId, section.id));
       const cats = new Map((await this.categories(c, section.class_id)).map((k) => [k.id, k]));

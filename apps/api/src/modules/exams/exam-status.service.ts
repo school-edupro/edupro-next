@@ -13,6 +13,7 @@ import {
   type ExamLockDto,
 } from './exams.dto';
 import { MarkSchemesService } from './mark-schemes.service';
+import { closeAreaOpenings } from './area-entry';
 import { impactWords, reopenExamMarks, reopenImpact, takeBackCards } from './exam-reopen';
 
 type Status = 'open' | 'submitted' | 'verified';
@@ -399,6 +400,8 @@ export class ExamStatusService {
            FROM exam_subjects es WHERE es.id = st.exam_subject_id AND es.exam_id = $1 AND st.entry_open`,
         [examId],
       );
+      // and so do the sections' areas reopened under the lock (docs/design/98)
+      await closeAreaOpenings(c, examId);
       const done = impact.length
         ? await reopenExamMarks(c, examId, null, reason, 'Reopened with the exam')
         : { reopened: 0, revoked: [] as string[] };

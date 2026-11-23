@@ -525,4 +525,173 @@ describe('who enters what (e2e)', () => {
     ]);
     expect(await lines('RM')).toEqual(['remarks:General:1/2', 'remarks:Sports:1/2']);
   });
+
+  it('docs/design/98: one section’s area reopened for entry under the exam lock, closed by Done, Close now, a lock change or the date', async () => {
+    const ex = id.exam!;
+    const open = (json: Record<string, unknown>, h = asAdmin()) =>
+      call(h, 'POST', `/exams/${ex}/area-entry/open`, { classSectionId: id.A, ...json });
+    const close = (area: string, h: Record<string, string>) =>
+      call(h, 'POST', `/exams/${ex}/area-entry/close`, { classSectionId: id.A, area });
+    const remark = () =>
+      call(as('CT'), 'PUT', `/exams/${ex}/remarks`, {
+        classSectionId: id.A,
+        rows: [{ studentId: student[0], remark: 'Kind to others' }],
+      });
+    const attend = () =>
+      call(as('CT'), 'PUT', `/exams/${ex}/attendance`, {
+        classSectionId: id.A,
+        rows: [{ studentId: student[0], daysPresent: 40, daysTotal: 45 }],
+      });
+    const rate = (who: string) =>
+      call(as(who), 'PUT', `/exams/${ex}/indicators`, {
+        classSectionId: id.A,
+        rows: [{ studentId: student[0], indicatorId: id.ART1, grade: 'B' }],
+      });
+    const health = () =>
+      call(as('CT'), 'PUT', `/exams/${ex}/health`, {
+        classSectionId: id.A,
+        rows: [{ studentId: student[1], heightCm: 133 }],
+      });
+    const register = async (who = 'CT') =>
+      (await call(as(who), 'GET', `/exams/${ex}/register?classSectionId=${id.A!}`)).json() as {
+        entry: Record<
+          string,
+          {
+            locked: boolean;
+            locks: { exam: boolean; class: boolean };
+            open: { until: string } | null;
+            canClose: boolean;
+          }
+        >;
+      };
+    // the whole exam locked: no area is entered, and nothing is reopened yet
+    expect((await call(asAdmin(), 'PUT', `/exams/${ex}/lock`, { locked: true })).statusCode).toBe(
+      200,
+    );
+    for (const r of [await remark(), await attend(), await rate('ART'), await health()])
+      expect(r.json()).toMatchObject({ type: 'exams.entry_locked', detail: 'The exam is locked' });
+    expect((await register()).entry.remarks).toEqual({
+      locked: true,
+      locks: { exam: true, class: false },
+      open: null,
+      canClose: false,
+    });
+    // only the lock right opens it, with a reason and a closing time from minutes to 30 days ahead
+    expect((await open({ area: 'remarks', note: 'Late' }, as('CT'))).statusCode).toBe(403);
+    expect((await open({ area: 'remarks', note: 'ok' })).statusCode).toBe(400);
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const far = new Date(Date.now() + 31 * 24 * 3600_000).toISOString();
+    for (const closesAt of [past, far])
+      expect(
+        (await open({ area: 'remarks', note: 'Late remarks', closesAt })).json(),
+      ).toMatchObject({
+        type: 'validation-failed',
+      });
+    const opened = (await open({ area: 'remarks', note: 'Late remarks' })).json();
+    expect(opened).toMatchObject({
+      area: 'remarks',
+      entry: { locked: false, open: { reason: 'Late remarks' } },
+    });
+    const until = Date.parse(opened.entry.open.until) - Date.now();
+    expect(until).toBeGreaterThan(47 * 3600_000);
+    expect(until).toBeLessThanOrEqual(48 * 3600_000);
+    expect((await open({ area: 'remarks', note: 'Again' })).json()).toMatchObject({
+      type: 'exams.entry_open',
+    });
+    // remarks open for that section only: the class teacher writes them; attendance stays locked
+    expect((await remark()).statusCode).toBe(200);
+    expect((await attend()).json()).toMatchObject({ type: 'exams.entry_locked' });
+    const reg = await register();
+    expect(reg.entry.remarks).toMatchObject({ locked: false, canClose: true });
+    expect(reg.entry.attendance).toMatchObject({ locked: true, open: null });
+    // the remark categories follow the same opening; who normally writes them does (RM: Sports)
+    const items = (
+      await call(as('RM'), 'GET', `/exams/${ex}/remark-items?classSectionId=${id.A!}`)
+    ).json();
+    expect(items).toMatchObject({ locked: false, entry: { remarks: { canClose: false } } });
+    expect(
+      (
+        await call(as('RM'), 'PUT', `/exams/${ex}/remark-items`, {
+          classSectionId: id.A,
+          rows: [{ studentId: student[1], categoryId: id.SPORTS, text: 'Team player' }],
+        })
+      ).statusCode,
+    ).toBe(200);
+    // the locked exam lists only what is reopened, however full, with its closing time
+    const mine = (
+      await call(as('CT'), 'GET', '/exams/my-entry').then(
+        (r) => r.json().data as Array<{ area: string; reopened?: boolean; until?: string }>,
+      )
+    ).filter((x) => x.area !== 'marks');
+    expect(mine.length).toBeGreaterThan(0);
+    expect(
+      mine.every((x) => x.area === 'remarks' && x.reopened && x.until === opened.entry.open.until),
+    ).toBe(true);
+    // indicators reopened: the teacher given the area rates theirs; only the class teacher (or the admin) closes
+    expect((await open({ area: 'indicators', note: 'Art marks missed' })).statusCode).toBe(201);
+    expect((await rate('ART')).statusCode).toBe(200);
+    expect((await close('indicators', as('ART'))).statusCode).toBe(403);
+    expect((await close('indicators', as('CT'))).json()).toMatchObject({
+      entry: { locked: true, open: null },
+    });
+    expect((await rate('ART')).json()).toMatchObject({ type: 'exams.entry_locked' });
+    expect((await close('indicators', as('CT'))).json()).toMatchObject({
+      type: 'exams.entry_not_open',
+    });
+    // the admin's Close now
+    expect((await close('remarks', asAdmin())).statusCode).toBe(201);
+    expect((await remark()).json()).toMatchObject({ type: 'exams.entry_locked' });
+    // a lapsed opening locks again, and the section's area can be opened afresh
+    expect((await open({ area: 'attendance', note: 'Attendance correction' })).statusCode).toBe(
+      201,
+    );
+    expect((await attend()).statusCode).toBe(200);
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE exam_area_entry_opens SET opened_at = now() - interval '3 days', closes_at = now() - interval '1 minute'
+          WHERE exam_id = $1 AND area = 'attendance' AND closed_at IS NULL`,
+        [ex],
+      ),
+    );
+    expect((await attend()).json()).toMatchObject({ type: 'exams.entry_locked' });
+    const soon = new Date(Date.now() + 3600_000).toISOString();
+    expect(
+      (await open({ area: 'attendance', note: 'Once more', closesAt: soon })).json(),
+    ).toMatchObject({
+      entry: { open: { until: soon } },
+    });
+    // unlocking the whole exam closes every opening (each area is open to all now)
+    expect((await open({ area: 'health', note: 'Heights late' })).statusCode).toBe(201);
+    expect((await call(asAdmin(), 'PUT', `/exams/${ex}/lock`, { locked: false })).statusCode).toBe(
+      200,
+    );
+    expect((await health()).statusCode).toBe(200);
+    // a class's lock of an area: reopened for one section, then the lock changed closes it
+    await call(asAdmin(), 'PUT', `/exams/${ex}/class-locks`, { classId: id.VI, remarks: true });
+    expect((await remark()).json()).toMatchObject({
+      detail: 'Remarks entry is locked for the class in this exam',
+    });
+    expect((await open({ area: 'remarks', note: 'One more remark' })).statusCode).toBe(201);
+    expect((await remark()).statusCode).toBe(200);
+    await call(asAdmin(), 'PUT', `/exams/${ex}/class-locks`, { classId: id.VI, remarks: false });
+    await call(asAdmin(), 'PUT', `/exams/${ex}/class-locks`, { classId: id.VI, remarks: true });
+    expect((await remark()).json()).toMatchObject({ type: 'exams.entry_locked' });
+    await call(asAdmin(), 'PUT', `/exams/${ex}/class-locks`, { classId: id.VI, remarks: false });
+    // the history, newest first, with how each closed
+    const list = (await call(asAdmin(), 'GET', `/exams/${ex}/area-entry`)).json().data as Array<{
+      area: string;
+      open: boolean;
+      closedHow: string | null;
+    }>;
+    expect(list.map((x) => `${x.area}:${x.closedHow ?? 'open'}`)).toEqual([
+      'remarks:lock',
+      'health:lock',
+      'attendance:lock',
+      'indicators:done',
+      'remarks:admin',
+      // opened three days back (moved there above to let it lapse)
+      'attendance:lapsed',
+    ]);
+    expect(list.some((x) => x.open)).toBe(false);
+  });
 });

@@ -18,6 +18,7 @@ import type {
   SetPartsDto,
 } from './exams.dto';
 import { EXAMS } from './exams.dto';
+import { closeAreaOpenings } from './area-entry';
 import { impactWords, reopenExamMarks, reopenImpact } from './exam-reopen';
 import { examProgress, type ExamProgress } from './exam-progress';
 import { fillExamFromSubjectMarks, followSubjectMarks } from './subject-marks-follow';
@@ -669,6 +670,9 @@ export class ExamsService {
           `UPDATE exam_subjects SET entry_locked = $2, locked_by = CASE WHEN $2 THEN app.current_user_id() END, locked_at = CASE WHEN $2 THEN now() END WHERE exam_id = $1`,
           [id, dto.marksLocked],
         );
+      // the whole lock changed here: the sections' areas reopened under it close (docs/design/98)
+      if (dto.marksLocked !== undefined && dto.marksLocked !== before.marksLocked)
+        await closeAreaOpenings(c, id);
       // a class added (or indicators taken now) gets its mapped set
       if (dto.classes || dto.areas) await this.fillSets(c, id);
       // a class added takes its papers from the master (docs/design/70)
@@ -691,12 +695,14 @@ export class ExamsService {
    * the others stay locked by their own locks; every class locked one by one sets it again.
    */
   private async wholeLockFollows(c: PoolClient, examId: string) {
-    await c.query(
+    const r = await c.query(
       `UPDATE exams e SET marks_locked = x.whole, updated_at = now(), updated_by = app.current_user_id()
          FROM (SELECT bool_and(entry_locked) AS whole FROM exam_subjects WHERE exam_id = $1) x
         WHERE e.id = $1 AND x.whole IS NOT NULL AND e.marks_locked <> x.whole`,
       [examId],
     );
+    // the whole lock changed: the sections' areas reopened under it close (docs/design/98)
+    if (r.rowCount) await closeAreaOpenings(c, examId);
   }
 
   /** Replaces the subject list of one class in the exam; locked rows keep their lock. */
@@ -1192,6 +1198,12 @@ export class ExamsService {
       const done = impact.length
         ? await reopenExamMarks(c, examId, dto.classId, reason, `Reopened with ${klass.classCode}`)
         : null;
+      // a class's lock of an area set or cleared: its sections' openings of that area close (docs/design/98)
+      const changed = (['indicators', 'remarks', 'attendance', 'health'] as const).filter(
+        (k) => dto[k] !== undefined && dto[k] !== klass.locks[k],
+      );
+      if (changed.length)
+        await closeAreaOpenings(c, examId, { classId: dto.classId, areas: changed });
       await c.query(
         `UPDATE exam_classes SET indicators_locked = COALESCE($3, indicators_locked), remarks_locked = COALESCE($4, remarks_locked),
                 attendance_locked = COALESCE($5, attendance_locked), health_locked = COALESCE($6, health_locked)

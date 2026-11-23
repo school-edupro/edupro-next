@@ -58,16 +58,14 @@ export class HpcService {
     });
   }
 
-  /** The section's entry right, the exam's lock and the class's HPC set. */
+  /** The section's entry right, the exam's lock (unless reopened, docs/design/98) and the class's HPC set. */
   private async open(c: PoolClient, ctx: RequestContext, examId: string, sectionId: string) {
     const tenant = requireTenant(ctx);
     const yearId = this.entry.year(tenant);
-    const exam = await this.entry.exam(c, examId, yearId);
+    await this.entry.exam(c, examId, yearId);
     const section = await this.entry.section(c, sectionId, yearId, examId);
     await this.entry.assertMayEnter(c, tenant, yearId, section.id, INDICATORS);
-    if (exam.marks_locked)
-      throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
-    await this.entry.assertTypeOpen(c, examId, section.class_id, INDICATORS);
+    await this.entry.assertAreaOpen(c, examId, section, INDICATORS);
     await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
     await this.assertHpc(c, examId, section.class_id);
     return { yearId, section, roster: await this.entry.roster(c, yearId, section.id) };

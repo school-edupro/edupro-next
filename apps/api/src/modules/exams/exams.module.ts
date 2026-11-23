@@ -21,6 +21,8 @@ import { SchemePromotionService } from './scheme-promotion.service';
 import { ExamEntryService } from './exam-entry.service';
 import { MyEntryService } from './my-entry.service';
 import { ExamResultsService } from './exam-results.service';
+import { AreaEntryController } from './area-entry.controller';
+import { AreaEntryService } from './area-entry.service';
 import { ExamStatusController } from './exam-status.controller';
 import { SubjectMarksController } from './subject-marks.controller';
 import { SubjectMarksService } from './subject-marks.service';
@@ -53,6 +55,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     ExamDateSheetsController,
     SubjectChoicesController,
     ExamStatusController,
+    AreaEntryController,
     MarkSchemesController,
     StudentRegistersController,
     GradeRegistersController,
@@ -82,6 +85,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     BoardLayoutAi,
     SubjectChoicesService,
     ExamStatusService,
+    AreaEntryService,
     MarkSchemesService,
     ReportCardSignaturesService,
     HpcService,

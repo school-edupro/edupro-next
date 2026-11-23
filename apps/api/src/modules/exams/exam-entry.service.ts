@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { areaEntries, type AreaEntry, type EntryArea } from './area-entry';
 import { listAreas, listScales } from './indicator-masters.service';
 import {
   EXAMS,
@@ -192,20 +193,31 @@ export const REMARKS: Kind = {
   lock: 'remarks_locked',
   label: 'Remarks',
 };
-const ATTENDANCE: Kind = {
+export const ATTENDANCE: Kind = {
   area: 'attendance',
   permission: EXAMS.attendanceEnter,
   subjectAware: false,
   lock: 'attendance_locked',
   label: 'Attendance',
 };
-const HEALTH: Kind = {
+export const HEALTH: Kind = {
   area: 'health',
   permission: EXAMS.healthEnter,
   subjectAware: false,
   lock: 'health_locked',
   label: 'Health',
 };
+
+/** docs/design/98: the entry kind of each area a section can have reopened under the lock */
+export const AREA_KIND: Record<EntryArea, Kind> = {
+  indicators: INDICATORS,
+  remarks: REMARKS,
+  attendance: ATTENDANCE,
+  health: HEALTH,
+};
+
+/** an area's state for the caller: locked or open, the locks, the opening, and whether they may close it */
+export type CallerAreaEntry = AreaEntry & { canClose: boolean };
 
 /**
  * Sprint 15: exam entry. Marks go through app.enter_marks (locks, range, enrolment); indicators, remarks,
@@ -375,25 +387,74 @@ export class ExamEntryService {
     );
   }
 
-  /** An entry type locked on the exam's class (docs/design/65). */
-  async assertTypeOpen(c: PoolClient, examId: string, classId: string, kind: Kind) {
+  /**
+   * An area locked for the section (docs/design/65): the whole exam's lock or the class's lock of the area —
+   * unless the admin reopened the section's area for entry (docs/design/98).
+   */
+  async assertAreaOpen(
+    c: PoolClient,
+    examId: string,
+    section: { id: string; class_id: string },
+    kind: Kind,
+  ) {
     const takes = await c.query<{ on: boolean }>(
       `SELECT $2 = ANY(areas) AS on FROM exams WHERE id = $1`,
       [examId, kind.area],
     );
     if (takes.rows[0] && !takes.rows[0].on) throw areaOff(kind.area);
-    if (!kind.lock) return;
-    const r = await c.query<{ locked: boolean }>(
-      // eslint-disable-next-line no-restricted-syntax -- the column is one of the fixed lock names above
-      `SELECT ${kind.lock} AS locked FROM exam_classes WHERE exam_id = $1 AND class_id = $2`,
-      [examId, classId],
+    if (kind.area === 'marks') return;
+    const st = (await areaEntries(c, examId, section.id, section.class_id))[kind.area];
+    if (!st.locked) return;
+    if (st.locks.exam)
+      throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
+    throw new DomainError(
+      'exams.entry_locked',
+      `${kind.label ?? 'This'} entry is locked for the class in this exam`,
+      { status: 409 },
     );
-    if (r.rows[0]?.locked)
-      throw new DomainError(
-        'exams.entry_locked',
-        `${kind.label ?? 'This'} entry is locked for the class in this exam`,
-        { status: 409 },
-      );
+  }
+
+  /** the class teacher (or a coordinator) of the section, the office unscoped, or the lock right closes it */
+  async mayCloseArea(
+    c: PoolClient,
+    tenant: TenantContext,
+    ctx: RequestContext,
+    yearId: string,
+    sectionId: string,
+    area: EntryArea,
+  ): Promise<boolean> {
+    if (ctx.permissions?.has(EXAMS.lockManage)) return true;
+    const kind = AREA_KIND[area];
+    if (!ctx.permissions?.has(kind.permission)) return false;
+    try {
+      await this.assertMayEnter(c, tenant, yearId, sectionId, kind);
+      return true;
+    } catch (e) {
+      if (e instanceof DomainError || e instanceof ForbiddenException) return false;
+      throw e;
+    }
+  }
+
+  /** the areas' states of a section for the caller (the sheets carry them as `entry`) */
+  async callerAreas<A extends EntryArea>(
+    c: PoolClient,
+    tenant: TenantContext,
+    ctx: RequestContext,
+    yearId: string,
+    examId: string,
+    section: { id: string; class_id: string },
+    areas: readonly A[],
+  ): Promise<Record<A, CallerAreaEntry>> {
+    const all = await areaEntries(c, examId, section.id, section.class_id);
+    const out = {} as Record<A, CallerAreaEntry>;
+    for (const a of areas)
+      out[a] = {
+        ...all[a],
+        canClose: all[a].open
+          ? await this.mayCloseArea(c, tenant, ctx, yearId, section.id, a)
+          : false,
+      };
+    return out;
   }
 
   // ---- what the caller may enter -----------------------------------------------------------------
@@ -1020,14 +1081,13 @@ export class ExamEntryService {
         );
         for (const x of p.rows) photos.set(x.student_id, x.n);
       }
-      const lock = await c.query<{ locked: boolean }>(
-        `SELECT indicators_locked AS locked FROM exam_classes WHERE exam_id = $1 AND class_id = $2`,
-        [examId, section.class_id],
-      );
+      // the exam's or the class's lock, unless the admin reopened the section's indicators (docs/design/98)
+      const entry = await this.callerAreas(c, tenant, ctx, yearId, examId, section, ['indicators']);
       return {
         exam: { id: exam.id, code: exam.code, name: exam.name, marksLocked: exam.marks_locked },
         section: { id: section.id, code: section.code },
-        locked: exam.marks_locked || Boolean(lock.rows[0]?.locked),
+        locked: entry.indicators.locked,
+        entry,
         set: set
           ? {
               id: set.id,
@@ -1062,7 +1122,7 @@ export class ExamEntryService {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     return this.db.tenant(tenant, async (c) => {
-      const exam = await this.exam(c, examId, yearId);
+      await this.exam(c, examId, yearId);
       const section = await this.section(c, dto.classSectionId, yearId, examId);
       const reach = await this.indicatorReach(c, tenant, yearId, section.id);
       if (reach.kind === 'none')
@@ -1071,9 +1131,7 @@ export class ExamEntryService {
           'You rate no indicator in this section: its class teacher does, or a teacher given its areas in Teacher assignments',
           { status: 403 },
         );
-      if (exam.marks_locked)
-        throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
-      await this.assertTypeOpen(c, examId, section.class_id, INDICATORS);
+      await this.assertAreaOpen(c, examId, section, INDICATORS);
       await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
       const set = await this.classSet(c, examId, section.class_id);
       if (!set)
@@ -1201,6 +1259,12 @@ export class ExamEntryService {
       return {
         exam: { id: exam.id, code: exam.code, name: exam.name, marksLocked: exam.marks_locked },
         section: { id: section.id, code: section.code },
+        /** each area's lock for this section, net of an opening (docs/design/98) */
+        entry: await this.callerAreas(c, tenant, ctx, yearId, examId, section, [
+          'remarks',
+          'attendance',
+          'health',
+        ]),
         healthVisible: health,
         remarkBank: bank.rows,
         rows: r.rows.map((x) => ({
@@ -1236,12 +1300,10 @@ export class ExamEntryService {
     sectionId: string,
     kind: Kind,
   ) {
-    const exam = await this.exam(c, examId, yearId);
+    await this.exam(c, examId, yearId);
     const section = await this.section(c, sectionId, yearId, examId);
     await this.assertMayEnter(c, tenant, yearId, section.id, kind);
-    if (exam.marks_locked)
-      throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
-    await this.assertTypeOpen(c, examId, section.class_id, kind);
+    await this.assertAreaOpen(c, examId, section, kind);
     await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
     return section;
   }
@@ -2132,11 +2194,12 @@ export class ExamEntryService {
       const exam = await this.exam(c, examId, yearId);
       const section = await this.section(c, q.classSectionId, yearId, examId);
       await this.scopes.assert(tenant, EXAMS.marksView, 'class_section', section.id);
-      const takes = await c.query<{ on: boolean; locked: boolean }>(
-        `SELECT 'health' = ANY(e.areas) AS on, (e.marks_locked OR COALESCE(ec.health_locked, false)) AS locked
-           FROM exams e LEFT JOIN exam_classes ec ON ec.exam_id = e.id AND ec.class_id = $2 WHERE e.id = $1`,
-        [examId, section.class_id],
+      const takes = await c.query<{ on: boolean }>(
+        `SELECT 'health' = ANY(e.areas) AS on FROM exams e WHERE e.id = $1`,
+        [examId],
       );
+      // the exam's or the class's lock, unless the admin reopened the section's height and weight (docs/design/98)
+      const entry = await this.callerAreas(c, tenant, ctx, yearId, examId, section, ['health']);
       let canEnter = ctx.permissions?.has(EXAMS.healthEnter) ?? false;
       if (canEnter)
         try {
@@ -2179,7 +2242,8 @@ export class ExamEntryService {
         section: { id: section.id, code: section.code },
         /** the exam takes height and weight (its areas) */
         takes: Boolean(takes.rows[0]?.on),
-        locked: Boolean(takes.rows[0]?.locked),
+        locked: entry.health.locked,
+        entry,
         canEnter,
         rows: roster.map((s) => {
           const now = recs.rows.find((x) => x.student_id === s.studentId && x.mine);

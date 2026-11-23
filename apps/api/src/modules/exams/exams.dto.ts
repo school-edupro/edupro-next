@@ -738,6 +738,25 @@ export const EntryStatusNoteSchema = z.object({
 });
 export class EntryStatusNoteDto extends createZodDto(EntryStatusNoteSchema) {}
 
+/** docs/design/98: a section's indicators, remarks, exam attendance or height and weight reopened under the lock */
+export const AreaEntryAreaSchema = z.enum(['indicators', 'remarks', 'attendance', 'health']);
+export const OpenAreaEntrySchema = z.object({
+  classSectionId: IdSchema,
+  area: AreaEntryAreaSchema,
+  /** why it opens again (kept with the opening and in the audit trail) */
+  note: z.string().trim().min(3, 'Give the reason (3 letters or more)').max(500),
+  /** when it closes by itself (ISO date-time); two days from now when left out, at most 30 days */
+  closesAt: z.string().datetime({ offset: true }).optional(),
+});
+export class OpenAreaEntryDto extends createZodDto(OpenAreaEntrySchema) {}
+
+export const CloseAreaEntrySchema = z.object({
+  classSectionId: IdSchema,
+  area: AreaEntryAreaSchema,
+  note: z.string().trim().max(500).optional(),
+});
+export class CloseAreaEntryDto extends createZodDto(CloseAreaEntrySchema) {}
+
 /** 6 Nov 2026: lock or unlock the whole exam; unlocking reopens its submitted and verified marks */
 export const ExamLockSchema = z.object({
   locked: z.boolean(),
