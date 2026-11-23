@@ -45,6 +45,15 @@ extension AssistantWords on S {
     'आपने आज $n प्रश्न पूछे हैं, जितने आपका विद्यालय अनुमति देता है। कल फिर पूछें।',
   );
   String get asstOpenProfile => _as('Open profile', 'प्रोफ़ाइल खोलें');
+  // docs/design/102: the AI model's help needs the consent that names who runs it
+  String get asstModelConsent => _as(
+    'The AI model can answer more of your questions. Allow “AI model’s help in the assistant” under Profile → Your consents; until then the assistant answers with its own rules.',
+    'AI मॉडल आपके और प्रश्नों के उत्तर दे सकता है। प्रोफ़ाइल → आपकी सहमतियाँ में “AI model’s help in the assistant” चालू करें; तब तक सहायक अपने नियमों से उत्तर देता है।',
+  );
+  String get asstModelAskParent => _as(
+    'For more answers, a parent can allow the AI model’s help under Profile → Your consents in their app.',
+    'और उत्तरों के लिए माता-पिता अपने ऐप में प्रोफ़ाइल → आपकी सहमतियाँ में AI मॉडल की सहायता चालू कर सकते हैं।',
+  );
   String get asstYou => _as('You', 'आप');
   String get asstAsk => _as('Ask', 'पूछें');
   String get asstNew => _as('New conversation', 'नई बातचीत');
@@ -100,6 +109,9 @@ class AssistantHome {
 
   /// granted · needed (the parent's own) · ask_parent (a student's parent has not consented) · null (staff)
   String? get consent => start['consent'] as String?;
+
+  /// docs/design/102: the AI model's help — granted · needed · ask_parent · null (does not apply)
+  String? get modelConsent => start['modelConsent'] as String?;
   int get askedToday => (start['askedToday'] as num?)?.toInt() ?? 0;
   int get dailyLimit => (start['dailyLimit'] as num?)?.toInt() ?? 0;
   bool get atLimit => dailyLimit > 0 && askedToday >= dailyLimit;
@@ -433,6 +445,18 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                 ),
             ],
           ),
+        if (canAsk && _current == null && home.modelConsent == 'needed')
+          _Note(
+            id: 'asstModelConsent',
+            text: s.asstModelConsent,
+            action: OutlinedButton(
+              key: const Key('asstModelProfile'),
+              onPressed: _openProfile,
+              child: Text(s.asstOpenProfile),
+            ),
+          )
+        else if (canAsk && _current == null && home.modelConsent == 'ask_parent')
+          _Note(id: 'asstModelAskParent', text: s.asstModelAskParent),
         if (conv != null && conv.isLoading && !conv.hasValue && _pending == null)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: Tokens.sp3),

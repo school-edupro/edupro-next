@@ -4,7 +4,7 @@
   "private": true,
   "description": "EduPro Next domain API (NestJS on Fastify)",
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && node scripts/copy-help.mjs",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "lint": "eslint src test",

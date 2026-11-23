@@ -12,6 +12,8 @@ export interface AiModelSettings {
   replyField: string | null;
   timeoutSeconds: number;
   on: boolean;
+  /** docs/design/102: who runs the model (named in families' consent) */
+  operator: string | null;
   updatedBy: string | null;
   updatedAt: string;
   lastTest: { at: string; ok: boolean | null; note: string | null } | null;
@@ -52,6 +54,7 @@ export async function saveAiModel(_prev: SaveState, fd: FormData): Promise<SaveS
     replyField: String(fd.get('replyField') ?? '').trim(),
     timeoutSeconds: Number(fd.get('timeoutSeconds') ?? 30),
     on: fd.get('on') === 'on',
+    operator: String(fd.get('operator') ?? '').trim(),
   };
   try {
     await apiFetch('/platform/ai-model', { method: 'PUT', body: JSON.stringify(body) });

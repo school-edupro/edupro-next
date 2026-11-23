@@ -126,3 +126,5 @@ input)` in `packages/ai/src/narrative.ts` — the API's Run now and the workers'
   walk has the page (as a non-holder). Suites: API `ai-model` (5), access / permission coverage / break-glass, the
   Claude, chatbot and assistant suites (30), AI reports; `packages/ai` (28), RLS (11); app 327 (the AI model label).
   Runbook `docs/runbooks/ai-model.md`.
+
+- **Doc 102 (23 Nov 2026)** takes this further: the model never answers in its own words, "how do I …" from the help pages, and parents and students once who runs the model is named and a parent agrees.

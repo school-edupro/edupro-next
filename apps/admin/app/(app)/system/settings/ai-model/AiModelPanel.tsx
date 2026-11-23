@@ -99,6 +99,24 @@ export function AiModelPanel({ settings }: { settings: AiModelSettings | null })
               finds it.
             </span>
           </label>
+          <label className="ep-field" htmlFor="aim-operator" style={{ gridColumn: '1 / -1' }}>
+            <span className="ep-field__label">Who runs the model (optional)</span>
+            <input
+              className="ep-input"
+              id="aim-operator"
+              name="operator"
+              maxLength={120}
+              defaultValue={settings?.operator ?? ''}
+              placeholder="the organisation's name"
+              aria-describedby="aim-operator-help"
+              autoComplete="organization"
+            />
+            <span className="ep-field__help" id="aim-operator-help">
+              Parents see this name when the app asks them to allow the AI model&apos;s help;
+              parents and students get that help only once it is named and they agree. Changing it
+              asks them again.
+            </span>
+          </label>
           <label className="ep-field" htmlFor="aim-timeout">
             <span className="ep-field__label">Wait for an answer, at most (seconds)</span>
             <input

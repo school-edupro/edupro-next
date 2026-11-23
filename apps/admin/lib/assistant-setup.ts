@@ -39,6 +39,8 @@ export interface ClaudeInfo {
   available: boolean;
   model: string | null;
   audiences: SetupAudience[];
+  /** docs/design/102: who runs the AI model (parents and students agree to it by name); null: not named */
+  operator?: string | null;
   monthlyLimit: number;
   limitBy: 'default' | 'school';
   usedThisMonth: number;

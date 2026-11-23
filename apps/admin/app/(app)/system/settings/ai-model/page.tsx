@@ -85,12 +85,15 @@ export default async function AiModelSettingsPage() {
           The assistant
         </h2>
         <p style={{ margin: 0 }}>
-          Help from the AI model for the assistant is switched on or off for teachers and office
-          staff in{' '}
+          Help from the AI model for the assistant is switched on or off for students, parents,
+          teachers and office staff in{' '}
           <a href="/insights/assistant/setup" style={{ textDecoration: 'underline' }}>
             Assistant set-up
           </a>
-          . Questions EduPro’s own rules answer never go to the model.
+          . Questions EduPro’s own rules answer never go to the model, and it never answers in its
+          own words: only from the person&apos;s records or a help page. Parents and students get it
+          only once <strong>Who runs the model</strong> is named and a parent allows it in the
+          app&apos;s consents.
         </p>
       </section>
     </>

@@ -4,6 +4,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { MODEL_PURPOSE, familyModel } from '../insights/family-model';
 import type { ConsentQueryDto, RecordConsentDto, SelfConsentDto } from './comms.dto';
 
 /** DPDP consent purposes every school starts with; the wording is versioned so a change asks again. */
@@ -60,6 +61,15 @@ export const DEFAULT_PURPOSES: Array<{
     channel: null,
     required: false,
   },
+  {
+    // docs/design/102 (migration 0417): {operator} is who runs the model, filled in when read
+    code: MODEL_PURPOSE,
+    name: 'AI model’s help in the assistant',
+    description:
+      'When the school assistant cannot answer with its own rules, it may send my question and only the records the answer needs (my child’s attendance, homework, fees and notices; phone numbers, e-mails and addresses hidden) to an AI model run by {operator}, which writes the answer.',
+    channel: null,
+    required: false,
+  },
 ];
 
 export interface PurposeStatus {
@@ -109,17 +119,41 @@ export class ConsentsService {
         ORDER BY p.sort_order, p.code`,
       [userId],
     );
-    return r.rows.map((x) => ({
-      code: x.code,
-      name: x.name,
-      description: x.description,
-      channel: x.channel,
-      isRequired: x.is_required,
-      version: x.version,
-      status: x.status,
-      recordedAt: x.recorded_at ? x.recorded_at.toISOString() : null,
-      source: x.source,
-    }));
+    // docs/design/102: the AI model's help — only while this school has it on for parents or students, never asked of
+    // a student (a parent decides), worded with who runs it; a choice made before that name changed is asked again
+    const model = r.rows.some((x) => x.code === MODEL_PURPOSE) ? await familyModel(c) : null;
+    const student =
+      model &&
+      (
+        await c.query<{ student: boolean }>(
+          `SELECT COALESCE(bool_and(person_type::text = 'student'), false) AS student FROM user_school_memberships
+            WHERE user_id = $1 AND school_id = app.current_school_id() AND status = 'active' AND deleted_at IS NULL`,
+          [userId],
+        )
+      ).rows[0]?.student;
+    return r.rows
+      .filter((x) => x.code !== MODEL_PURPOSE || (model && !student))
+      .map((x) => {
+        const stale =
+          x.code === MODEL_PURPOSE &&
+          !!x.recorded_at &&
+          !!model?.since &&
+          x.recorded_at < model.since;
+        return {
+          code: x.code,
+          name: x.name,
+          description:
+            x.code === MODEL_PURPOSE && model
+              ? x.description.replace('{operator}', model.operator)
+              : x.description,
+          channel: x.channel,
+          isRequired: x.is_required,
+          version: x.version,
+          status: stale ? null : x.status,
+          recordedAt: !stale && x.recorded_at ? x.recorded_at.toISOString() : null,
+          source: stale ? null : x.source,
+        };
+      });
   }
 
   async mine(ctx: RequestContext) {

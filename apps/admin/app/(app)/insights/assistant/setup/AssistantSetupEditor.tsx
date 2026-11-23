@@ -410,8 +410,9 @@ export function AssistantSetupEditor({
             </a>
             ; Claude is not used while it is on): the question and the records of the approved query
             it chooses, with phone numbers, e-mails, Aadhaar and addresses masked. It only reads
-            through the same approved queries and the person&apos;s own rights; its answers say
-            &ldquo;Answered with the AI model&rdquo;.
+            through the same approved queries and the person&apos;s own rights, or a help page for
+            &ldquo;how do I &hellip;&rdquo; questions, and never answers in its own words; its
+            answers say &ldquo;Answered with the AI model&rdquo;.
           </p>
         ) : (
           <p className="ep-field__help" style={{ marginTop: 0 }}>
@@ -443,9 +444,13 @@ export function AssistantSetupEditor({
                 id={`as-claude-${a}`}
                 label={AUDIENCE_LABEL[a]}
                 help={
-                  open
-                    ? `Questions EduPro cannot place get ${setup.claudeInfo.provider === 'llm' ? 'the AI model' : 'Claude'}’s help.`
-                    : 'Not yet: after the AI assistant consent names Anthropic and families agree again.'
+                  !open
+                    ? setup.claudeInfo.provider === 'llm'
+                      ? 'Not yet: Mobilise names who runs the AI model first (families agree to it by name).'
+                      : 'Not with Claude: families’ consent does not name Anthropic.'
+                    : a === 'parent' || a === 'student'
+                      ? `Only after ${a === 'parent' ? 'the parent' : 'a parent'} allows “AI model’s help in the assistant” in the app’s consents (run by ${setup.claudeInfo.operator ?? 'the named organisation'}); until then EduPro’s own answers.`
+                      : `Questions EduPro cannot place get ${setup.claudeInfo.provider === 'llm' ? 'the AI model' : 'Claude'}’s help.`
                 }
                 checked={open && values.claude[a]}
                 disabled={!canEdit || !open}

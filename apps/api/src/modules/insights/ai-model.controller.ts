@@ -22,6 +22,8 @@ const SaveSchema = z.object({
     .nullish(),
   timeoutSeconds: z.coerce.number().int().min(5).max(120).default(30),
   on: z.boolean(),
+  /** docs/design/102: who runs the model (named in families' consent); missing keeps the saved name */
+  operator: z.string().trim().max(120).nullish(),
 });
 class AiModelSaveDto extends createZodDto(SaveSchema) {}
 

@@ -64,14 +64,26 @@ describe('the AI model for all schools (e2e)', () => {
         const prompt = (JSON.parse(raw) as { prompt: string }).prompt;
         res.writeHead(200, { 'content-type': 'application/json' });
         // the assistant's two prompts and a report's facts (docs/design/101 phase B)
-        if (prompt.includes('The queries you may use')) {
+        if (prompt.includes('Reply with ONE line of JSON')) {
+          // docs/design/102: a how-to question → a help topic offered; anything else → a free answer (ignored)
+          const asked = /The question: (.*)/.exec(prompt)?.[1] ?? '';
+          const topic = /- ((?:leave|faq)[#-][a-z0-9-]+):/.exec(prompt)?.[1];
           res.end(
             JSON.stringify({
-              response: prompt.includes('- find_student:')
-                ? 'Sure: {"query": "find_student", "inputs": {"q": "Asha"}}'
-                : '{"answer": "I cannot read that here."}',
+              response:
+                prompt.includes('- find_student:') && asked.includes('Asha')
+                  ? 'Sure: {"query": "find_student", "inputs": {"q": "Asha"}}'
+                  : prompt.includes('- my_children:') && asked.includes('kids')
+                    ? '{"query": "my_children", "inputs": {}}'
+                    : /how do i/i.test(asked) && topic
+                      ? `{"help": "${topic}"}`
+                      : '{"answer": "Decorators wrap functions."}',
             }),
           );
+          return;
+        }
+        if (prompt.includes('The help text')) {
+          res.end(JSON.stringify({ response: 'Open My leave and choose Apply.' }));
           return;
         }
         if (prompt.includes('The records from')) {
@@ -124,7 +136,7 @@ describe('the AI model for all schools (e2e)', () => {
     process.env.ANTHROPIC_API_KEY = 'test-key-not-real';
     process.env.AI_BASE_URL = base;
     process.env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:9';
-    process.env.AI_CLAUDE_MONTHLY_QUESTIONS = '5';
+    process.env.AI_CLAUDE_MONTHLY_QUESTIONS = '20';
     delete process.env.AI_MODEL;
     app = await createApp();
     inject = injector(app);
@@ -440,6 +452,222 @@ describe('the AI model for all schools (e2e)', () => {
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.some((x) => x.url.startsWith('/v1/messages'))).toBe(false);
     plan = 'response';
+  });
+
+  it('docs/design/102 phase A: never the model\'s own words; "how do I …" from the help pages of the person\'s rights', async () => {
+    plan = 'response';
+    const ask = (who: SeededUser, question: string, surface?: 'admin' | 'teacher') =>
+      call('POST', '/insights/assistant', who, {
+        question,
+        language: 'en',
+        ...(surface ? { surface } : {}),
+      });
+    const prompts = () => seen.map((x) => (x.body as { prompt?: string } | null)?.prompt ?? '');
+    // a question outside the school: the model's own sentence is never shown — EduPro's own reply
+    seen.length = 0;
+    const free = await ask(admin, 'Explain Python decorators in 2 lines');
+    expect(free.statusCode).toBe(201);
+    expect(free.json()).toMatchObject({ by: 'local', refused: true });
+    expect(free.json().answer).not.toContain('Decorators');
+    expect(free.json().answer).toContain('I can answer questions about your school records');
+    expect(prompts()).toHaveLength(1);
+    expect(prompts()[0]).toContain('Never answer in your own words');
+    expect(prompts()[0]).toContain('never answer from your own knowledge');
+    // a how-to question with a "change" word still reaches the model, which answers from the help page
+    seen.length = 0;
+    const how = await ask(admin, 'How do I change the approver of my leave?');
+    expect(how.json()).toMatchObject({
+      by: 'llm',
+      refused: false,
+      answer: 'Open My leave and choose Apply.',
+    });
+    const cited = (how.json() as { citations: Array<{ query: string }> }).citations.map(
+      (c) => c.query,
+    );
+    expect(cited).toHaveLength(1);
+    expect(cited[0]).toMatch(/^help:leave#[a-z0-9-]+$/);
+    expect((how.json() as { link: { web: string } }).link.web).toBe(
+      `/help/leave#${cited[0]!.split('#')[1]!}`,
+    );
+    expect(prompts()).toHaveLength(2);
+    expect(prompts()[0]).toContain('The help topics on using EduPro');
+    expect(prompts()[0]).toContain('- payroll#');
+    expect(prompts()[1]).toContain('The help text "Leave & attendance (staff) › ');
+    // a teacher: only the pages of their rights; from the teacher app, no link to the office website
+    seen.length = 0;
+    const t = await ask(teacher, 'How do I change the approver of my leave?', 'teacher');
+    expect(t.json()).toMatchObject({ by: 'llm', link: null });
+    expect(prompts()[0]).toContain('- leave#');
+    expect(prompts()[0]).not.toContain('- payroll#');
+    // help answers count as model answers
+    expect(
+      (
+        (await call('GET', '/insights/assistant/settings', admin)).json() as {
+          claudeInfo: { usedThisMonth: number };
+        }
+      ).claudeInfo.usedThisMonth,
+    ).toBe(3);
+  });
+
+  it('docs/design/102 phase B: parents and students — the name first, the consent naming it, their own records only', async () => {
+    plan = 'response';
+    const p = stamp('AIMF');
+    let parent!: SeededUser;
+    let pupil!: SeededUser;
+    await withMigrator(async (c) => {
+      parent = await seedUser(c, school, `${p}-parent`, 'parent', 'guardian');
+      pupil = await seedUser(c, school, `${p}-pupil`, 'student', 'student');
+    });
+    const cls = await call('POST', '/academics/classes', admin, {
+      code: 'VII',
+      name: 'Class VII',
+      displayOrder: 7,
+    });
+    const sec = await call('POST', `/academics/classes/${String(cls.json().id)}/sections`, admin, {
+      name: 'A',
+    });
+    const child = async (first: string, no: string, mobile?: string) => {
+      const r = await call('POST', '/people/students', admin, {
+        admissionNo: `${p}-${no}`,
+        firstName: first,
+        lastName: 'Made',
+        guardians: mobile
+          ? [
+              {
+                guardian: { firstName: 'Mina', lastName: 'Made', mobile },
+                relation: 'mother',
+                isPrimary: true,
+              },
+            ]
+          : [],
+        enrolment: { classSectionId: sec.json().id, rollNo: Number(no) },
+      });
+      expect(r.statusCode).toBe(201);
+      return r.json().id as string;
+    };
+    const asha = await child('Asha', '1', '9876500077');
+    await child('Bhanu', '2');
+    await withMigrator(async (c) => {
+      await c.query(
+        `UPDATE guardians SET user_id = $1 WHERE mobile = '9876500077' AND school_id = $2`,
+        [parent.id, school.id],
+      );
+      await c.query('UPDATE students SET user_id = $1 WHERE id = $2', [pupil.id, asha]);
+    });
+    type Setup = {
+      topicsOff: unknown;
+      starters: unknown;
+      claudeInfo: { audiences: string[]; operator: string | null };
+    };
+    const setup = async () =>
+      (await call('GET', '/insights/assistant/settings', admin)).json() as Setup;
+    const saveSetup = async (claude: Record<string, boolean>) => {
+      const now = await setup();
+      return call('PUT', '/insights/assistant/settings', admin, {
+        audiences: { student: true, parent: true, teacher: true, admin: true },
+        dailyLimit: 500,
+        topicsOff: now.topicsOff,
+        starters: now.starters,
+        claude,
+      });
+    };
+    const everyone = { student: true, parent: true, teacher: true, admin: true };
+    const name = (operator: string) =>
+      call('PUT', '/platform/ai-model', holder, {
+        url: `${base}/v1/chat`,
+        token: '',
+        replyField: '',
+        on: true,
+        operator,
+      });
+    const ask = (who: SeededUser, question: string) =>
+      call('POST', '/insights/assistant', who, { question, language: 'en' });
+    const start = async (who: SeededUser) =>
+      (await call('GET', '/insights/assistant/start', who)).json() as {
+        modelConsent: string | null;
+      };
+    const purposes = async (who: SeededUser) =>
+      (
+        (await call('GET', '/comms/consents/mine', who)).json() as {
+          purposes: Array<{ code: string; description: string; status: string | null }>;
+        }
+      ).purposes;
+    const prompts = () => seen.map((x) => (x.body as { prompt?: string } | null)?.prompt ?? '');
+
+    // who runs the model not named yet: not for families
+    const unnamed = await saveSetup(everyone);
+    expect(unnamed.statusCode).toBe(400);
+    expect(unnamed.body).toContain('needs the name of who runs the model');
+    expect((await setup()).claudeInfo.audiences).toEqual(['teacher', 'admin']);
+    expect((await purposes(parent)).some((x) => x.code === 'ai.model')).toBe(false);
+    // named by a holder: every audience may be switched on
+    expect((await name('Made-up Labs')).json()).toMatchObject({
+      settings: { operator: 'Made-up Labs', tokenLast4: TOKEN.slice(-4) },
+    });
+    expect((await setup()).claudeInfo).toMatchObject({
+      audiences: ['student', 'parent', 'teacher', 'admin'],
+      operator: 'Made-up Labs',
+    });
+    expect((await saveSetup(everyone)).statusCode).toBe(200);
+    // the assistant's own consent opens the assistant; the model's help waits for its own, which names who runs it
+    await call('POST', '/comms/consents/mine', parent, {
+      purposeCode: 'ai.assistant',
+      status: 'granted',
+    });
+    expect(await start(parent)).toMatchObject({ modelConsent: 'needed' });
+    expect(await start(pupil)).toMatchObject({ modelConsent: 'ask_parent' });
+    const offered = (await purposes(parent)).find((x) => x.code === 'ai.model');
+    expect(offered).toMatchObject({ status: null });
+    expect(offered!.description).toContain('an AI model run by Made-up Labs');
+    expect((await purposes(pupil)).some((x) => x.code === 'ai.model')).toBe(false);
+    seen.length = 0;
+    expect((await ask(parent, 'could you tell me all about my kids please')).json().by).toBe(
+      'local',
+    );
+    expect(seen).toHaveLength(0);
+    // allowed: the model helps with the parent's own children only
+    await call('POST', '/comms/consents/mine', parent, {
+      purposeCode: 'ai.model',
+      status: 'granted',
+    });
+    expect(await start(parent)).toMatchObject({ modelConsent: 'granted' });
+    seen.length = 0;
+    const kids = await ask(parent, 'could you tell me all about my kids please');
+    expect(kids.json()).toMatchObject({ by: 'llm', answer: 'Here is what I found.' });
+    expect(prompts()[0]).toContain("a parent (only their own children's records)");
+    expect(prompts()[0]).toContain('- my_children:');
+    expect(prompts()[0]).not.toContain('- find_student:');
+    expect(prompts()[1]).toContain('Asha');
+    expect(prompts()[1]).not.toContain('Bhanu');
+    // "how do I …" from the school's Help questions for parents, the link to the Help screen
+    seen.length = 0;
+    const how = await ask(parent, 'How do I reset the app password?');
+    expect(how.json()).toMatchObject({
+      by: 'llm',
+      answer: 'Open My leave and choose Apply.',
+      link: { app: '/help', web: '/help' },
+    });
+    expect(prompts()[0]).toMatch(/- faq-\d+: /);
+    // a student: through the parent's consent, told "you"
+    expect(await start(pupil)).toMatchObject({ modelConsent: 'granted' });
+    seen.length = 0;
+    expect((await ask(pupil, 'How do I reset the app password?')).json().by).toBe('llm');
+    expect(prompts()[0]).toContain('a student (only their own records; say "you")');
+    // the name changes: consents given before count no more, families are asked again
+    await name('Other Made-up Co');
+    expect(await start(parent)).toMatchObject({ modelConsent: 'needed' });
+    const again = (await purposes(parent)).find((x) => x.code === 'ai.model');
+    expect(again).toMatchObject({ status: null });
+    expect(again!.description).toContain('run by Other Made-up Co');
+    seen.length = 0;
+    expect((await ask(parent, 'could you tell me all about my kids please')).json().by).toBe(
+      'local',
+    );
+    expect(seen).toHaveLength(0);
+    // the other tests: staff only
+    expect(
+      (await saveSetup({ student: false, parent: false, teacher: true, admin: true })).statusCode,
+    ).toBe(200);
   });
 
   it('docs/design/101 phase B: an AI report written by the AI model when the school chose it; else the template', async () => {

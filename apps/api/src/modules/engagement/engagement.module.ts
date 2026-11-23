@@ -110,6 +110,7 @@ import { QueriesService } from './queries.service';
     PrivacyService,
     EngagementPlusService,
     DsrService,
+    FamilyHelpService,
   ],
 })
 export class EngagementModule implements OnModuleInit {

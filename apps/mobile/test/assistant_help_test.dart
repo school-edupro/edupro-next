@@ -80,6 +80,9 @@ class School {
   /// the school's name for the assistant
   String name = 'MobiAI';
 
+  /// docs/design/102: the AI model's help for a family — granted · needed · ask_parent · null (does not apply)
+  String? modelConsent;
+
   /// what was shown with an answer (docs/design/91): by a word of the question
   Map<String, Object?>? display(String q) {
     final w = q.toLowerCase();
@@ -326,6 +329,7 @@ class School {
               : mode == 'consent'
               ? (kind == 'student' ? 'ask_parent' : 'needed')
               : 'granted',
+          'modelConsent': modelConsent,
           'dailyLimit': 30,
           'askedToday': mode == 'limit' ? 30 : asked,
           'starters': kind == 'staff'
@@ -772,6 +776,48 @@ void main() {
       await tester.pumpAndSettle();
       expect(t.calls.where((c) => c.path == '/insights/assistant/start').length, before + 1);
     });
+
+    testWidgets(
+      'the AI model’s help waits for its own consent (docs/design/102): a note, asking still open',
+      (tester) async {
+        await tall(tester);
+        await pump(
+          tester,
+          const AssistantScreen(profile: parent),
+          school: School()..modelConsent = 'needed',
+        );
+        expect(find.byKey(const Key('asstModelConsent')), findsOneWidget);
+        expect(find.textContaining('AI model’s help in the assistant'), findsOneWidget);
+        expect(find.byKey(const Key('asstQuestion')), findsOneWidget);
+        for (final g in [
+          textContrastGuideline,
+          androidTapTargetGuideline,
+          labeledTapTargetGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g));
+        }
+        await tapIn(tester, find.byKey(const Key('asstModelProfile')));
+        expect(find.byType(ProfileScreen), findsOneWidget);
+        // a student: a parent allows it
+        await pump(
+          tester,
+          const AssistantScreen(profile: student),
+          school: School(kind: 'student')..modelConsent = 'ask_parent',
+        );
+        expect(find.byKey(const Key('asstModelAskParent')), findsOneWidget);
+        expect(find.byKey(const Key('asstModelProfile')), findsNothing);
+        // given, or not for this school: nothing shown
+        for (final given in ['granted', null]) {
+          await pump(
+            tester,
+            const AssistantScreen(profile: parent),
+            school: School()..modelConsent = given,
+          );
+          expect(find.byKey(const Key('asstModelConsent')), findsNothing);
+          expect(find.byKey(const Key('asstModelAskParent')), findsNothing);
+        }
+      },
+    );
 
     testWidgets('a consent withdrawn meanwhile: asking says so', (tester) async {
       await tall(tester);

@@ -19,6 +19,9 @@ interface Row {
   tested_at: Date | null;
   test_ok: boolean | null;
   test_note: string | null;
+  /** docs/design/102: who runs the model (named in families' consent) and when that last changed */
+  operator: string | null;
+  operator_changed_at: Date | null;
 }
 
 export interface AiModelSave {
@@ -28,6 +31,8 @@ export interface AiModelSave {
   replyField?: string | null;
   timeoutSeconds: number;
   on: boolean;
+  /** docs/design/102: who runs the model; missing: keep the saved name; empty: none */
+  operator?: string | null;
 }
 
 /** the address: http(s), no user or password in it, nothing after a # */
@@ -104,6 +109,16 @@ export class AiModelService {
     }
   }
 
+  /** docs/design/102: who runs the model, when it is on and named (parents' and students' help needs it); else null */
+  async operator(): Promise<string | null> {
+    try {
+      const row = await this.row();
+      return row?.is_on ? row.operator : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** What a person sees: holders the settings (never the token, its last 4); others whether a model is set up. */
   async view(ctx: RequestContext) {
     const row = await this.row(true);
@@ -120,6 +135,7 @@ export class AiModelService {
               replyField: row.reply_field,
               timeoutSeconds: row.timeout_seconds,
               on: row.is_on,
+              operator: row.operator,
               updatedBy: row.updated_by_name,
               updatedAt: row.updated_at.toISOString(),
               lastTest: row.tested_at
@@ -150,14 +166,21 @@ export class AiModelService {
       token: `••••${r.last4}`,
     });
     const last4 = token ? token.slice(-4) : (was?.token_last4 ?? '');
+    const operator =
+      dto.operator === undefined ? (was?.operator ?? null) : dto.operator?.trim() || null;
+    if (operator !== null && operator.length < 2)
+      throw new DomainError('validation-failed', 'Write the full name of who runs the model', {
+        status: 400,
+      });
     await this.db.tenant(requireTenant(ctx), (c) =>
-      c.query('SELECT app.ai_model_save($1, $2, $3, $4, $5, $6)', [
+      c.query('SELECT app.ai_model_save($1, $2, $3, $4, $5, $6, $7)', [
         url,
         token ? encryptField(token) : null,
         token ? last4 : null,
         dto.replyField?.trim() || null,
         dto.timeoutSeconds,
         dto.on,
+        operator,
       ]),
     );
     this.cache = null;
@@ -166,15 +189,19 @@ export class AiModelService {
       entityType: 'ai_model_settings',
       entityId: '1',
       before: was
-        ? shape({
-            url: was.url,
-            replyField: was.reply_field,
-            timeoutSeconds: was.timeout_seconds,
-            on: was.is_on,
-            last4: was.token_last4,
-          })
+        ? {
+            operator: was.operator,
+            ...shape({
+              url: was.url,
+              replyField: was.reply_field,
+              timeoutSeconds: was.timeout_seconds,
+              on: was.is_on,
+              last4: was.token_last4,
+            }),
+          }
         : null,
       after: {
+        operator,
         ...shape({
           url,
           replyField: dto.replyField?.trim() || null,

@@ -140,6 +140,9 @@ describe('the assistant with Claude’s help (e2e, docs/design/93 phase B)', () 
     });
   };
 
+  /** the AI model for all schools was on before this run (docs/design/101) */
+  let wasOn: boolean | undefined;
+
   beforeAll(async () => {
     server = createServer((req, res) => {
       let raw = '';
@@ -177,6 +180,11 @@ describe('the assistant with Claude’s help (e2e, docs/design/93 phase B)', () 
 
     const s = stamp('CL');
     await withMigrator(async (c) => {
+      // docs/design/101: an AI model on for all schools would answer instead of Claude — off for this run, put back
+      wasOn = (
+        await c.query<{ is_on: boolean }>('SELECT is_on FROM ai_model_settings WHERE id = 1')
+      ).rows[0]?.is_on;
+      if (wasOn) await c.query('UPDATE ai_model_settings SET is_on = false WHERE id = 1');
       school = await seedSchool(c, `${s}A`);
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
       teacher = await seedUser(c, school, `${s}-teacher`);
@@ -240,6 +248,8 @@ describe('the assistant with Claude’s help (e2e, docs/design/93 phase B)', () 
   }, 120_000);
 
   afterAll(async () => {
+    if (wasOn)
+      await withMigrator((c) => c.query('UPDATE ai_model_settings SET is_on = true WHERE id = 1'));
     await app?.close();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     for (const [k, v] of Object.entries(saved))
