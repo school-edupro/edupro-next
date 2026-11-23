@@ -179,6 +179,7 @@ ApprovalsController_decide
 # an item's record for the Details screen and its files, no web page (docs/design/100)
 ApprovalsController_detail
 ApprovalsController_file
+ApprovalsController_act
 
 # phase D — notifications chosen by the person, the app's version check
 CommsPushController_events

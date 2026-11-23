@@ -163,7 +163,13 @@ export class ApprovalsService {
     req: ContextualRequest,
     kind: string,
     id: string,
-  ): Promise<{ item: ApprovalItem; detail: ApprovalDetail }> {
+  ): Promise<{
+    item: ApprovalItem;
+    detail: ApprovalDetail;
+    record?: unknown;
+    options?: Record<string, unknown>;
+    steps?: string[];
+  }> {
     const [source] = await this.sourcesFor(ctx, kind);
     if (!source) throw new DomainError('not-found', 'No such kind of approval', { status: 404 });
     const list = await this.calls.call(req, source.list.method, source.list.url, source.list.body);
@@ -180,10 +186,54 @@ export class ApprovalsService {
       else if (r.status !== 404 && r.status !== 403)
         this.logger.warn(`approvals detail: ${kind} record ${get.url} answered ${r.status}`);
     }
+    const form = source.detail?.form === true;
+    const read = async (url: string) => {
+      const r = await this.calls.call(req, 'GET', url);
+      return r.status < 400 ? r.body : null;
+    };
     return {
       item: this.shape(source, listed),
       detail: readRecord(record, { title: listed.title, subtitle: listed.detail }, source.detail),
+      // phase D: the record itself and the lists its form needs, for the kinds decided item by item
+      ...(form
+        ? {
+            record,
+            options: (await source.detail?.options?.(id, record, read)) ?? {},
+            steps: Object.keys(source.actions ?? {}),
+          }
+        : {}),
     };
+  }
+
+  /**
+   * docs/design/100 phase D: a step of an item decided item by item (a receipt's inspection, a clearance, an ACR's
+   * level …), sent to the kind's own route with the form's body while the item waits for the person; that route
+   * checks and records it (its audit, its rules).
+   */
+  async act(
+    ctx: RequestContext,
+    req: ContextualRequest,
+    kind: string,
+    id: string,
+    step: string,
+    body: Record<string, unknown>,
+  ) {
+    const [source] = await this.sourcesFor(ctx, kind);
+    const make = source?.actions?.[step];
+    if (!source || !make) throw new DomainError('not-found', 'No such step here', { status: 404 });
+    const list = await this.calls.call(req, source.list.method, source.list.url, source.list.body);
+    if (list.status >= 400) throw new HttpException(list.body as object, list.status);
+    if (!source.items(list.body).some((i) => i.id === id))
+      throw new DomainError('approvals.gone', 'This no longer waits for you.', { status: 404 });
+    const call = make(id, body);
+    if (!call)
+      throw new DomainError('validation-failed', 'Something in the form is not right.', {
+        status: 400,
+      });
+    const r = await this.calls.call(req, call.method, call.url, call.body);
+    ctx.auditWritten = true;
+    if (r.status >= 400) throw new HttpException(r.body as object, r.status);
+    return { kind, id, step, result: r.body };
   }
 
   /** a file the item's record names: its download address (asked afresh; the record is read again first) */

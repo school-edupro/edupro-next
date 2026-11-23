@@ -72,4 +72,27 @@ no-dues clearances).
   adjustments and requests, rate corrections, vacancies, ACRs, no-dues, consents, hostel visits, assets handed to
   you, attendance corrections. Checked on Alpha: an approval step (the request, its purpose, its steps) and a purchase
   order (line items, GST summary, sourcing, revisions, payment terms, steps, history).
-
+- **D (23 Nov 2026).** The six kinds decided item by item are decided in the app. API: `POST /approvals/:kind/:id/act`
+  {step, body} (`ApprovalsService.act`: the kind must have the step — else 404; the kind's list says the item waits
+  for the person — else 404 `approvals.gone`; the step builds the kind's own call, as the person, and its refusals
+  come back as they are; the audit is the route's). `ApprovalSource.actions` per kind: receipts `inspect`
+  (`/purchase/receipts/:id/inspect`), condemnations `sign` and `decide`, withdrawals `clear` (the department's
+  clearance, `PUT …/clearances/:dept`) and `bypass`, transfers `accept` and `reject`, ACRs `save`, `submit`,
+  `send_back` and `file` (a file registered on the ACR, then sent), no-dues `clear` (`/people/exits/:id/clearance/:dept`).
+  `DetailConfig.form` gives the record as it is with the Details (the form reads it), `options` what the form offers
+  (a transfer: the sections to admit into and the next admission number). App: `lib/staff/approval_forms.dart`
+  `ApprovalForm` under the Details — a receipt's lines (accepted and rejected adding up to what came, why, the
+  rejected serials, a note; Accept as marked or Reject it all), a condemnation's Sign or Approve / Reject / Send back,
+  a withdrawal's clearance for my department (dues, a charge where the department has one, remarks, documents —
+  needed where the department says so —, Hold or Clear, Bypass), a transfer's Admit (a section searched by typing,
+  the admission number filled in, a roll number) or Refuse, an ACR level (the scale as words, text, yes or no, files;
+  for a review the grade, why it differs, agreement, remarks and — at the last level — the standard remark lines of
+  the grade; Save draft, Submit, Send back), no-dues for my departments (dues, a note, Clear). A step done closes the
+  Details; a draft saved or a file added keeps it open; a refusal says why and keeps the form.
+- **E (23 Nov 2026).** Tests: API `approvals-inbox` (a step only a kind has, written right, only while the item waits;
+  every step's route exists and takes the body the app sends), `school-transfer` (admitted and refused from the app's
+  Approvals: the record and its options, not the sending school's, the admission number and roll, gone once decided,
+  a second refusal refused); app `approval_forms_test` (15: each form's body, the checks before sending, a refusal;
+  light / dark / Hindi; twice the text) — 320 app tests in all. Help: `purchase.md` (inspect and condemn on the
+  phone). Hindi's Accept as marked wrapped in a half-width button and failed the contrast check: the receipt's two
+  buttons stand one under the other.

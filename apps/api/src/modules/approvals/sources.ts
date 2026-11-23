@@ -23,6 +23,18 @@ const dates = (from: unknown, to: unknown) =>
   from ? (to && to !== from ? `${String(from)} – ${String(to)}` : String(from)) : null;
 const item = (x: ListedItem) => x;
 
+// docs/design/100 phase D: the form's body checked before it goes to the kind's own route
+const dept = (b: Record<string, unknown>) => {
+  const d = String(b.department ?? '');
+  return /^[A-Za-z0-9_-]{1,40}$/.test(d) ? d : null;
+};
+const without = (b: Record<string, unknown>, ...keys: string[]) =>
+  Object.fromEntries(Object.entries(b).filter(([k]) => !keys.includes(k)));
+const seqOf = (b: Record<string, unknown>) => {
+  const n = Number(b.seq);
+  return Number.isInteger(n) && n >= 0 && n < 100 ? n : null;
+};
+
 // workflow steps whose kind has a source (or a page) of its own
 const OWN = ['vacancy', 'staff_regularisation', 'employee_exit', 'consent_response'];
 const PREFIX_OWN = ['purchase', 'staff_leave'];
@@ -190,7 +202,10 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/receipts?mine=1' },
-    detail: { get: (id) => ({ method: 'GET', url: `/purchase/receipts/${id}` }) },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/receipts/${id}` }), form: true },
+    actions: {
+      inspect: (id, b) => ({ method: 'POST', url: `/purchase/receipts/${id}/inspect`, body: b }),
+    },
     total: (a) => count(a, 'total'),
     // quantities line by line: on its own page
     items: (a) =>
@@ -300,7 +315,11 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'admin',
     list: { method: 'GET', url: '/purchase/condemnations?mine=1' },
-    detail: { get: (id) => ({ method: 'GET', url: `/purchase/condemnations/${id}` }) },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/condemnations/${id}` }), form: true },
+    actions: {
+      sign: (id) => ({ method: 'POST', url: `/purchase/condemnations/${id}/sign` }),
+      decide: (id, b) => ({ method: 'POST', url: `/purchase/condemnations/${id}/decide`, body: b }),
+    },
     // a committee signs, then an approver decides: on its own page
     items: (a) =>
       rows(a, 'rows').map((x) =>
@@ -504,7 +523,29 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     needsAll: ['people.withdrawal.view'],
     app: 'admin',
     list: { method: 'GET', url: '/people/withdrawals?mine=true&size=100' },
-    detail: { get: (id) => ({ method: 'GET', url: `/people/withdrawals/${id}` }) },
+    detail: { get: (id) => ({ method: 'GET', url: `/people/withdrawals/${id}` }), form: true },
+    actions: {
+      clear: (id, b) => {
+        const d = dept(b);
+        return d
+          ? {
+              method: 'PUT',
+              url: `/people/withdrawals/${id}/clearances/${d}`,
+              body: without(b, 'department'),
+            }
+          : null;
+      },
+      bypass: (id, b) => {
+        const d = dept(b);
+        return d
+          ? {
+              method: 'POST',
+              url: `/people/withdrawals/${id}/clearances/${d}/bypass`,
+              body: { reason: b.reason },
+            }
+          : null;
+      },
+    },
     total: (a) => count(a, 'page', 'total'),
     // a department's clearance with its dues: on its own page
     items: (a) =>
@@ -526,7 +567,37 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: ['people.transfer.manage'],
     app: 'admin',
     list: { method: 'GET', url: '/people/school-transfers?box=incoming' },
-    detail: { get: (id) => ({ method: 'GET', url: `/people/school-transfers/${id}` }) },
+    detail: {
+      get: (id) => ({ method: 'GET', url: `/people/school-transfers/${id}` }),
+      form: true,
+      // the sections to admit into and the next admission number, as the admin's page offers them
+      options: async (_id, _record, read) => {
+        const sections: Array<{ id: string; label: string }> = [];
+        for (const k of rows(await read('/academics/classes?size=200')).filter(
+          (x) => x.status !== 'inactive',
+        ))
+          for (const x of rows(await read(`/academics/classes/${String(k.id)}/sections`)))
+            if (x.status !== 'inactive')
+              sections.push({
+                id: String(x.id),
+                label: `${String(k.code ?? k.name)}-${String(x.name)}`,
+              });
+        const next = (await read('/people/profile/next-numbers')) as Record<string, unknown> | null;
+        return { sections, admissionNo: next?.admissionNo ?? null };
+      },
+    },
+    actions: {
+      accept: (id, b) => ({
+        method: 'POST',
+        url: `/people/school-transfers/${id}/accept`,
+        body: b,
+      }),
+      reject: (id, b) => ({
+        method: 'POST',
+        url: `/people/school-transfers/${id}/reject`,
+        body: { reason: b.reason },
+      }),
+    },
     // accepting places the student in a class: on its own page
     items: (a) =>
       rows(a)
@@ -608,6 +679,35 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/people/acr/to-assess' },
+    detail: { get: (id) => ({ method: 'GET', url: `/people/acr/reports/${id}` }), form: true },
+    actions: {
+      save: (id, b) => {
+        const q = seqOf(b);
+        return q === null
+          ? null
+          : {
+              method: 'PUT',
+              url: `/people/acr/reports/${id}/levels/${q}`,
+              body: without(b, 'seq'),
+            };
+      },
+      submit: (id, b) => {
+        const q = seqOf(b);
+        return q === null
+          ? null
+          : {
+              method: 'POST',
+              url: `/people/acr/reports/${id}/levels/${q}/submit`,
+              body: without(b, 'seq'),
+            };
+      },
+      send_back: (id, b) => ({
+        method: 'POST',
+        url: `/people/acr/reports/${id}/send-back`,
+        body: { reason: b.reason },
+      }),
+      file: (id, b) => ({ method: 'POST', url: `/people/acr/reports/${id}/files`, body: b }),
+    },
     // an assessment form: on its own page
     items: (a) =>
       rows(a, 'waiting').map((x) => {
@@ -877,6 +977,20 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/people/exits/clearance/mine' },
+    // the list row carries the exit's clearances (there is no record route)
+    detail: { form: true },
+    actions: {
+      clear: (id, b) => {
+        const d = dept(b);
+        return d
+          ? {
+              method: 'POST',
+              url: `/people/exits/${id}/clearance/${d}`,
+              body: without(b, 'department'),
+            }
+          : null;
+      },
+    },
     // a department's dues: on its own page
     items: (a) =>
       rows(a).map((x) => {

@@ -1891,6 +1891,63 @@ class S {
     'Not approved by $who${when.isEmpty ? '' : ' on $when'}${note == null ? '' : ': $note'}',
     '$who ने स्वीकृत नहीं किया${when.isEmpty ? '' : ' ($when)'}${note == null ? '' : ': $note'}',
   );
+  // the kinds decided item by item, in the app (docs/design/100 phase D)
+  String get yes => _t('Yes', 'हाँ');
+  String get no => _t('No', 'नहीं');
+  String get afNotYours =>
+      _t('Nothing here waits for you now.', 'इसमें अभी आपके लिए कुछ प्रतीक्षा में नहीं।');
+  String get afInspect => _t('Inspection', 'निरीक्षण');
+  String get afCommittee => _t(
+    'A committee inspects this receipt: your inspection is your signature; it is final once enough members sign.',
+    'इस रसीद का निरीक्षण समिति करती है: आपका निरीक्षण आपका हस्ताक्षर है; पर्याप्त सदस्यों के हस्ताक्षर पर यह अंतिम होगा।',
+  );
+  String afReceived(String n, String uom) => _t('Received: $n $uom', 'प्राप्त: $n $uom');
+  String get afAccepted => _t('Accepted', 'स्वीकृत');
+  String get afRejected => _t('Rejected', 'अस्वीकृत');
+  String get afWhy => _t('Why', 'क्यों');
+  String get afNote => _t('Note', 'टिप्पणी');
+  String afQtyAdd(String line) => _t(
+    '$line: accepted and rejected must add up to what was received.',
+    '$line: स्वीकृत और अस्वीकृत मिलकर प्राप्त के बराबर हों।',
+  );
+  String afWhyRejected(String line) =>
+      _t('$line: say why some were rejected.', '$line: बताएँ कुछ क्यों अस्वीकृत किए।');
+  String get afAcceptMarked => _t('Accept as marked', 'जैसा चिह्नित, स्वीकार करें');
+  String get afRejectAll => _t('Reject it all', 'सब अस्वीकार करें');
+  String get afDues => _t('Dues (Rs.)', 'बकाया (रु.)');
+  String get afCharge => _t('Charge (Rs.)', 'शुल्क (रु.)');
+  String get afRemarks => _t('Remarks', 'टिप्पणियाँ');
+  String get afDoc => _t('Attach a file', 'फ़ाइल लगाएँ');
+  String get afDocNeeded => _t('Attach the document (needed)', 'दस्तावेज़ लगाएँ (आवश्यक)');
+  String get afHold => _t('Hold', 'रोकें');
+  String get afClear => _t('Clear', 'मंज़ूर करें');
+  String get afBypass => _t('Bypass', 'छोड़ें');
+  String get afAdmit => _t('Admit', 'प्रवेश दें');
+  String get afRefuse => _t('Refuse', 'मना करें');
+  String get afSection => _t('Class and section', 'कक्षा और सेक्शन');
+  String get afPickSection => _t('Pick the class and section.', 'कक्षा और सेक्शन चुनें।');
+  String get afAdmissionNoLabel => _t('Admission number', 'प्रवेश संख्या');
+  String get afAdmissionNo => _t(
+    'Give an admission number (letters, numbers, / or -).',
+    'प्रवेश संख्या दें (अक्षर, अंक, / या -)।',
+  );
+  String get afRollNo => _t('Roll number (empty: the next free)', 'रोल नंबर (खाली: अगला खाली)');
+  String get afAnswer => _t('Answer', 'उत्तर');
+  String afFiles(int n) => _t('$n file(s)', '$n फ़ाइल');
+  String get afGrade => _t('Grade', 'ग्रेड');
+  String get afGradeWhy => _t(
+    'Why this grade (when it differs from the level before)',
+    'यह ग्रेड क्यों (जब पिछले स्तर से अलग हो)',
+  );
+  String get afAgreement =>
+      _t('Do you agree with the level before?', 'क्या आप पिछले स्तर से सहमत हैं?');
+  String get afAgree => _t('Agree', 'सहमत');
+  String get afPartly => _t('Partly', 'आंशिक');
+  String get afDisagree => _t('Disagree', 'असहमत');
+  String get afRemarkLines => _t('Standard remarks', 'मानक टिप्पणियाँ');
+  String get afSaveDraft => _t('Save draft', 'मसौदा सहेजें');
+  String get afSubmit => _t('Submit', 'जमा करें');
+  String afClearFor(String dept) => _t('Clear for $dept', '$dept के लिए मंज़ूर करें');
   // a section's area reopened under the exam lock (docs/design/98)
   String aeArea(String area) => switch (area) {
     'indicators' => _t('Indicators', 'संकेतक'),

@@ -557,7 +557,9 @@ Who approves, or the department's **HOD** when none is set (the school admin whe
 a PO above the committee limit the **purchase committee** inspects instead: its members sign the same
 inspection, and changing it asks the others to sign again. Nobody inspects what they received. The
 inspector (in the admin under My approvals, or in the staff app) marks per line what is **accepted** and
-what is **rejected** with the reason — ticking the rejected serial numbers — or **rejects it all**.
+what is **rejected** with the reason — ticking the rejected serial numbers — or **rejects it all**. On the
+phone this is done in the app itself: **Approvals → the receipt → Details** shows the receipt and its lines
+with the same boxes (no web page opens).
 
 **On acceptance**:
 
@@ -776,6 +778,10 @@ Unserviceable, obsolete, surplus or expired assets and stock are **condemned** (
 4. **Record the disposal**: how (public auction, sale by tender, sale, buy-back, scrap, donation,
    destruction), when, to whom, for how much, the reference and a file. Above **₹2 lakh** of book value
    it must be a public auction or a tender, with its reference.
+
+The committee's signature and the admin's decision can also be given on the phone: the staff app's
+**Approvals → the condemnation → Details** shows the proposal with Sign, or Approve / Reject / Send back
+(with a reason).
 
 The record prints in the manner of form GFR-17. Reports → **Condemnations and disposals**.
 

@@ -57,6 +57,14 @@ export interface DetailConfig {
   get?: (id: string, row: Record<string, unknown> | null) => RouteCall | null;
   /** the item's row in the list answer, where its id is not the row's own (`vendor-12`, a movement's id) */
   row?: (answer: unknown, id: string) => Record<string, unknown> | null;
+  /** phase D: the record as it is, for the app's own form (the kinds decided item by item) */
+  form?: boolean;
+  /** phase D: lists the form needs (sections to admit into, the next number), read as the person */
+  options?: (
+    id: string,
+    record: unknown,
+    read: (url: string) => Promise<unknown>,
+  ) => Promise<Record<string, unknown>>;
   /** fields left out (beyond ids, rights and empty ones) */
   hide?: string[];
   /** a field's words where its name does not say it */
@@ -99,6 +107,11 @@ export interface ApprovalSource {
   decide?: (id: string, decision: Decision, reason: string | null) => RouteCall;
   /** docs/design/100: the item's record for the app's Details screen */
   detail?: DetailConfig;
+  /**
+   * docs/design/100 phase D: the steps the app's form sends for a kind decided item by item (inspect, sign, clear,
+   * accept …), each to the kind's own route with the form's body — its own checks decide; null: a body it refuses
+   */
+  actions?: Record<string, (id: string, body: Record<string, unknown>) => RouteCall | null>;
 }
 
 /**

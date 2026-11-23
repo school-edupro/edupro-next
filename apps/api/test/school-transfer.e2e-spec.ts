@@ -317,4 +317,84 @@ describe('transfer between schools of the group (e2e)', () => {
         .sort(),
     ).toEqual(['accepted', 'cancelled', 'rejected']);
   });
+
+  it("docs/design/100 phase D: the staff app's Approvals admits or refuses one, through the same routes", async () => {
+    await withdraw('d', 'Dev');
+    await withdraw('e', 'Esha');
+    const send = async (key: string) =>
+      (
+        await inject({
+          method: 'POST',
+          url: `/people/withdrawals/${ids[`w${key}`]}/transfer`,
+          headers: hA(),
+          json: { toSchoolId: beta.id },
+        })
+      ).json().id as string;
+    const td = await send('d');
+    const te = await send('e');
+    // the item's record and what the form offers: the sections to admit into, the next admission number
+    const d = await inject({ method: 'GET', url: `/approvals/transfer/${td}`, headers: hB() });
+    expect(d.statusCode).toBe(200);
+    const body = d.json() as {
+      item: { decideHere: boolean };
+      record: { status: string };
+      options: { sections: Array<{ id: string; label: string }>; admissionNo: string | null };
+    };
+    expect(body.item.decideHere).toBe(false);
+    expect(body.record.status).toBe('requested');
+    expect(body.options.sections).toContainEqual({ id: ids.secB, label: 'VI-A' });
+    // not Alpha's to decide
+    const notMine = await inject({
+      method: 'POST',
+      url: `/approvals/transfer/${td}/act`,
+      headers: hA(),
+      json: { step: 'reject', body: { reason: 'x' } },
+    });
+    expect(notMine.statusCode).toBe(404);
+    const ok = await inject({
+      method: 'POST',
+      url: `/approvals/transfer/${td}/act`,
+      headers: hB(),
+      json: {
+        step: 'accept',
+        body: { classSectionId: ids.secB, admissionNo: `${s}-B3`, rollNo: 7 },
+      },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({
+      kind: 'transfer',
+      step: 'accept',
+      result: { status: 'accepted' },
+    });
+    const prof = await inject({
+      method: 'GET',
+      url: `/people/students/${ok.json().result.toStudentId as string}/profile`,
+      headers: hB(),
+    });
+    expect(prof.json()).toMatchObject({ admissionNo: `${s}-B3` });
+    expect(prof.json().enrolment).toMatchObject({ classSectionId: ids.secB, rollNo: 7 });
+    // decided: gone from the app's Approvals
+    const gone = await inject({ method: 'GET', url: `/approvals/transfer/${td}`, headers: hB() });
+    expect(gone.json()).toMatchObject({ type: 'approvals.gone' });
+    const rej = await inject({
+      method: 'POST',
+      url: `/approvals/transfer/${te}/act`,
+      headers: hB(),
+      json: { step: 'reject', body: { reason: 'No seat in Class VI' } },
+    });
+    expect(rej.statusCode).toBe(200);
+    expect(rej.json().result).toMatchObject({
+      status: 'rejected',
+      decisionNote: 'No seat in Class VI',
+    });
+    // the kind's own refusals come back as they are: a step on one decided already
+    const again = await inject({
+      method: 'POST',
+      url: `/approvals/transfer/${te}/act`,
+      headers: hB(),
+      json: { step: 'reject', body: { reason: 'Again' } },
+    });
+    expect(again.statusCode).toBe(404);
+    expect(again.json()).toMatchObject({ type: 'approvals.gone' });
+  });
 });

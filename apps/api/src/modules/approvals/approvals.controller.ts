@@ -24,6 +24,16 @@ const DecisionSchema = z.object({
 });
 class ApprovalDecisionDto extends createZodDto(DecisionSchema) {}
 
+/** docs/design/100 phase D: a step of an item decided item by item, with its form's body */
+const ActSchema = z.object({
+  step: z
+    .string()
+    .trim()
+    .regex(/^[a-z_]{2,30}$/),
+  body: z.record(z.string(), z.unknown()).default({}),
+});
+class ApprovalActDto extends createZodDto(ActSchema) {}
+
 /**
  * The approvals inbox (docs/design/89 §5.4). Signed-in only here: each kind's own routes, called as the person, decide
  * what they may list and decide (their permissions, scope, segregation of duties, second factor and audit).
@@ -58,6 +68,23 @@ export class ApprovalsController {
     @Param('id') id: string,
   ) {
     return this.approvals.detail(ctx, req, kind, id);
+  }
+
+  @Post(':kind/:id/act')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({
+    summary:
+      'A step of an item decided item by item (inspect, sign, clear, accept, save, submit …) through its own route',
+  })
+  act(
+    @ReqCtx() ctx: RequestContext,
+    @Req() req: ContextualRequest,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Body() body: ApprovalActDto,
+  ) {
+    return this.approvals.act(ctx, req, kind, id, body.step, body.body);
   }
 
   @Get(':kind/:id/files/:fileId')

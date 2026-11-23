@@ -10,6 +10,7 @@ import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
 import '../ui/widgets.dart';
+import 'approval_forms.dart';
 import 'data.dart';
 
 /// The Approvals icon in a staff member's bar (docs/design/89 §5.4), with how many things wait for them.
@@ -470,6 +471,15 @@ class ApprovalDetailScreen extends ConsumerWidget {
               const SizedBox(height: Tokens.sp4),
               if (it['decideHere'] == true)
                 DecisionPanel(item: it, onDone: () => Navigator.of(context).pop(true))
+              else if (r['record'] is Map)
+                // decided item by item: its own form, in the app (docs/design/100 phase D)
+                ApprovalForm(
+                  kind: '${item['kind']}',
+                  id: '${item['id']}',
+                  record: asJson(r['record']),
+                  options: asJson(r['options']),
+                  onDone: () => Navigator.of(context).pop(true),
+                )
               else
                 Notice(text: s.decideOnPage),
             ],

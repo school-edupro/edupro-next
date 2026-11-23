@@ -306,6 +306,105 @@ describe('approvals inbox (e2e)', () => {
     });
   });
 
+  it('docs/design/100 phase D: a step of an item decided item by item; only a step its kind has, only while it waits', async () => {
+    const step = (kind: string, json: unknown, who = admin) =>
+      call('POST', `/approvals/${kind}/999999999/act`, who, json);
+    // a kind with no steps, a step the kind does not have, no such kind
+    expect((await step('leave', { step: 'clear', body: {} })).statusCode).toBe(404);
+    expect((await step('no_dues', { step: 'sign', body: {} })).statusCode).toBe(404);
+    expect((await step('nothing', { step: 'clear', body: {} })).statusCode).toBe(404);
+    // a step written wrong
+    expect((await step('no_dues', { step: 'Clear!', body: {} })).statusCode).toBe(400);
+    // not waiting for me: nothing is called
+    const gone = await step('no_dues', { step: 'clear', body: { department: 'it', dues: 0 } });
+    expect(gone.statusCode).toBe(404);
+    expect(gone.json()).toMatchObject({ type: 'approvals.gone' });
+  });
+
+  it("every step's route exists and takes the body the app sends", async () => {
+    const h = { ...headersFor(admin.sub, school.id) };
+    // the bodies the app's forms send (apps/mobile/lib/staff/approval_forms.dart)
+    const SAMPLE: Record<string, Record<string, Record<string, unknown>>> = {
+      receipt: {
+        inspect: {
+          action: 'accept',
+          note: 'Checked by the store',
+          lines: [
+            {
+              lineId: '999999999',
+              acceptedQty: 8,
+              rejectedQty: 2,
+              reason: 'Broken in transit',
+              rejectedSerials: [],
+            },
+          ],
+        },
+      },
+      condemnation: { sign: {}, decide: { action: 'reject', note: 'Still usable' } },
+      withdrawal: {
+        clear: {
+          department: 'library',
+          status: 'cleared',
+          dues: 0,
+          remarks: 'Books returned',
+          documents: [],
+        },
+        bypass: { department: 'library', reason: 'Librarian on leave' },
+      },
+      transfer: {
+        accept: { classSectionId: '999999999', admissionNo: 'A-101', rollNo: 12 },
+        reject: { reason: 'No seat in the class' },
+      },
+      acr: {
+        save: { seq: 2, answers: { '1': 5 }, remarks: 'A good year' },
+        submit: {
+          seq: 2,
+          answers: { '1': 5 },
+          remarks: 'A good year',
+          grade: 'A',
+          agreement: 'agree',
+          remarkIds: [],
+        },
+        send_back: { reason: 'Fill the self part' },
+        file: {
+          fileName: 'proof.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 4,
+          classification: 'personal',
+        },
+      },
+      no_dues: { clear: { department: 'it', dues: 150, note: 'Charger not returned' } },
+    };
+    const faults: string[] = [];
+    for (const src of APPROVAL_SOURCES)
+      for (const [name, make] of Object.entries(src.actions ?? {})) {
+        const body = SAMPLE[src.kind]?.[name];
+        if (!body) {
+          faults.push(`${src.kind} ${name}: no sample body here`);
+          continue;
+        }
+        const c = make('999999999', body);
+        if (!c) {
+          faults.push(`${src.kind} ${name}: the app's body refused`);
+          continue;
+        }
+        const r = await inject({
+          method: c.method,
+          url: c.url,
+          headers: h,
+          ...(c.body === undefined ? {} : { json: c.body }),
+        });
+        if (r.statusCode === 404 && /Cannot (GET|POST|PUT)/.test(r.body))
+          faults.push(`${src.kind} ${name}: route missing (${c.url})`);
+        if (r.statusCode === 400 && r.json().type === 'validation-failed' && r.json().errors)
+          faults.push(`${src.kind} ${name}: ${r.body.slice(0, 300)}`);
+      }
+    // every kind decided item by item has its steps
+    for (const k of ['receipt', 'condemnation', 'withdrawal', 'transfer', 'acr', 'no_dues'])
+      if (!APPROVAL_SOURCES.find((x) => x.kind === k)?.actions) faults.push(`${k}: no steps`);
+    expect(faults).toEqual([]);
+  });
+
   it('a family member has nothing to decide', async () => {
     const box = await inbox(parent);
     expect(box.total).toBe(0);

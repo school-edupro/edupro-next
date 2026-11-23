@@ -596,6 +596,10 @@ class EduProApi {
   Future<dynamic> approvalsFile({required String kind, required String id, required String fileId}) =>
       _t.send('GET', '/approvals/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
 
+  /// POST /approvals/{kind}/{id}/act — A step of an item decided item by item (inspect, sign, clear, accept, save, submit …) through its own route
+  Future<dynamic> approvalsAct({required ApprovalActDto body, required String kind, required String id}) =>
+      _t.send('POST', '/approvals/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/act', body: body.toJson());
+
   /// GET /comms/push/events — The kinds of push the school sends and those I switched off
   Future<dynamic> commsPushEvents() =>
       _t.send('GET', '/comms/push/events');
@@ -1892,6 +1896,17 @@ class ApprovalDecisionDto {
   Map<String, Object?> toJson() => {
         'decision': decision,
         if (reason != null) 'reason': reason,
+      };
+}
+
+/** The ApprovalActDto the API takes. */
+class ApprovalActDto {
+  const ApprovalActDto({required this.step, this.body});
+  final String step;
+  final Object? body;
+  Map<String, Object?> toJson() => {
+        'step': step,
+        if (body != null) 'body': body,
       };
 }
 
