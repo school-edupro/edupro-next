@@ -289,6 +289,11 @@ const PAGES = [
   '/exams/5/remarks',
   '/exams/5/attendance',
   '/exams/5/health',
+  // docs/design/98: Term I (437) is wholly locked on Alpha — the admin's Reopen for entry on each area
+  '/exams/437/indicators',
+  '/exams/437/remarks',
+  '/exams/437/attendance',
+  '/exams/437/health',
   '/exams/5/analysis',
   '/exams/5/register',
   '/exams/5/promotion',

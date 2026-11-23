@@ -2,6 +2,7 @@ import { Badge, Button, Card } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { AutoSubmit } from '@/components/AutoSubmit';
+import { AreaEntryBar, type AreaEntryState } from '@/components/exams/AreaEntryBar';
 import { ExamFrame } from '@/components/exams/ExamFrame';
 import { FormSaveBar } from '@/components/exams/FormSaveBar';
 import { IndicatorSheet, type SheetArea } from '@/components/exams/IndicatorSheet';
@@ -29,6 +30,8 @@ interface Sheet {
   exam: { id: string; code: string; name: string; marksLocked: boolean };
   section: { id: string; code: string };
   locked: boolean;
+  /** docs/design/98: the lock, net of the admin's reopening of this section's indicators */
+  entry?: { indicators: AreaEntryState };
   set: {
     id: string;
     code: string;
@@ -90,9 +93,9 @@ export default async function ExamIndicatorsPage({
     }),
     apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
   ]);
-  const sections = await apiFetch<{ data: Array<{ classSectionId: string; code: string }> }>(
-    `/exams/${id}/entry/sections`,
-  )
+  const sections = await apiFetch<{
+    data: Array<{ classSectionId: string; classId: string; code: string }>;
+  }>(`/exams/${id}/entry/sections`)
     .then((r) => r.data)
     .catch(() => []);
   const section = sections.find((x) => x.classSectionId === sp.section) ?? sections[0];
@@ -214,6 +217,16 @@ export default async function ExamIndicatorsPage({
               )
             }
           >
+            <AreaEntryBar
+              examId={exam.id}
+              classId={section.classId}
+              classSectionId={section.classSectionId}
+              section={sheet.section.code}
+              area="indicators"
+              entry={sheet.entry?.indicators}
+              canLock={me.permissions.includes('exams.lock.manage')}
+              back={`/exams/${exam.id}/indicators?section=${section.classSectionId}`}
+            />
             <IndicatorSheet
               key={section.classSectionId}
               examId={exam.id}

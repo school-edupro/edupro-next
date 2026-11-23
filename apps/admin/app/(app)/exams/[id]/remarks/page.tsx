@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { AutoSubmit } from '@/components/AutoSubmit';
 import { Notice } from '@/components/Notice';
+import { AreaEntryBar, type AreaEntryState } from '@/components/exams/AreaEntryBar';
 import { ExamFrame } from '@/components/exams/ExamFrame';
 import { FormSaveBar } from '@/components/exams/FormSaveBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
@@ -12,6 +13,8 @@ import type { Exam, ExamProgress } from '@/lib/types';
 interface Sheet {
   section: { id: string; code: string };
   locked: boolean;
+  /** docs/design/98: the lock, net of the admin's reopening of this section's remarks */
+  entry?: { remarks: AreaEntryState };
   categories: Array<{
     id: string;
     code: string;
@@ -60,15 +63,14 @@ export default async function ExamRemarksPage({
       throw e;
     }),
     apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
-    apiFetch<{ data: Array<{ classSectionId: string; code: string }> }>(
+    apiFetch<{ data: Array<{ classSectionId: string; classId: string; code: string }> }>(
       `/exams/${id}/entry/sections`,
     )
       .then((r) => r.data)
-      .catch(() => [] as Array<{ classSectionId: string; code: string }>),
+      .catch(() => [] as Array<{ classSectionId: string; classId: string; code: string }>),
   ]);
-  const sectionId =
-    sections.find((x) => x.classSectionId === sp.section)?.classSectionId ??
-    sections[0]?.classSectionId;
+  const picked = sections.find((x) => x.classSectionId === sp.section) ?? sections[0];
+  const sectionId = picked?.classSectionId;
   const [sheet, reg] = sectionId
     ? await Promise.all([
         apiFetch<Sheet>(`/exams/${id}/remark-items?classSectionId=${sectionId}`),
@@ -128,6 +130,18 @@ export default async function ExamRemarksPage({
             )
           }
         >
+          {picked ? (
+            <AreaEntryBar
+              examId={exam.id}
+              classId={picked.classId}
+              classSectionId={picked.classSectionId}
+              section={sheet.section.code}
+              area="remarks"
+              entry={sheet.entry?.remarks}
+              canLock={me.permissions.includes('exams.lock.manage')}
+              back={`/exams/${exam.id}/remarks?section=${picked.classSectionId}`}
+            />
+          ) : null}
           {reg && reg.remarkBank.length === 0 ? (
             <Alert tone="warning">{t('noGeneral', { section: sheet.section.code })}</Alert>
           ) : null}

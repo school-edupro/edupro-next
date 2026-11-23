@@ -4857,6 +4857,43 @@
       "takes": "Takes",
       "all": "Everything",
       "notTaken": "This exam does not take {area}: tick it under Set-up → Details to use it."
+    },
+    "reopen": {
+      "areas": {
+        "indicators": "Indicators",
+        "remarks": "Remarks",
+        "attendance": "Exam attendance",
+        "health": "Height and weight"
+      },
+      "open": "Reopen for entry",
+      "openTitle": "Reopen {area} of {section} for entry?",
+      "openBody": "Only {area} of {section} opens: the people who enter it there (the class teacher, and teachers given it in Teacher assignments) can enter and change it, while the rest of the exam stays locked. It closes when the class teacher presses Done, when you close it, at the time below, or when the exam's or the class's lock changes.",
+      "openCards": "The class's published report card is taken back ({cards}): families stop seeing it until it is published again (no message is sent).",
+      "openReason": "Why reopen it? (kept with the opening)",
+      "closesAt": "Closes on",
+      "closesHelp": "Two days from now unless you change it; at most 30 days.",
+      "until": "Open for entry until {until}",
+      "by": "Reopened by {name}: {reason}",
+      "closeNow": "Close now",
+      "done": "Done — close entry",
+      "closeTitle": "Close {area} of {section} for entry?",
+      "closeBody": "It is locked again with the rest of the exam; what was saved stays.",
+      "listTitle": "Reopened for entry",
+      "listHelp": "Indicators, remarks, exam attendance and height and weight of a section reopened while the exam is locked: open now first, then the last closed. Reopen one from its page with the section picked.",
+      "listNone": "Nothing is reopened in this exam.",
+      "colSection": "Section",
+      "colArea": "Area",
+      "colReason": "Why",
+      "colOpened": "Opened",
+      "colUntil": "Until",
+      "colState": "State",
+      "stateOpen": "Open",
+      "how": {
+        "done": "Closed by the class teacher (Done)",
+        "admin": "Closed by the office",
+        "lock": "Closed by a lock change",
+        "lapsed": "Closed at its time"
+      }
     }
   },
   "accessAssignments": {

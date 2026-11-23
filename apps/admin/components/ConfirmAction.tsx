@@ -19,6 +19,7 @@ export function ConfirmAction({
   reason,
   choices,
   select,
+  when,
   blocked,
 }: {
   action: (fd: FormData) => void | Promise<void>;
@@ -45,6 +46,11 @@ export function ConfirmAction({
     legend: string;
     items: Array<{ value: string; label: string; checked?: boolean; disabled?: boolean }>;
   };
+  /**
+   * A date and time in the dialog (docs/design/98: when a reopened area closes), posted as `name` in the
+   * browser's `YYYY-MM-DDTHH:mm`; starts at `value`, kept between `min` and `max`.
+   */
+  when?: { name: string; label: string; value: string; min?: string; max?: string; help?: string };
   /** Nothing can be done now: the dialog says why and offers only Close (docs/design/82). */
   blocked?: string;
 }) {
@@ -54,6 +60,7 @@ export function ConfirmAction({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chosen, setChosen] = useState('');
+  const [at, setAt] = useState(when?.value ?? '');
   const [picked, setPicked] = useState<string[]>(
     choices?.items.filter((i) => i.checked && !i.disabled).map((i) => i.value) ?? [],
   );
@@ -65,6 +72,7 @@ export function ConfirmAction({
       ))}
       {reason ? <input type="hidden" name="reason" value={text} /> : null}
       {select ? <input type="hidden" name={select.name} value={chosen} /> : null}
+      {when ? <input type="hidden" name={when.name} value={at} /> : null}
       {choices
         ? picked.map((v) => <input key={v} type="hidden" name={choices.name} value={v} />)
         : null}
@@ -94,6 +102,13 @@ export function ConfirmAction({
                     }
                     if (select && !chosen) {
                       setError(`Pick: ${select.label.toLowerCase()}.`);
+                      return;
+                    }
+                    if (
+                      when &&
+                      (!at || (when.min && at < when.min) || (when.max && at > when.max))
+                    ) {
+                      setError(`Pick: ${when.label.toLowerCase()} (within the allowed dates).`);
                       return;
                     }
                     if (reason && !reason.optional && text.trim().length < 3) {
@@ -175,6 +190,41 @@ export function ConfirmAction({
                 ))}
               </select>
               {error && !reason && !choices ? (
+                <span className="ep-field__error" role="alert">
+                  {error}
+                </span>
+              ) : null}
+            </label>
+          ) : null}
+          {when ? (
+            <label
+              className="ep-field"
+              htmlFor={`${reasonId}-when`}
+              style={{ marginTop: 'var(--sp-3)' }}
+            >
+              <span className="ep-field__label">
+                {when.label}
+                <span aria-hidden="true"> *</span>
+              </span>
+              <input
+                id={`${reasonId}-when`}
+                type="datetime-local"
+                className="ep-input"
+                value={at}
+                min={when.min}
+                max={when.max}
+                aria-describedby={when.help ? `${reasonId}-when-help` : undefined}
+                onChange={(e) => {
+                  setAt(e.target.value);
+                  setError(null);
+                }}
+              />
+              {when.help ? (
+                <span id={`${reasonId}-when-help`} className="ep-field__help">
+                  {when.help}
+                </span>
+              ) : null}
+              {error && !reason ? (
                 <span className="ep-field__error" role="alert">
                   {error}
                 </span>

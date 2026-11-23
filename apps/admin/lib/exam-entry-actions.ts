@@ -355,6 +355,44 @@ export async function openSheetForEntry(fd: FormData) {
   );
 }
 
+/**
+ * docs/design/98: the school admin reopens one section's indicators, remarks, exam attendance or height
+ * and weight while the exam (or the class's lock of the area) stays locked, until a date and time; the
+ * people who normally enter it there enter again.
+ */
+export async function openAreaForEntry(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const backTo = str(fd, 'back') || `/exams/${examId}`;
+  // the dialog's date and time are the school's (India) clock
+  const at = str(fd, 'closesAt');
+  const closesAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(at) ? `${at}:00+05:30` : undefined;
+  const r = await call<{ revoked?: string[] }>(`/exams/${examId}/area-entry/open`, 'POST', {
+    classSectionId: str(fd, 'classSectionId'),
+    area: str(fd, 'area'),
+    note: str(fd, 'reason'),
+    ...(closesAt ? { closesAt } : {}),
+  });
+  if (!r.ok) back(backTo, 'validation', r.error);
+  const revoked = r.data.revoked ?? [];
+  back(
+    backTo,
+    'ok',
+    `Open for entry: the people who enter it in this section can enter now, until it closes.${revoked.length ? ` Taken back from the published card: ${revoked.join(', ')}.` : ''}`,
+  );
+}
+
+/** docs/design/98: the admin's Close now (or the class teacher's Done) on a reopened area */
+export async function closeAreaEntry(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const backTo = str(fd, 'back') || `/exams/${examId}`;
+  const r = await call(`/exams/${examId}/area-entry/close`, 'POST', {
+    classSectionId: str(fd, 'classSectionId'),
+    area: str(fd, 'area'),
+  });
+  if (!r.ok) back(backTo, 'validation', r.error);
+  back(backTo, 'ok', 'Closed: it is locked again with the rest of the exam.');
+}
+
 // ---- mark schemes (docs/design/65, part 3) --------------------------------------------------------
 export async function createMarkScheme(fd: FormData) {
   const preset = str(fd, 'preset');

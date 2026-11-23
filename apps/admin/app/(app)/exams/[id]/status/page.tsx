@@ -2,6 +2,7 @@ import { Card, KpiTile } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { AutoSubmit } from '@/components/AutoSubmit';
+import { AreaOpeningsCard } from '@/components/exams/AreaEntryBar';
 import { ExamFrame } from '@/components/exams/ExamFrame';
 import { SubNav } from '@/components/exams/SubNav';
 import {
@@ -342,6 +343,7 @@ export default async function ExamStatusPage({
         ))}
         {!blocks.length ? <p style={{ marginBottom: 0 }}>{st('nothing')}</p> : null}
       </Card>
+      <AreaOpeningsCard examId={exam.id} canLock={me.permissions.includes('exams.lock.manage')} />
     </>
   );
 }

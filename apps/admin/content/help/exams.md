@@ -106,6 +106,15 @@
   stays locked. Its submitted or verified marks go back to open, and the class's published report card
   is taken back (the dialog says which). The sheet shows **Open for entry** until the teacher
   **submits** it, which closes it again; locking or opening the whole exam or the class closes it too.
+- **Reopen one section's indicators, remarks, exam attendance or height and weight** the same way: open
+  **Indicators**, **Remarks**, **Attendance** or **Health**, pick the section, then **Reopen for entry** (school
+  admin only), give the reason and when it closes (two days unless you change it; at most 30 days). Only that
+  section's area opens; the people who normally enter it there enter again (the class teacher, teachers given
+  indicator areas or remark categories in Teacher assignments, a subject's remark category its subject teacher).
+  It shows **Open for entry until …** and closes when the class teacher presses **Done — close entry**, when you
+  press **Close now**, at its time, or when the whole exam's or the class's lock changes. A published report card
+  of the class is taken back (the dialog says which). The exam's **Marks status** page lists what is reopened and
+  how each closed.
 
 ## Marks entry
 

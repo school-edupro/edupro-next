@@ -17670,3 +17670,18 @@ button.ep-shiftcal__cell:focus-visible {
   color: var(--text-heading);
   text-decoration: underline;
 }
+
+/* a section's area reopened for entry under the exam lock (docs/design/98): the state, why, and Close / Reopen */
+.ep-area-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.ep-area-entry__why {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

@@ -2,6 +2,7 @@ import { Badge, Button, Card } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { AutoSubmit } from '@/components/AutoSubmit';
+import { AreaEntryBar, type AreaEntryState } from '@/components/exams/AreaEntryBar';
 import { ExamFrame } from '@/components/exams/ExamFrame';
 import { FormSaveBar } from '@/components/exams/FormSaveBar';
 import { LiveCalc } from '@/components/exams/LiveCalc';
@@ -14,6 +15,8 @@ import type { Exam, ExamProgress } from '@/lib/types';
 interface Register {
   exam: { marksLocked: boolean };
   section: { id: string; code: string };
+  /** docs/design/98: each area's lock for the section, net of the admin's reopening */
+  entry?: Record<'remarks' | 'attendance' | 'health', AreaEntryState>;
   rows: Array<{
     studentId: string;
     name: string;
@@ -60,7 +63,11 @@ export default async function ExamAttendancePage({
     ? await apiFetch<Register>(`/exams/${id}/register?classSectionId=${sectionId}`)
     : null;
   const klass = exam.classes.find((k) => k.classId === section?.classId);
-  const locked = !!reg && (reg.exam.marksLocked || Boolean(klass?.locks?.attendance));
+  const locked =
+    !!reg &&
+    (reg.entry
+      ? reg.entry.attendance.locked
+      : reg.exam.marksLocked || Boolean(klass?.locks?.attendance));
   const canEnter = me.permissions.includes('exams.attendance.enter');
   const open = canEnter && !locked;
   const back = `/exams/${id}/attendance${sectionId ? `?section=${sectionId}` : ''}`;
@@ -162,6 +169,18 @@ export default async function ExamAttendancePage({
               )
             }
           >
+            {section ? (
+              <AreaEntryBar
+                examId={exam.id}
+                classId={section.classId}
+                classSectionId={section.classSectionId}
+                section={reg.section.code}
+                area="attendance"
+                entry={reg.entry?.attendance}
+                canLock={me.permissions.includes('exams.lock.manage')}
+                back={back}
+              />
+            ) : null}
             <form action={saveExamAttendance}>
               <input type="hidden" name="examId" value={exam.id} />
               <input type="hidden" name="classSectionId" value={reg.section.id} />
