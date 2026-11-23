@@ -242,7 +242,7 @@ Department, Attendance Log and Attendance History download as Excel or PDF.
 **A reporting manager** (anyone set as **Reports to** on an employee's Posting) sees **Staff punches** in
 the menu for the staff who report to them: **My team** (every punch of all of them, up to 31 days),
 **Attendance Log** and **Attendance History** for one of them — not anyone else's, not a department, not the
-machines or the unmatched punches. In the staff app the same is under **My team → Punches**. The office
+machines or the unmatched punches. In the staff app the same is under **My team's attendance → their punches**. The office
 also gets **My team** when staff report to them.
 
 **Who reports to whom** is set in **People → Employees → Reporting managers**: every employee with their
@@ -358,6 +358,12 @@ and opens their days. When leave comes off a past day (cancelled, shortened), th
 from its punches, or becomes a weekly off, a holiday or absent — never left blank.
 
 ### The tabs of My leave
+
+The staff website and the phone app show the same page (since 23 Nov 2026): **My leave**, **My attendance** and
+**My team's attendance** in their menu open it on My Leave, My Attendance and Reporties Attendance; the balance
+cards with **Leave Details**, **Download Leave**, **Download Attendance** and **Apply Leave** are above the tabs, and
+Reporties Leave approves or rejects in the row. On the phone the files open in the app's file viewer, and a tab
+row wider than the screen slides sideways.
 
 Under the leave cards, **My leave** has four tabs. Each list shows **Records per page** (25, 50 or 100),
 "Showing 1 – 50 of N results", the page numbers, and **Excel** and **PDF** of everything the filters

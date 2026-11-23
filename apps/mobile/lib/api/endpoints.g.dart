@@ -544,6 +544,34 @@ class EduProApi {
   Future<dynamic> staffLeaveRequestCancel({required StaffLeaveReasonDto body, required String id}) =>
       _t.send('POST', '/leave/requests/${Uri.encodeComponent(id)}/cancel-request', body: body.toJson());
 
+  /// GET /leave/menu — What the side menu shows me: leave and corrections waiting at my level, the staff reporting to me, my reports
+  Future<dynamic> staffLeaveMenu() =>
+      _t.send('GET', '/leave/menu');
+
+  /// POST /leave/requests/{id}/decide
+  Future<dynamic> staffLeaveDecide({required StaffLeaveDecideDto body, required String id}) =>
+      _t.send('POST', '/leave/requests/${Uri.encodeComponent(id)}/decide', body: body.toJson());
+
+  /// POST /leave/requests/{id}/cancel-decide
+  Future<dynamic> staffLeaveDecideCancel({required StaffLeaveDecideDto body, required String id}) =>
+      _t.send('POST', '/leave/requests/${Uri.encodeComponent(id)}/cancel-decide', body: body.toJson());
+
+  /// GET /leave/self/team — The leave of the staff reporting to me in a month; Excel or PDF
+  Future<dynamic> leaveSelfTeam({String? month, String? from, String? to, String? employeeId, String? leaveTypeId, String? status, String? q, int? page, int? size, String? format}) =>
+      _t.send('GET', '/leave/self/team', query: {if (month != null) 'month': month, if (from != null) 'from': from, if (to != null) 'to': to, if (employeeId != null) 'employeeId': employeeId, if (leaveTypeId != null) 'leaveTypeId': leaveTypeId, if (status != null) 'status': status, if (q != null) 'q': q, if (page != null) 'page': page, if (size != null) 'size': size, if (format != null) 'format': format});
+
+  /// GET /leave/self/leave-file — All my leave as Excel or PDF
+  Future<dynamic> leaveSelfLeaveFile({String? month, String? from, String? to, String? format}) =>
+      _t.send('GET', '/leave/self/leave-file', query: {if (month != null) 'month': month, if (from != null) 'from': from, if (to != null) 'to': to, if (format != null) 'format': format});
+
+  /// GET /leave/self/attendance-file — My month's attendance, every day, as Excel or PDF
+  Future<dynamic> leaveSelfAttendanceFile({String? month, String? from, String? to, String? format}) =>
+      _t.send('GET', '/leave/self/attendance-file', query: {if (month != null) 'month': month, if (from != null) 'from': from, if (to != null) 'to': to, if (format != null) 'format': format});
+
+  /// GET /staff-attendance/team — My team’s attendance: all my reportees a column a day (up to 31 days), or one of them day by day (up to 92); Excel or PDF
+  Future<dynamic> staffAttendanceTeam({String? month, String? from, String? to, String? employeeId, int? page, int? size, String? format}) =>
+      _t.send('GET', '/staff-attendance/team', query: {if (month != null) 'month': month, if (from != null) 'from': from, if (to != null) 'to': to, if (employeeId != null) 'employeeId': employeeId, if (page != null) 'page': page, if (size != null) 'size': size, if (format != null) 'format': format});
+
   /// GET /payroll/me/payslips — My payslips of a financial year, with the year so far
   Future<dynamic> payrollPayslipMine({required String fy}) =>
       _t.send('GET', '/payroll/me/payslips', query: {'fy': fy});
@@ -1834,6 +1862,17 @@ class StaffLeaveReasonDto {
   final String reason;
   Map<String, Object?> toJson() => {
         'reason': reason,
+      };
+}
+
+/** The StaffLeaveDecideDto the API takes. */
+class StaffLeaveDecideDto {
+  const StaffLeaveDecideDto({required this.outcome, this.note});
+  final String outcome;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'outcome': outcome,
+        if (note != null) 'note': note,
       };
 }
 

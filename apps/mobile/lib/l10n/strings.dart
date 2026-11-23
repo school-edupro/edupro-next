@@ -1780,6 +1780,117 @@ class S {
     '$name: उपस्थित दिन कुल दिनों से ज़्यादा नहीं हो सकते।',
   );
   String eaNotNumber(String name) => _t('$name: write whole days.', '$name: पूरे दिन लिखें।');
+  // Leave & attendance as the admin's Employee Leave / Attendance (docs/design/99)
+  String get lvTitle => _t('Employee Leave / Attendance', 'कर्मचारी अवकाश / उपस्थिति');
+  String get lvTabAttendance => _t('My Attendance', 'मेरी उपस्थिति');
+  String get lvTabLeave => _t('My Leave', 'मेरा अवकाश');
+  String lvTabTeamLeave(int waiting) => _t(
+    'Reporties Leave${waiting > 0 ? ' ($waiting waiting)' : ''}',
+    'अधीनस्थों का अवकाश${waiting > 0 ? ' ($waiting प्रतीक्षा में)' : ''}',
+  );
+  String lvTabTeamAttendance(int team) => _t(
+    'Reporties Attendance${team > 0 ? ' ($team)' : ''}',
+    'अधीनस्थों की उपस्थिति${team > 0 ? ' ($team)' : ''}',
+  );
+  String get lvDetails => _t('Leave Details', 'अवकाश विवरण');
+  String get lvDownloadLeave => _t('Download Leave', 'अवकाश डाउनलोड करें');
+  String get lvDownloadAttendance => _t('Download Attendance', 'उपस्थिति डाउनलोड करें');
+  String lvAvailable(String n) => _t('$n Available', '$n उपलब्ध');
+  String lvAvailed(String n) => _t('$n Availed', '$n लिया गया');
+  String get lvNoBalance => _t('— No balance', '— कोई शेष नहीं');
+  String lvMaxPer(String n) => _t('$n Max / application', 'प्रति आवेदन अधिकतम $n');
+  String get lvNoLimit => _t('No limit', 'कोई सीमा नहीं');
+  String get lvPolicy => _t('Policy', 'नीति');
+  String get lvHeld => _t('Held this month', 'इस माह रोका गया');
+  String get lvAvailedYear => _t('Availed this year', 'इस वर्ष लिया गया');
+  String get lvMostAtATime => _t('Most at a time', 'एक बार में अधिकतम');
+  String lvDays(String n) => _t('$n days', '$n दिन');
+  String get lvNoKept => _t('No balance kept', 'शेष नहीं रखा जाता');
+  String get lvHalfDays => _t('half days allowed', 'आधे दिन की अनुमति');
+  String get lvDetailsHelp => _t(
+    'Available: what you can take now (leave waiting for approval is held from it). Availed: approved leave this leave year, April to March.',
+    'उपलब्ध: जो आप अभी ले सकते हैं (स्वीकृति की प्रतीक्षा वाला अवकाश इसमें से रोका जाता है)। लिया गया: इस अवकाश वर्ष (अप्रैल से मार्च) में स्वीकृत अवकाश।',
+  );
+  String get lvNoEmployee => _t(
+    'This sign-in is not linked to an active employee record, so it has no leave balance or attendance of its own.',
+    'यह साइन-इन किसी सक्रिय कर्मचारी रिकॉर्ड से जुड़ा नहीं है, इसलिए इसका अपना अवकाश शेष या उपस्थिति नहीं है।',
+  );
+  String get lvRegularise => _t('Regularise', 'सुधार करें');
+  String get lvCorrectionsAsked => _t('Corrections I asked', 'मेरे मांगे गए सुधार');
+  String get lvNoneMonth => _t('None in this month.', 'इस माह कोई नहीं।');
+  String lvLocked(String month) => _t(
+    '$month is locked for payroll: corrections can no longer be asked.',
+    '$month वेतन के लिए बंद है: अब सुधार नहीं मांगे जा सकते।',
+  );
+  String lvCorrectionFrom(String day) => _t(
+    'Corrections can be asked for days from $day on; for an earlier day, ask the leave office.',
+    '$day से आगे के दिनों के लिए सुधार मांगे जा सकते हैं; पहले के दिन के लिए अवकाश कार्यालय से पूछें।',
+  );
+  String lvLate(String n) => _t('late $n min', '$n मिनट देर');
+  String lvEarly(String n) => _t('left $n min early', '$n मिनट पहले गए');
+  String lvCorrection(String x) => _t('Correction: $x', 'सुधार: $x');
+  String get lvFrom => _t('From Date', 'आरंभ तिथि');
+  String get lvTo => _t('To Date', 'अंतिम तिथि');
+  String get lvExcel => _t('Excel', 'एक्सेल');
+  String get lvPdf => _t('PDF', 'पीडीएफ');
+  String lvShowing(int a, int b, int n) =>
+      _t('Showing $a – $b of $n', '$n में से $a – $b दिखाए गए');
+  String lvApplied(String x) => _t('Applied $x', 'आवेदन $x');
+  String lvActionBy(String who, String when) => _t('By $who $when', '$who द्वारा $when');
+  String lvHalf(String session) =>
+      session == 'first' ? _t('First half', 'पहला आधा') : _t('Second half', 'दूसरा आधा');
+  String get lvNoLeave => _t('No Leave Records in these dates.', 'इन तिथियों में कोई अवकाश नहीं।');
+  String get lvEmployee => _t('Search Employee', 'कर्मचारी खोजें');
+  String get lvAllEmployees => _t('All employees', 'सभी कर्मचारी');
+  String get lvType => _t('Leave Type', 'अवकाश प्रकार');
+  String get lvAllTypes => _t('All types', 'सभी प्रकार');
+  String get lvStatus => _t('Status', 'स्थिति');
+  String get lvWaitingWithMe => _t('Waiting with me', 'मेरे पास प्रतीक्षा में');
+  String get lvAll => _t('All', 'सभी');
+  String get lvWaitingAny => _t('Waiting (any level)', 'प्रतीक्षा में (कोई भी स्तर)');
+  String get lvApprove => _t('Approve', 'स्वीकृत करें');
+  String get lvReject => _t('Reject', 'अस्वीकार करें');
+  String get lvApproveCancel => _t('Approve cancel', 'रद्द करना स्वीकृत करें');
+  String get lvRejectCancel => _t('Reject cancel', 'रद्द करना अस्वीकार करें');
+  String lvRejectTitle(String what) => _t('Do not approve $what', '$what स्वीकृत न करें');
+  String lvRejectBody(String name, bool cancellation) => _t(
+    '$name is told, with your reason.${cancellation ? ' The leave stays approved.' : ' The days are given back.'}',
+    '$name को आपके कारण के साथ बताया जाएगा।${cancellation ? ' अवकाश स्वीकृत रहेगा।' : ' दिन वापस मिलेंगे।'}',
+  );
+  String get lvWhy => _t('Why', 'क्यों');
+  String get lvDoNotApprove => _t('Do not approve', 'स्वीकृत न करें');
+  String get lvOnBehalf => _t('Entered by the office', 'कार्यालय द्वारा दर्ज');
+  String lvToCancel(String x) => _t('To cancel: $x', 'रद्द करने हेतु: $x');
+  String get lvNoneWaiting =>
+      _t('No Leaves waiting for you.', 'आपके पास कोई अवकाश प्रतीक्षा में नहीं।');
+  String get lvNoLeaves => _t('No Leaves.', 'कोई अवकाश नहीं।');
+  String get lvNobody => _t(
+    'Nobody reports to you this year (the reporting manager on each employee’s posting).',
+    'इस वर्ष कोई आपको रिपोर्ट नहीं करता (प्रत्येक कर्मचारी की तैनाती पर रिपोर्टिंग प्रबंधक)।',
+  );
+  String get lvWaitingHelp => _t(
+    'Waiting with me: leave and cancellations waiting for YOUR approval — approving or rejecting acts immediately.',
+    'मेरे पास प्रतीक्षा में: आपकी स्वीकृति की प्रतीक्षा वाले अवकाश और रद्दीकरण — स्वीकृत या अस्वीकार तुरंत लागू होता है।',
+  );
+  String get lvApproved => _t('Approved.', 'स्वीकृत।');
+  String get lvRejected =>
+      _t('Not approved: the employee is told.', 'स्वीकृत नहीं: कर्मचारी को बताया गया।');
+  String get lvTeamHelp => _t(
+    'All employees: a column a day, up to 31 days. One employee: their days one by one, up to 92 days.',
+    'सभी कर्मचारी: हर दिन का एक कॉलम, 31 दिन तक। एक कर्मचारी: उनके दिन एक-एक करके, 92 दिन तक।',
+  );
+  String get lvEmployeeCol => _t('Employee', 'कर्मचारी');
+  String get lvSent => _t('Sent.', 'भेजा गया।');
+  String lvWaitingFor(String who) => _t('Waiting for $who', '$who की प्रतीक्षा');
+  String get lvWaitingApprover => _t('Waiting for the approver', 'स्वीकर्ता की प्रतीक्षा');
+  String lvApprovedBy(String who, String when) => _t(
+    'Approved by $who${when.isEmpty ? '' : ' on $when'}',
+    '$who ने स्वीकृत किया${when.isEmpty ? '' : ' ($when)'}',
+  );
+  String lvRejectedBy(String who, String when, String? note) => _t(
+    'Not approved by $who${when.isEmpty ? '' : ' on $when'}${note == null ? '' : ': $note'}',
+    '$who ने स्वीकृत नहीं किया${when.isEmpty ? '' : ' ($when)'}${note == null ? '' : ': $note'}',
+  );
   // a section's area reopened under the exam lock (docs/design/98)
   String aeArea(String area) => switch (area) {
     'indicators' => _t('Indicators', 'संकेतक'),

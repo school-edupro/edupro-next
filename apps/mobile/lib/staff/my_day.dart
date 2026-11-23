@@ -16,7 +16,7 @@ import 'approvals.dart';
 import 'class_attendance.dart';
 import 'data.dart';
 import 'marks.dart';
-import 'my_leave.dart';
+import 'leave_page.dart' show LeaveAttendanceScreen;
 
 /// The day sections the person marks (class teacher or coordinator) that have no attendance yet.
 List<Json> sectionsToMark(List<Json> assignments, Json? summary) {
@@ -355,7 +355,7 @@ extension on _MyDayScreenState {
         alignment: Alignment.centerLeft,
         child: TextButton(
           key: const Key('homeOpenLeave'),
-          onPressed: () => _open(context, s.myLeave, MyLeaveScreen(profile: p)),
+          onPressed: () => _open(context, s.myLeave, LeaveAttendanceScreen(profile: p)),
           child: Text(s.openMyLeave),
         ),
       ),

@@ -15,7 +15,7 @@ import {
   BalanceDetailDto,
   LeaveApprovalsDto,
   BalanceQueryDto,
-  DecideDto,
+  StaffLeaveDecideDto,
   LEAVE_OFFICE,
   LEAVE_OWN,
   MineQueryDto,
@@ -152,7 +152,11 @@ export class StaffLeaveController {
 
   @Post('requests/:id/decide')
   @AuthenticatedOnly()
-  decide(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: DecideDto) {
+  decide(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StaffLeaveDecideDto,
+  ) {
     return this.leave.decide(ctx, id, body);
   }
 
@@ -188,7 +192,11 @@ export class StaffLeaveController {
 
   @Post('requests/:id/cancel-decide')
   @AuthenticatedOnly()
-  decideCancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: DecideDto) {
+  decideCancel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StaffLeaveDecideDto,
+  ) {
     return this.leave.decideCancel(ctx, id, body);
   }
 

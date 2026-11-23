@@ -37,12 +37,11 @@ import '../staff/documents.dart';
 import '../staff/exam_attendance.dart';
 import '../staff/health.dart';
 import '../staff/indicators.dart';
+import '../staff/leave_page.dart';
 import '../staff/lesson_plans.dart';
 import '../staff/syllabus.dart';
 import '../staff/verify_marks.dart';
 import '../staff/marks.dart';
-import '../staff/my_attendance.dart';
-import '../staff/my_leave.dart';
 import '../staff/remarks.dart';
 import '../staff/subject_choices.dart';
 import '../staff/layout.dart' show staffFallback, staffLayoutProvider, staffTabs;
@@ -94,8 +93,13 @@ Widget? nativeScreen(Profile p, String href, S s) {
     }
     return switch (path) {
       '/attendance' => MarkClassScreen(profile: p),
-      '/my-attendance' => MyAttendanceScreen(profile: p),
-      '/my-leave' => MyLeaveScreen(profile: p),
+      // Leave & attendance as the admin's Employee Leave / Attendance, on the menu item's tab (docs/design/99)
+      '/my-attendance' => LeaveAttendanceScreen(profile: p, initialTab: 'attendance'),
+      '/my-leave' => LeaveAttendanceScreen(
+        profile: p,
+        initialTab: href.contains('tab=team-leave') ? 'team-leave' : 'leave',
+      ),
+      '/my-team' => LeaveAttendanceScreen(profile: p, initialTab: 'team-attendance'),
       '/my-payslips' => PayslipsScreen(profile: p),
       // as on the staff website: the day's sheet, assignments, the report (docs/design/96)
       '/daily-work' => DailyWorkScreen(profile: p),

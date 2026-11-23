@@ -163,6 +163,15 @@ StaffLeaveController_get
 StaffLeaveController_apply
 StaffLeaveController_withdraw
 StaffLeaveController_requestCancel
+# Leave & attendance as the admin's Employee Leave / Attendance (docs/design/99): counts, reporties' leave and
+# attendance, deciding in the list, the files (base64 answers)
+StaffLeaveController_menu
+StaffLeaveController_decide
+StaffLeaveController_decideCancel
+LeaveSelfController_team
+LeaveSelfController_leaveFile
+LeaveSelfController_attendanceFile
+StaffAttendanceController_team
 PayrollPayslipController_mine
 PayrollPayslipController_minePdf !file
 ApprovalsController_inbox

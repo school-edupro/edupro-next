@@ -42,7 +42,7 @@ import {
   LEAVE_OFFICE,
   LEAVE_OWN,
   type StaffLeaveApplyDto,
-  type DecideDto,
+  type StaffLeaveDecideDto,
   type MineQueryDto,
   type OnBehalfDto,
   type OverrideDto,
@@ -1006,7 +1006,7 @@ export class LeaveService implements OnModuleInit {
   }
 
   /** An approver's decision at their level (a rejection says why); the next level is told. */
-  async decide(ctx: RequestContext, id: string, dto: DecideDto) {
+  async decide(ctx: RequestContext, id: string, dto: StaffLeaveDecideDto) {
     const step = await this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await this.load(c, id);
       if (r.status !== 'pending' || !r.workflow_instance_id)
@@ -1176,7 +1176,7 @@ export class LeaveService implements OnModuleInit {
     });
   }
 
-  async decideCancel(ctx: RequestContext, id: string, dto: DecideDto) {
+  async decideCancel(ctx: RequestContext, id: string, dto: StaffLeaveDecideDto) {
     const step = await this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await this.load(c, id);
       if (r.cancel_status !== 'pending' || !r.cancel_instance_id)

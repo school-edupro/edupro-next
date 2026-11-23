@@ -9,7 +9,7 @@ import {
   DayCorrectDto,
   BulkDaysDto,
   CorrectionsDto,
-  DecideDto,
+  StaffLeaveDecideDto,
   ExceptionsDto,
   LEAVE_LOCK,
   LEAVE_OFFICE,
@@ -118,7 +118,11 @@ export class StaffAttendanceController {
 
   @Post('regularisations/:id/decide')
   @AuthenticatedOnly()
-  decideReg(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: DecideDto) {
+  decideReg(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StaffLeaveDecideDto,
+  ) {
     return this.att.decideReg(ctx, Id.parse(id), body);
   }
 

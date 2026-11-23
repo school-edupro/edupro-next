@@ -6,7 +6,7 @@ import 'package:edupro/family/help.dart';
 import 'package:edupro/family/attendance.dart' show AttendanceScreen;
 import 'package:edupro/family/results.dart' show ResultsScreen;
 import 'package:edupro/family/profile.dart' show ProfileScreen;
-import 'package:edupro/staff/my_leave.dart' show MyLeaveScreen;
+import 'package:edupro/staff/leave_page.dart' show LeaveAttendanceScreen;
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -817,7 +817,7 @@ void main() {
       expect(asks(t).single.body, {'question': 'My leave balance', 'surface': 'teacher'});
       expect(find.text('Casual leave left'), findsOneWidget);
       await tapIn(tester, find.text('Open My leave'));
-      expect(find.byType(MyLeaveScreen), findsOneWidget);
+      expect(find.byType(LeaveAttendanceScreen), findsOneWidget);
     });
 
     testWidgets('a person the assistant is not open to', (tester) async {

@@ -24,7 +24,7 @@ import {
   LEAVE_OFFICE,
   LEAVE_OWN,
   type DayCorrectDto,
-  type DecideDto,
+  type StaffLeaveDecideDto,
   type ExceptionsDto,
   type LockDto,
   type MyMonthDto,
@@ -1706,7 +1706,7 @@ export class AttendanceService implements OnModuleInit {
     );
   }
 
-  async decideReg(ctx: RequestContext, id: string, dto: DecideDto) {
+  async decideReg(ctx: RequestContext, id: string, dto: StaffLeaveDecideDto) {
     const step = await this.db.tenant(requireTenant(ctx), async (c) => {
       const g = (
         await c.query<{ status: string; wf: string | null; day: string }>(

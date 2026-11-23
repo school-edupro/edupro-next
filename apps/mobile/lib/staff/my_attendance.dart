@@ -5,10 +5,8 @@ import 'package:uuid/uuid.dart';
 import '../api/api_transport.dart';
 import '../api/endpoints.g.dart';
 import '../app_services.dart';
-import '../family/attendance.dart' show leaveTone;
 import '../family/common.dart';
 import '../l10n/strings.dart';
-import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
@@ -21,153 +19,20 @@ Tone dayTone(String t) => switch (t) {
   _ => Tone.neutral,
 };
 
-/// The person's own attendance month by month (from the school's punch machines: EduPro has no check-in from the
-/// phone), with the corrections they asked for and a way to ask for one.
-class MyAttendanceScreen extends ConsumerStatefulWidget {
-  const MyAttendanceScreen({super.key, required this.profile});
-  final Profile profile;
-
-  @override
-  ConsumerState<MyAttendanceScreen> createState() => _MyAttendanceScreenState();
-}
-
-class _MyAttendanceScreenState extends ConsumerState<MyAttendanceScreen> {
-  DateTime _month = DateTime(schoolToday().year, schoolToday().month);
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ref.watch(stringsProvider);
-    final arg = (widget.profile, ym(_month));
-    final now = schoolToday();
-    return LoadedList<Json>(
-      value: ref.watch(myStaffAttendanceProvider(arg)),
-      refresh: () => ref.refresh(myStaffAttendanceProvider(arg).future),
-      children: (m) {
-        final days = asList(m['days']).reversed;
-        final regs = asList(m['regularisations']);
-        return [
-          Row(
-            children: [
-              IconButton(
-                tooltip: s.previous,
-                icon: const Icon(Icons.chevron_left),
-                onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)),
-              ),
-              Expanded(
-                child: Text(
-                  s.month(_month),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              IconButton(
-                tooltip: s.next,
-                icon: const Icon(Icons.chevron_right),
-                onPressed: _month.year == now.year && _month.month == now.month
-                    ? null
-                    : () => setState(() => _month = DateTime(_month.year, _month.month + 1)),
-              ),
-            ],
-          ),
-          if (m['locked'] != true)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                key: const Key('askCorrection'),
-                icon: const Icon(Icons.edit_calendar_outlined),
-                label: Text(s.askCorrection),
-                onPressed: () => _ask(m),
-              ),
-            ),
-          if (regs.isNotEmpty) ...[
-            SectionTitle(s.askCorrection),
-            for (final r in regs)
-              Card(
-                child: ListTile(
-                  title: Text(s.dayShort('${r['day']}')),
-                  subtitle: Text(
-                    [
-                      if (r['in_time'] != null) '${s.inTime} ${r['in_time']}',
-                      if (r['out_time'] != null) '${s.outTime} ${r['out_time']}',
-                      if (r['day_type'] != null) s.dayType('${r['day_type']}'),
-                      '${r['reason'] ?? ''}',
-                    ].join(' · '),
-                  ),
-                  trailing: r['status'] == 'pending'
-                      ? TextButton(
-                          onPressed: () => _withdraw('${r['id']}'),
-                          child: Text(s.withdraw),
-                        )
-                      : StatusChip(s.leaveStatus('${r['status']}'), leaveTone('${r['status']}')),
-                ),
-              ),
-          ],
-          SectionTitle(s.month(_month)),
-          if (days.isEmpty) EmptyLine(s.nothingYet),
-          for (final d in days)
-            ListTile(
-              dense: true,
-              title: Text(s.dayShort('${d['day']}')),
-              subtitle: Text(
-                d['in'] == null && d['out'] == null
-                    ? s.noPunches
-                    : '${s.inTime} ${d['in'] ?? '—'} · ${s.outTime} ${d['out'] ?? '—'}',
-              ),
-              trailing: StatusChip(
-                '${d['words'] ?? s.dayType('${d['dayType']}')}',
-                dayTone('${d['dayType']}'),
-              ),
-            ),
-        ];
-      },
-    );
-  }
-
-  Future<void> _withdraw(String id) async {
-    final s = ref.read(stringsProvider);
-    try {
-      await ref
-          .read(apiProvider)
-          .staffAttendanceWithdrawReg(
-            id: id,
-            body: const StaffLeaveWithdrawDto(reason: ''),
-          );
-      ref.invalidate(myStaffAttendanceProvider((widget.profile, ym(_month))));
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(s, e))));
-      }
-    }
-  }
-
-  Future<void> _ask(Json m) async {
-    final sent = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => FamilyPage(
-          title: ref.read(stringsProvider).askCorrection,
-          child: CorrectionForm(earliest: DateTime.tryParse('${m['correctionFrom'] ?? ''}')),
-        ),
-      ),
-    );
-    if (sent == true && mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(ref.read(stringsProvider).correctionSent)));
-      ref.invalidate(myStaffAttendanceProvider((widget.profile, ym(_month))));
-    }
-  }
-}
-
 /// Asks for a correction of a day: the in / out time, or what the day should be, and why.
 class CorrectionForm extends ConsumerStatefulWidget {
-  const CorrectionForm({super.key, this.earliest});
+  const CorrectionForm({super.key, this.earliest, this.day});
   final DateTime? earliest;
+
+  /// the day to correct, from its row (docs/design/99: Regularise); none: today, changeable
+  final DateTime? day;
 
   @override
   ConsumerState<CorrectionForm> createState() => _CorrectionFormState();
 }
 
 class _CorrectionFormState extends ConsumerState<CorrectionForm> {
-  DateTime _day = schoolToday();
+  late DateTime _day = widget.day ?? schoolToday();
   TimeOfDay? _in;
   TimeOfDay? _out;
   String? _type;

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app.dart';
 import 'package:edupro/app_services.dart';
@@ -63,6 +65,9 @@ class School {
   /// (docs/design/98)
   final bool reopened;
   final areaCloses = <Map<String, Object?>>[];
+
+  /// leave decided from Reporties Leave (docs/design/99)
+  final leaveDecisions = <Map<String, Object?>>[];
 
   /// the person may set who approves lessons (the set-up right; docs/design/96, part 8)
   final bool lessonSetup;
@@ -1484,24 +1489,150 @@ class School {
         return {'kind': 'leave', 'id': '701', 'decision': c.body!['decision']};
       case 'GET /leave/mine':
         return {
+          'employee': {'id': 'e7', 'name': 'Asha Teacher', 'code': 'E015', 'department': 'English'},
           'balances': [
-            {'typeId': 't1', 'code': 'CL', 'name': 'Casual leave', 'available': '6'},
+            {
+              'typeId': 't1',
+              'code': 'CL',
+              'name': 'Casual leave',
+              'available': '6',
+              'held': '0',
+              'availed': '1',
+              'policy': '12 a year',
+            },
           ],
           'types': [
-            {'id': 't1', 'code': 'CL', 'name': 'Casual leave', 'halfDay': true},
+            {
+              'id': 't1',
+              'code': 'CL',
+              'name': 'Casual leave',
+              'halfDay': true,
+              'keepsBalance': true,
+            },
+            {'id': 't2', 'code': 'OD', 'name': 'On duty', 'keepsBalance': false, 'maxDays': 3},
           ],
           'rows': [
             {
               'id': '801',
-              'leaveType': {'name': 'Casual leave'},
+              'number': 'LV/2026-27/00801',
+              'leaveType': {'code': 'CL', 'name': 'Casual leave'},
               'from': day(5),
               'to': day(5),
               'days': 1,
+              'reason': 'A wedding',
               'status': 'pending',
               'cancelStatus': null,
+              'appliedAt': '2026-11-20T04:30:00.000Z',
+              'can': {'withdraw': true, 'requestCancel': false},
             },
           ],
+          'total': 1,
+          'page': 1,
+          'size': 25,
           'can': {'apply': true},
+        };
+      // the tabs' counts, the reporties' leave and attendance (docs/design/99)
+      case 'GET /leave/menu':
+        return {'leave': 1, 'team': 2, 'corrections': 0, 'reports': 0};
+      case 'GET /leave/self/team':
+        final all = c.query?['status'] == null;
+        Map<String, Object?> teamRow(String id, String status, bool decide) => {
+          'id': id,
+          'number': 'LV/2026-27/00$id',
+          'employee': {'id': 'e20', 'name': 'Ravi Kumar', 'code': 'E020', 'department': 'Maths'},
+          'leaveType': {'code': 'CL', 'name': 'Casual leave'},
+          'from': day(3),
+          'to': day(4),
+          'days': 2,
+          'reason': 'Family function',
+          'status': status,
+          'source': 'self',
+          'what': 'leave',
+          'appliedAt': '2026-11-19T04:30:00.000Z',
+          'can': {'decide': decide, 'decideCancel': false},
+        };
+        return {
+          'team': 2,
+          'waiting': 1,
+          'rows': [teamRow('811', 'pending', true), if (all) teamRow('812', 'approved', false)],
+          'total': all ? 2 : 1,
+          'page': 1,
+          'size': 25,
+          'filters': {
+            'employees': [
+              {'id': 'e20', 'name': 'Ravi Kumar', 'code': 'E020'},
+              {'id': 'e21', 'name': 'Meena Joshi', 'code': 'E021'},
+            ],
+            'types': [
+              {'id': 't1', 'code': 'CL', 'name': 'Casual leave'},
+            ],
+          },
+        };
+      case 'POST /leave/requests/811/decide':
+        leaveDecisions.add(c.body!);
+        return {'status': c.body!['outcome']};
+      case 'GET /staff-attendance/team':
+        final employees = [
+          {'id': 'e20', 'name': 'Ravi Kumar', 'code': 'E020'},
+          {'id': 'e21', 'name': 'Meena Joshi', 'code': 'E021'},
+        ];
+        if (c.query?['employeeId'] != null) {
+          return {
+            'mode': 'days',
+            'from': c.query?['from'],
+            'to': c.query?['to'],
+            'team': 2,
+            'employees': employees,
+            'employee': employees.first,
+            'days': [
+              {
+                'day': day(-1),
+                'weekday': 'Sun',
+                'dayType': 'P',
+                'code': 'P',
+                'words': 'Present',
+                'in': '07:50',
+                'out': '14:05',
+                'lateEarly': '',
+                'remark': null,
+              },
+            ],
+            'totals': {'P': 1},
+            'total': 1,
+            'page': 1,
+            'size': 50,
+          };
+        }
+        return {
+          'mode': 'grid',
+          'from': c.query?['from'],
+          'to': c.query?['to'],
+          'team': 2,
+          'employees': employees,
+          'dates': [day(-2), day(-1)],
+          'types': ['CL'],
+          'rows': [
+            for (final e in employees)
+              {
+                'employee': {...e, 'department': null},
+                'cells': [
+                  {'day': day(-2), 'code': 'P', 'title': 'Present'},
+                  {'day': day(-1), 'code': e['id'] == 'e20' ? 'CL' : 'P', 'title': ''},
+                ],
+                'totals': {'P': e['id'] == 'e20' ? 1 : 2, 'CL': e['id'] == 'e20' ? 1 : 0},
+                'payable': 2,
+                'unmarked': 0,
+              },
+          ],
+          'total': 2,
+          'page': 1,
+          'size': 50,
+        };
+      case 'GET /leave/self/leave-file' || 'GET /leave/self/attendance-file':
+        return {
+          'filename': 'my-leave.pdf',
+          'contentType': 'application/pdf',
+          'base64': base64Encode(utf8.encode('%PDF-1.4 sample')),
         };
       case 'POST /leave/apply':
         applies++;
@@ -1515,10 +1646,19 @@ class School {
         return {'status': 'withdrawn'};
       case 'GET /staff-attendance/mine':
         return {
-          'month': c.query?['month'],
+          'employee': {'id': 'e7', 'name': 'Asha Teacher', 'code': 'E015'},
+          'month': '${c.query?['month']}-01',
           'locked': false,
           'days': [
-            {'day': day(-1), 'dayType': 'P', 'words': 'Present', 'in': '07:55', 'out': '14:10'},
+            {
+              'day': day(-1),
+              'dayType': 'P',
+              'code': 'P',
+              'words': 'Present',
+              'in': '07:55',
+              'out': '14:10',
+              'late': 5,
+            },
           ],
           'regularisations': [],
         };
@@ -1937,6 +2077,36 @@ Future<(FakeTransport, School)> pumpStaff(
   return (t, school);
 }
 
+/// a tab of the Leave & attendance screen (docs/design/99): the row slides, so bring the tab into view first
+Future<void> lvTab(WidgetTester tester, String text) async {
+  // with large text the balance can fill the screen: the tab row (pinned once reached) is further down
+  for (var i = 0; i < 10 && find.text(text).evaluate().isEmpty; i++) {
+    await tester.drag(find.byKey(const Key('lvScreen')), const Offset(0, -400));
+    await tester.pumpAndSettle();
+  }
+  await tester.ensureVisible(find.text(text));
+  await tester.pumpAndSettle();
+  // a tab wider than the phone (twice the text) is tapped at its visible start
+  final tab = find.ancestor(of: find.text(text), matching: find.byType(Tab));
+  final at = tester.getTopLeft(tab) + const Offset(12, 12);
+  final width = tester.getSize(find.byKey(const Key('lvScreen'))).width;
+  await tester.tapAt(Offset(at.dx.clamp(12, width - 12), at.dy));
+  await tester.pumpAndSettle();
+}
+
+/// scroll a Leave & attendance tab's list until `f` shows
+Future<void> lvScroll(WidgetTester tester, String list, Finder f) async {
+  await tester.scrollUntilVisible(
+    f,
+    300,
+    scrollable: find
+        .descendant(of: find.byKey(PageStorageKey(list)), matching: find.byType(Scrollable))
+        .first,
+    maxScrolls: 60,
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> scrollTo(WidgetTester tester, Finder f) async {
   // built is not enough (a list builds a little past the screen): bring it into view
   if (f.evaluate().isEmpty) {
@@ -2079,51 +2249,101 @@ void main() {
     expect(find.text('Kid Sample · VI-A'), findsNothing);
   });
 
-  testWidgets('my leave: apply, confirm the bridge the school asks about; withdraw one waiting', (
-    tester,
-  ) async {
-    final (t, school) = await pumpStaff(tester);
-    await tester.tap(find.text('Attendance').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('My leave'));
-    await tester.pumpAndSettle();
-    expect(find.text('Casual leave: 6 available'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('applyStaffLeave')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('staffLeaveType')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Casual leave').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('staffLeaveReason')), 'A family function');
-    await tester.tap(find.byKey(const Key('sendStaffLeave')));
-    await tester.pumpAndSettle();
-    expect(find.text('This leave spans a Sunday. Count it?'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('confirmLeave')));
-    await tester.pumpAndSettle();
-    expect(school.applies, 2);
-    final last = t.calls.lastWhere((c) => c.path == '/leave/apply');
-    expect(last.body, containsPair('bridgeOk', true));
-    expect(last.body, containsPair('leaveTypeId', 't1'));
-    expect(find.text('Leave application sent.'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('leaveAction-801')));
-    await tester.pumpAndSettle();
-    expect(t.calls.any((c) => c.path == '/leave/requests/801/withdraw'), isTrue);
-  });
+  // docs/design/99: Leave & attendance as the admin's Employee Leave / Attendance
+  testWidgets(
+    'Leave & attendance as the admin’s page: the balance, details, apply; My Leave, withdraw',
+    (tester) async {
+      final (t, school) = await pumpStaff(tester, size: const Size(420, 2600));
+      final s = S(false);
+      await tester.tap(find.text('Attendance').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('My leave'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lvScreen')), findsOneWidget);
+      expect(find.text('Asha Teacher (E015) · English'), findsOneWidget);
+      // a card a leave type: available and availed, or no balance and the most per application
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('lvCard-CL')),
+          matching: find.text(s.lvAvailable('6.00')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('lvCard-OD')),
+          matching: find.text(s.lvMaxPer('3')),
+        ),
+        findsOneWidget,
+      );
+      // the tabs, with what waits on me and how many report to me
+      expect(find.text(s.lvTabTeamLeave(1)), findsOneWidget);
+      expect(find.text(s.lvTabTeamAttendance(2)), findsOneWidget);
+      // Leave Details
+      await tester.tap(find.byKey(const Key('lvDetails')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lvDetail-CL')), findsOneWidget);
+      expect(find.textContaining('${s.lvPolicy}: 12 a year'), findsOneWidget);
+      await tester.tap(find.text(s.close));
+      await tester.pumpAndSettle();
+      // Download Leave: the file in the viewer
+      await tester.tap(find.byKey(const Key('lvDownloadLeave')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/leave/self/leave-file').query, {
+        'format': 'xlsx',
+      });
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // Apply leave, the school's question first
+      await tester.tap(find.byKey(const Key('applyStaffLeave')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('staffLeaveType')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Casual leave').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('staffLeaveReason')), 'A family function');
+      await tester.tap(find.byKey(const Key('sendStaffLeave')));
+      await tester.pumpAndSettle();
+      expect(find.text('This leave spans a Sunday. Count it?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('confirmLeave')));
+      await tester.pumpAndSettle();
+      expect(school.applies, 2);
+      expect(find.text('Leave application sent.'), findsOneWidget);
+      // My Leave: the leave year, my leave; withdraw one waiting
+      expect(find.byKey(const Key('lvLeave-801')), findsOneWidget);
+      expect(find.text('LV/2026-27/00801'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('lvWithdraw-801')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lvReasonOk')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/leave/requests/801/withdraw'), isTrue);
+      final list = t.calls.lastWhere((c) => c.path == '/leave/mine' && c.query?['page'] != null);
+      expect(list.query?['from'], endsWith('-04-01'));
+      expect(list.query?['to'], endsWith('-03-31'));
+    },
+  );
 
-  testWidgets('my attendance: the month from the punches; a correction asked for once', (
-    tester,
-  ) async {
-    final (t, _) = await pumpStaff(tester);
+  testWidgets('My Attendance: every day of the month; Regularise from a day’s row', (tester) async {
+    final (t, _) = await pumpStaff(tester, size: const Size(420, 2600));
+    final s = S(false);
     await tester.tap(find.text('Attendance').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('My attendance'));
     await tester.pumpAndSettle();
-    expect(find.text('In 07:55 · Out 14:10'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('askCorrection')));
+    expect(find.byKey(const Key('lvScreen')), findsOneWidget);
+    // the day before, from the punches, late; today's row asks for a correction
+    final yesterday = find.byKey(Key('lvDay-${day(-1)}'));
+    if (day(-1).substring(0, 7) == day(0).substring(0, 7)) {
+      await lvScroll(tester, 'lvAttendance', yesterday);
+      expect(
+        find.descendant(of: yesterday, matching: find.text('In 07:55 · Out 14:10')),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: yesterday, matching: find.text(s.lvLate('5'))), findsOneWidget);
+    }
+    await lvScroll(tester, 'lvAttendance', find.byKey(Key('lvRegularise-${day(0)}')));
+    await tester.tap(find.byKey(Key('lvRegularise-${day(0)}')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('sendCorrection')));
-    await tester.pumpAndSettle();
-    expect(find.text('Give the in or out time, or what the day should be.'), findsOneWidget);
     await tester.tap(find.text('Half day'));
     await tester.enterText(find.byKey(const Key('corrReason')), 'Left early for a meeting');
     await tester.tap(find.byKey(const Key('sendCorrection')));
@@ -2132,6 +2352,117 @@ void main() {
     expect(c.body, {'day': day(0), 'dayType': 'HD', 'reason': 'Left early for a meeting'});
     expect(c.headers['Idempotency-Key'], isA<String>());
     expect(find.text('Correction asked for.'), findsOneWidget);
+  });
+
+  testWidgets('Reporties Leave: waiting with me; Approve, or Reject with a reason, in the row', (
+    tester,
+  ) async {
+    final (t, school) = await pumpStaff(tester, size: const Size(420, 2600));
+    final s = S(false);
+    await tester.tap(find.text('Attendance').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My leave'));
+    await tester.pumpAndSettle();
+    await lvTab(tester, s.lvTabTeamLeave(1));
+    expect(t.calls.lastWhere((c) => c.path == '/leave/self/team').query?['status'], 'waiting');
+    expect(find.byKey(const Key('lvLeave-811')), findsOneWidget);
+    expect(find.text('Ravi Kumar (E020) · Maths'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('lvApprove-811')));
+    await tester.pumpAndSettle();
+    expect(school.leaveDecisions.last, {'outcome': 'approved'});
+    expect(find.text(s.lvApproved), findsOneWidget);
+    await tester.tap(find.byKey(const Key('lvReject-811')));
+    await tester.pumpAndSettle();
+    expect(find.text(s.lvRejectBody('Ravi Kumar', false)), findsOneWidget);
+    // the reason first: 3 letters or more
+    expect(tester.widget<FilledButton>(find.byKey(const Key('lvReasonOk'))).onPressed, isNull);
+    await tester.enterText(find.byKey(const Key('lvReason')), 'Exams that week');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('lvReasonOk')));
+    await tester.pumpAndSettle();
+    expect(school.leaveDecisions.last, {'outcome': 'rejected', 'note': 'Exams that week'});
+    expect(find.text(s.lvRejected), findsOneWidget);
+  });
+
+  testWidgets('Reporties Attendance: all of them a column a day; one person day by day', (
+    tester,
+  ) async {
+    final (t, _) = await pumpStaff(tester, size: const Size(420, 2600));
+    final s = S(false);
+    await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+    await tester.pumpAndSettle();
+    await lvTab(tester, s.lvTabTeamAttendance(2));
+    expect(find.byKey(const Key('lvGrid')), findsOneWidget);
+    expect(find.text('Ravi Kumar\nE020'), findsOneWidget);
+    expect(
+      t.calls.lastWhere((c) => c.path == '/staff-attendance/team').query?['from'],
+      endsWith('-01'),
+    );
+    await tester.tap(find.byKey(const Key('lvTeamEmployee')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ravi Kumar (E020)').last);
+    await tester.pumpAndSettle();
+    expect(
+      t.calls.lastWhere((c) => c.path == '/staff-attendance/team').query?['employeeId'],
+      'e20',
+    );
+    expect(find.byKey(Key('lvTeamDay-${day(-1)}')), findsOneWidget);
+    expect(find.text('${s.inTime} 07:50 · ${s.outTime} 14:05'), findsOneWidget);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Leave & attendance: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600));
+        final s = S(hindi);
+        await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+        await tester.pumpAndSettle();
+        for (final tab in [
+          s.lvTabAttendance,
+          s.lvTabLeave,
+          s.lvTabTeamLeave(1),
+          s.lvTabTeamAttendance(2),
+        ]) {
+          await lvTab(tester, tab);
+          for (final g in [
+            androidTapTargetGuideline,
+            iOSTapTargetGuideline,
+            labeledTapTargetGuideline,
+            textContrastGuideline,
+          ]) {
+            await expectLater(tester, meetsGuideline(g), reason: '$tab: ${g.description}');
+          }
+        }
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Leave & attendance: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    final s = S(false);
+    await scrollTo(tester, find.byKey(const Key('shortcut-myLeave')));
+    await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+    await tester.pumpAndSettle();
+    for (final (tab, list) in [
+      (s.lvTabAttendance, 'lvAttendance'),
+      (s.lvTabTeamLeave(1), 'lvTeamLeave'),
+      (s.lvTabTeamAttendance(2), 'lvTeamAttendance'),
+    ]) {
+      await lvTab(tester, tab);
+      expect(tester.takeException(), isNull, reason: tab);
+      expect(find.byKey(PageStorageKey(list)), findsOneWidget, reason: tab);
+    }
   });
 
   testWidgets('Marks as on the website: the exam and sheet, codes, not taken, save, submit', (

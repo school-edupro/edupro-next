@@ -185,7 +185,7 @@ export const DecideSchema = z
     message: 'Say why it is not approved',
     path: ['note'],
   });
-export class DecideDto extends createZodDto(DecideSchema) {}
+export class StaffLeaveDecideDto extends createZodDto(DecideSchema) {}
 
 export const ReasonSchema = z.object({ reason: z.string().trim().min(3).max(500) });
 export class StaffLeaveReasonDto extends createZodDto(ReasonSchema) {}
