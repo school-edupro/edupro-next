@@ -36,6 +36,31 @@ export interface ApprovalItem {
 
 export type Decision = 'approve' | 'reject';
 
+/**
+ * docs/design/100: an item's own record as the app's Details screen shows it (no web page): its facts, longer
+ * notes, its lists as tables (an indent's items, a leave's days, the approval levels), its files.
+ */
+export interface ApprovalDetail {
+  title: string;
+  subtitle: string | null;
+  status: string | null;
+  facts: Array<{ label: string; value: string }>;
+  notes: Array<{ label: string; text: string }>;
+  tables: Array<{ title: string; columns: string[]; rows: string[][] }>;
+  /** files the record names; the app asks `GET /approvals/:kind/:id/files/:fileId` for one (checked again) */
+  files: Array<{ label: string; fileId: string }>;
+}
+
+/** How a kind's record is read for the Details screen. */
+export interface DetailConfig {
+  /** the record's own route (called as the person); none: the item's row of the list */
+  get?: (id: string) => RouteCall;
+  /** fields left out (beyond ids, rights and empty ones) */
+  hide?: string[];
+  /** a field's words where its name does not say it */
+  labels?: Record<string, string>;
+}
+
 /** A call to one of the API's own routes. */
 export interface RouteCall {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH';
@@ -70,6 +95,8 @@ export interface ApprovalSource {
   rejectAs?: 'reject' | 'send_back' | null;
   /** the route that takes the decision; none: decided on its own page only */
   decide?: (id: string, decision: Decision, reason: string | null) => RouteCall;
+  /** docs/design/100: the item's record for the app's Details screen */
+  detail?: DetailConfig;
 }
 
 /**

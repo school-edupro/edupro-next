@@ -273,6 +273,39 @@ describe('approvals inbox (e2e)', () => {
     expect(none.statusCode).toBe(404);
   });
 
+  it("docs/design/100: an item's record for the app's Details, through its own routes; only while it waits for me", async () => {
+    const id = await applyLeave('Fever and a doctor visit', 2);
+    const r = await call('GET', `/approvals/leave/${id}`, teacher);
+    expect(r.statusCode).toBe(200);
+    const { item, detail } = r.json() as {
+      item: Item;
+      detail: {
+        title: string;
+        facts: Array<{ label: string; value: string }>;
+        notes: Array<{ label: string; text: string }>;
+        tables: Array<{ title: string; columns: string[]; rows: string[][] }>;
+        files: Array<{ fileId: string }>;
+      };
+    };
+    expect(item).toMatchObject({ kind: 'leave', id, decideHere: true, rejectAs: 'reject' });
+    expect(detail.title).toContain('Ana');
+    expect(JSON.stringify(detail)).toContain('Fever and a doctor visit');
+    // ids and rights stay out of the record
+    expect(detail.facts.map((f) => f.label)).not.toContain('Id');
+    expect(detail.facts.map((f) => f.label)).not.toContain('Can');
+    // not waiting for someone else, nor a kind that is not there; a file the record does not name is refused
+    expect((await call('GET', `/approvals/leave/${id}`, other)).statusCode).toBe(404);
+    expect((await call('GET', `/approvals/nothing/${id}`, teacher)).statusCode).toBe(404);
+    expect((await call('GET', `/approvals/leave/${id}/files/999999999`, teacher)).statusCode).toBe(
+      404,
+    );
+    // decided: no longer there
+    await call('POST', `/approvals/leave/${id}/decision`, teacher, { decision: 'approve' });
+    expect((await call('GET', `/approvals/leave/${id}`, teacher)).json()).toMatchObject({
+      type: 'approvals.gone',
+    });
+  });
+
   it('a family member has nothing to decide', async () => {
     const box = await inbox(parent);
     expect(box.total).toBe(0);
@@ -295,6 +328,13 @@ describe('approvals inbox (e2e)', () => {
       if (l.statusCode === 404 && /Cannot (GET|POST)/.test(l.body))
         faults.push(`${src.kind}: list route missing`);
       if (l.statusCode === 400) faults.push(`${src.kind}: list ${l.body}`);
+      // the record route the Details screen reads (docs/design/100)
+      const g = src.detail?.get?.('999999999');
+      if (g) {
+        const d = await inject({ method: g.method, url: g.url, headers: h });
+        if (d.statusCode === 404 && /Cannot (GET|POST)/.test(d.body))
+          faults.push(`${src.kind}: record route missing (${g.url})`);
+      }
       if (!src.decide) continue;
       for (const d of ['approve', 'reject'] as const) {
         if (d === 'reject' && src.rejectAs === null) continue;

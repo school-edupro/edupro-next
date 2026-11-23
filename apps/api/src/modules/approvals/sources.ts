@@ -34,6 +34,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: ['workflow.inbox.act'],
     app: 'admin',
     list: { method: 'GET', url: '/workflow/inbox' },
+    detail: { hide: ['roleCodes', 'need', 'definitionCode', 'entityType', 'currentLevel'] },
     reasonOnReject: false,
     items: (a) =>
       rows(a)
@@ -149,6 +150,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/orders?view=waiting&status=submitted&size=100' },
+    detail: { hide: ['label', 'revision'] },
     total: (a) => count(a, 'waitingForMe'),
     items: (a) =>
       rows(a).map((x) =>
@@ -519,6 +521,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/gate-passes/inbox' },
+    detail: { get: (id) => ({ method: 'GET', url: `/gate-passes/${id}` }) },
     total: (a) => count(a, 'waiting'),
     items: (a) =>
       rows(a).map((x) =>
@@ -647,6 +650,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: ['academics.lesson_plan.view'],
     app: 'teacher',
     list: { method: 'GET', url: '/academics/lessons?mine=approve&size=100' },
+    detail: { get: (id) => ({ method: 'GET', url: `/academics/lessons/${id}` }) },
     total: (a) => count(a, 'page', 'total'),
     approveAs: 'acknowledge',
     items: (a) =>
@@ -674,6 +678,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/attendance/leaves?tab=inbox' },
+    detail: { get: (id) => ({ method: 'GET', url: `/attendance/leaves/${id}` }) },
     total: (a) => count(a, 'inbox'),
     items: (a) =>
       rows(a).map((x) =>
@@ -700,6 +705,10 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/leave/approvals?view=waiting&kind=leave&size=100' },
+    detail: {
+      get: (id) => ({ method: 'GET', url: `/leave/requests/${id}` }),
+      hide: ['level', 'levels'],
+    },
     total: (a) => count(a, 'total'),
     items: (a) =>
       rows(a, 'rows')
@@ -717,6 +726,10 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/leave/approvals?view=waiting&kind=cancellation&size=100' },
+    detail: {
+      get: (id) => ({ method: 'GET', url: `/leave/requests/${id}` }),
+      hide: ['level', 'levels'],
+    },
     total: (a) => count(a, 'total'),
     items: (a) =>
       rows(a, 'rows')
@@ -772,6 +785,10 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/admissions/approvals?tab=waiting&size=100' },
+    detail: {
+      get: (id) => ({ method: 'GET', url: `/admissions/approvals/${id}` }),
+      hide: ['categories', 'edit', 'fields', 'changes', 'receipts'],
+    },
     total: (a) => count(a, 'total'),
     reasonOnApprove: true,
     items: (a) =>

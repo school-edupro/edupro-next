@@ -2,6 +2,7 @@ import type { Env } from '../../config/env';
 import type { InternalCalls } from '../../common/http/internal-calls';
 import type { ContextualRequest, RequestContext } from '../../common/http/request-context';
 import type { AccessService } from '../access/access.service';
+import type { FilesService } from '../files/files.service';
 import { ApprovalsService } from './approvals.service';
 
 /** The inbox's counts: each kind's route counts what waits in all, though its list stops at a page. */
@@ -39,7 +40,7 @@ describe('ApprovalsService.inbox counts', () => {
             : { status: 200, body: { data: [], rows: [] } },
       ),
   } as unknown as InternalCalls;
-  const svc = new ApprovalsService(access, calls, env);
+  const svc = new ApprovalsService(access, calls, {} as FilesService, env);
 
   it("counts a kind by its route's total, not by the items read", async () => {
     const box = await svc.inbox(ctx, req);

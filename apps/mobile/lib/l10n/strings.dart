@@ -1203,11 +1203,11 @@ class S {
   String get sendBack => _t('Send back', 'वापस भेजें');
   String get acknowledgeIt => _t('Acknowledge', 'पावती दें');
   String get sign => _t('Sign', 'हस्ताक्षर करें');
-  String get openPage => _t('Open the full page', 'पूरा पेज खोलें');
   String get decideOnPage => _t(
-    'This is decided on its own page (it needs more than a yes or no).',
-    'इसका निर्णय इसके अपने पेज पर होता है (इसमें हाँ या ना से अधिक चाहिए)।',
+    'This is decided item by item (more than a yes or no). Its details are here.',
+    'इसका निर्णय एक-एक बिंदु पर होता है (हाँ या ना से अधिक)। इसका विवरण यहाँ है।',
   );
+  String get files => _t('Files', 'फ़ाइलें');
   String get reasonNeeded =>
       _t('Write the reason (at least 3 letters).', 'कारण लिखें (कम से कम 3 अक्षर)।');
   String get reasonOptional => _t('Note (optional)', 'टिप्पणी (वैकल्पिक)');

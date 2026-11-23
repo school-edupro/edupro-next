@@ -91,6 +91,19 @@ Widget? nativeScreen(Profile p, String href, S s) {
       // the menu's Exam attendance (`?only=attendance`) or the whole Exam register (docs/design/96 parts 17, 18)
       return ExamAttendanceScreen(profile: p, full: !href.contains('only=attendance'));
     }
+    // the menu's approval pages as the app's Approvals, their kinds only — no web page (docs/design/100)
+    const approvalPages = {
+      '/leave-approvals': ['staff_leave', 'staff_leave_cancel'],
+      '/attendance-corrections': ['staff_regularisation'],
+      '/leaves': ['leave'],
+      '/consent-approvals': ['consent'],
+      '/profile/approvals': ['staff_profile'],
+      '/admission-approvals': ['admission'],
+      '/exit-approvals': ['exit'],
+      '/no-dues': ['no_dues'],
+    };
+    final kinds = approvalPages[path];
+    if (kinds != null) return ApprovalsScreen(profile: p, only: kinds);
     return switch (path) {
       '/attendance' => MarkClassScreen(profile: p),
       // Leave & attendance as the admin's Employee Leave / Attendance, on the menu item's tab (docs/design/99)

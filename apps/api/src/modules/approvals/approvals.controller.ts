@@ -45,6 +45,35 @@ export class ApprovalsController {
     return this.approvals.inbox(ctx, req, q.kind, q.view);
   }
 
+  @Get(':kind/:id')
+  @AuthenticatedOnly()
+  @ApiOperation({
+    summary:
+      "One waiting item and its record for the app's Details screen (docs/design/100), read through its own routes",
+  })
+  detail(
+    @ReqCtx() ctx: RequestContext,
+    @Req() req: ContextualRequest,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+  ) {
+    return this.approvals.detail(ctx, req, kind, id);
+  }
+
+  @Get(':kind/:id/files/:fileId')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: "A file the waiting item's record names: its download address" })
+  file(
+    @ReqCtx() ctx: RequestContext,
+    @Req() req: ContextualRequest,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Param('fileId') fileId: string,
+  ) {
+    if (!/^\d{1,18}$/.test(fileId)) return { download: null };
+    return this.approvals.file(ctx, req, kind, id, fileId);
+  }
+
   @Post(':kind/:id/decision')
   @HttpCode(200)
   @AuthenticatedOnly()

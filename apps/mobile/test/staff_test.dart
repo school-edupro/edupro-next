@@ -6,6 +6,9 @@ import 'package:edupro/app_services.dart';
 import 'package:edupro/auth/session_store.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/family/attendance.dart' show leaveFilePickerProvider;
+import 'package:edupro/staff/approvals.dart';
+import 'package:edupro/ui/home_shell.dart' show nativeScreen;
+import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/staff/data.dart';
 import 'package:edupro/staff/indicators.dart';
 import 'package:edupro/staff/register_sheet.dart';
@@ -231,6 +234,7 @@ class School {
       entry('/my-leave', 'My leave', 'calendar'),
       entry('/my-attendance', 'My attendance', 'clock'),
       entry('/leave-approvals', 'Leave to approve', 'check'),
+      entry('/office-orders', 'Office orders', 'file'),
       entry('/messages', 'Messages', 'message'),
       entry('/help', 'Help', 'search'),
     ];
@@ -282,7 +286,7 @@ class School {
     return {
       'tabs': [
         entry('/', 'Home', 'home'),
-        if (webTab) by('/leave-approvals') else tabOf(attendance),
+        if (webTab) by('/office-orders') else tabOf(attendance),
         if (lists) tabOf(office),
         tabOf(classes),
         if (!lists) by('/messages'),
@@ -1439,6 +1443,64 @@ class School {
       case 'POST /exams/e1/entry-status/submit':
         marksStage = 'submitted';
         return {'status': 'submitted'};
+      // an item's record for the Details screen and its file (docs/design/100)
+      case 'GET /approvals/leave/701':
+        return {
+          'item': {
+            'kind': 'leave',
+            'id': '701',
+            'title': 'Kid Sample · VI-A',
+            'detail': 'Sick leave',
+            'reasonOnReject': true,
+            'reasonOnApprove': false,
+            'decideHere': true,
+            'approveAs': 'approve',
+            'rejectAs': 'reject',
+          },
+          'detail': {
+            'title': 'Kid Sample · VI-A',
+            'subtitle': 'Sick leave',
+            'status': 'pending',
+            'facts': [
+              {'label': 'Student', 'value': 'Kid Sample (A-41)'},
+              {'label': 'From', 'value': '24 Nov 2026'},
+            ],
+            'notes': [
+              {'label': 'Reason', 'text': 'Fever since the morning'},
+            ],
+            'tables': [
+              {
+                'title': 'Approval',
+                'columns': ['Level', 'Name', 'Status'],
+                'rows': [
+                  ['1', 'Class teacher', 'pending'],
+                ],
+              },
+            ],
+            'files': [
+              {'label': 'Doctor note', 'fileId': '901'},
+            ],
+          },
+        };
+      case 'GET /approvals/receipt/702':
+        return {
+          'item': {'kind': 'receipt', 'id': '702', 'decideHere': false},
+          'detail': {
+            'title': 'GRN-4 · Sample Traders',
+            'subtitle': null,
+            'status': null,
+            'facts': [
+              {'label': 'Vendor', 'value': 'Sample Traders'},
+            ],
+            'notes': [],
+            'tables': [],
+            'files': [],
+          },
+        };
+      case 'GET /approvals/leave/701/files/901':
+        return {
+          'download': {'url': '/files/901'},
+        };
       case 'GET /approvals/inbox':
         final items = [
           {
@@ -2243,12 +2305,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Kid Sample · VI-A'), findsOneWidget);
     expect(find.text('GRN-4 · Sample Traders'), findsOneWidget);
-    // a goods receipt is decided line by line on its page
+    // a goods receipt is decided line by line: its details in the app, never a web page (docs/design/100)
     await tester.tap(find.byKey(const Key('approval-receipt-702')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('decided on its own page'), findsOneWidget);
+    expect(find.textContaining('decided item by item'), findsOneWidget);
     expect(find.byKey(const Key('approveIt')), findsNothing);
-    expect(find.byKey(const Key('openPage')), findsOneWidget);
+    expect(find.text('Open the full page'), findsNothing);
+    await tester.tap(find.byKey(const Key('openDetails')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('approvalDetail')), findsOneWidget);
+    expect(find.text('Sample Traders'), findsOneWidget);
+    expect(t.calls.any((c) => c.path.startsWith('/web')), isFalse);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
     // the leave: no reason, then a reason
@@ -2265,6 +2334,111 @@ void main() {
       'reason': 'Exams that week',
     });
     expect(find.text('Kid Sample · VI-A'), findsNothing);
+  });
+
+  testWidgets(
+    'approvals: Details in the app — facts, notes, tables, a file in the viewer; decide there',
+    (tester) async {
+      final (t, _) = await pumpStaff(tester, size: const Size(420, 2600));
+      final s = S(false);
+      await tester.tap(find.byKey(const Key('approvalsButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('approval-leave-701')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('openDetails')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('approvalDetail')), findsOneWidget);
+      expect(find.text('Kid Sample (A-41)'), findsOneWidget);
+      expect(find.text('Fever since the morning'), findsOneWidget);
+      expect(find.text('Class teacher'), findsOneWidget);
+      // the file opens in the app's viewer, its address asked afresh
+      await tester.tap(find.byKey(const Key('fileView-901')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/approvals/leave/701/files/901'), isTrue);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // the decision on the Details screen closes it and the sheet
+      await scrollTo(tester, find.byKey(const Key('approveIt')));
+      await tester.tap(find.byKey(const Key('approveIt')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/approvals/leave/701/decision').body, {
+        'decision': 'approve',
+      });
+      expect(find.byKey(const Key('approvalDetail')), findsNothing);
+      expect(find.text(s.done), findsOneWidget);
+    },
+  );
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'approval Details: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600));
+        await tester.tap(find.byKey(const Key('approvalsButton')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('approval-leave-701')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('openDetails')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('approvalDetail')), findsOneWidget);
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: 'Details: ${g.description}');
+        }
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('approval Details: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    await tester.tap(find.byKey(const Key('approvalsButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('approval-leave-701')));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.byKey(const Key('openDetails')));
+    await tester.tap(find.byKey(const Key('openDetails')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('approvalDetail')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a menu’s approval page opens as the app’s Approvals, its kinds only', (
+    tester,
+  ) async {
+    await pumpStaff(tester);
+    final s = S(false);
+    final p = Profile.fromJson(staffProfile);
+    for (final (href, shows, hides) in [
+      ('/leaves', 'Kid Sample · VI-A', 'GRN-4 · Sample Traders'),
+      ('/leave-approvals', null, 'Kid Sample · VI-A'),
+    ]) {
+      final screen = nativeScreen(p, href, s);
+      expect(screen, isA<ApprovalsScreen>(), reason: href);
+      await tester.pumpWidget(
+        ProviderScope(
+          key: UniqueKey(),
+          overrides: [transportProvider.overrideWithValue(FakeTransport(School().answer))],
+          child: MaterialApp(home: Scaffold(body: screen!)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (shows != null) expect(find.text(shows), findsOneWidget, reason: href);
+      expect(find.text(hides), findsNothing, reason: href);
+    }
   });
 
   // docs/design/99: Leave & attendance as the admin's Employee Leave / Attendance
@@ -4248,10 +4422,10 @@ void main() {
   testWidgets('a tab the school chose with only a web page opens it from the tab', (tester) async {
     await pumpStaff(tester, with_: School(webTab: true));
     await tester.tap(
-      find.descendant(of: find.byType(NavigationBar), matching: find.text('Leave to approve')),
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('Office orders')),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('openWeb-leaveApprovals')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-officeOrders')), findsOneWidget);
   });
 
   testWidgets('More follows the school’s staff menu: its order and its names', (tester) async {

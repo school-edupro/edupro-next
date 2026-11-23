@@ -588,6 +588,14 @@ class EduProApi {
   Future<dynamic> approvalsDecide({required ApprovalDecisionDto body, required String kind, required String id}) =>
       _t.send('POST', '/approvals/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/decision', body: body.toJson());
 
+  /// GET /approvals/{kind}/{id} — One waiting item and its record for the app's Details screen (docs/design/100), read through its own routes
+  Future<dynamic> approvalsDetail({required String kind, required String id}) =>
+      _t.send('GET', '/approvals/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}');
+
+  /// GET /approvals/{kind}/{id}/files/{fileId} — A file the waiting item's record names: its download address
+  Future<dynamic> approvalsFile({required String kind, required String id, required String fileId}) =>
+      _t.send('GET', '/approvals/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
   /// GET /comms/push/events — The kinds of push the school sends and those I switched off
   Future<dynamic> commsPushEvents() =>
       _t.send('GET', '/comms/push/events');

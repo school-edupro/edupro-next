@@ -8,7 +8,15 @@ import {
   type RequestContext,
 } from '../../common/http/request-context';
 import { AccessService } from '../access/access.service';
-import type { ApprovalItem, Decision } from './approval-source';
+import { FilesService } from '../files/files.service';
+import { findRow, readRecord } from './approval-detail';
+import type {
+  ApprovalDetail,
+  ApprovalItem,
+  ApprovalSource,
+  Decision,
+  ListedItem,
+} from './approval-source';
 import { APPROVAL_SOURCES } from './sources';
 
 export interface Inbox {
@@ -33,8 +41,37 @@ export class ApprovalsService {
   constructor(
     private readonly access: AccessService,
     private readonly calls: InternalCalls,
+    private readonly files: FilesService,
     @Inject(ENV) private readonly env: Env,
   ) {}
+
+  /** a listed item with its kind's fixed facts (the inbox's shape) */
+  private shape(s: ApprovalSource, { adminHref, ...i }: ListedItem): ApprovalItem {
+    return {
+      ...i,
+      kind: s.kind,
+      app: s.app,
+      reasonOnReject: s.reasonOnReject ?? true,
+      reasonOnApprove: s.reasonOnApprove ?? false,
+      decideHere: s.decide !== undefined,
+      approveAs: s.approveAs ?? 'approve',
+      rejectAs: s.rejectAs === undefined ? 'reject' : s.rejectAs,
+      url: s.app === 'admin' ? `${this.env.ADMIN_APP_URL}${i.href}` : null,
+      adminHref: s.app === 'admin' ? i.href : (adminHref ?? null),
+      staffUrl: s.app === 'teacher' ? `${this.env.TEACHER_APP_URL}${i.href}` : null,
+    };
+  }
+
+  /** the kinds this person may decide (their rights; the routes themselves then decide what they see) */
+  private async sourcesFor(ctx: RequestContext, kind?: string) {
+    const permissions = await this.access.effectivePermissions(requireTenant(ctx));
+    return APPROVAL_SOURCES.filter(
+      (s) =>
+        (!kind || s.kind === kind) &&
+        (s.permissions.length === 0 || s.permissions.some((p) => permissions.has(p))) &&
+        (s.needsAll ?? []).every((p) => permissions.has(p)),
+    );
+  }
 
   async inbox(
     ctx: RequestContext,
@@ -42,13 +79,7 @@ export class ApprovalsService {
     kind?: string,
     view: 'items' | 'counts' = 'items',
   ): Promise<Inbox> {
-    const permissions = await this.access.effectivePermissions(requireTenant(ctx));
-    const sources = APPROVAL_SOURCES.filter(
-      (s) =>
-        (!kind || s.kind === kind) &&
-        (s.permissions.length === 0 || s.permissions.some((p) => permissions.has(p))) &&
-        (s.needsAll ?? []).every((p) => permissions.has(p)),
-    );
+    const sources = await this.sourcesFor(ctx, kind);
     const read = await Promise.all(
       sources.map(async (s) => {
         try {
@@ -60,19 +91,7 @@ export class ApprovalsService {
             return { s, items: [] as ApprovalItem[], count: 0 };
           }
           if (r.status >= 400) throw new Error(`${s.list.url} answered ${r.status}`);
-          const items: ApprovalItem[] = s.items(r.body).map(({ adminHref, ...i }) => ({
-            ...i,
-            kind: s.kind,
-            app: s.app,
-            reasonOnReject: s.reasonOnReject ?? true,
-            reasonOnApprove: s.reasonOnApprove ?? false,
-            decideHere: s.decide !== undefined,
-            approveAs: s.approveAs ?? 'approve',
-            rejectAs: s.rejectAs === undefined ? 'reject' : s.rejectAs,
-            url: s.app === 'admin' ? `${this.env.ADMIN_APP_URL}${i.href}` : null,
-            adminHref: s.app === 'admin' ? i.href : (adminHref ?? null),
-            staffUrl: s.app === 'teacher' ? `${this.env.TEACHER_APP_URL}${i.href}` : null,
-          }));
+          const items: ApprovalItem[] = s.items(r.body).map((i) => this.shape(s, i));
           // the route's own count of everything waiting, never fewer than the items read
           const count = Math.max(s.total?.(r.body) ?? items.length, items.length);
           return { s, items, count };
@@ -132,5 +151,51 @@ export class ApprovalsService {
     ctx.auditWritten = true;
     if (r.status >= 400) throw new HttpException(r.body as object, r.status);
     return { kind, id, decision, result: r.body };
+  }
+
+  /**
+   * docs/design/100: one waiting item for the app's Details screen — the item (its decision) and its record, read
+   * through the kind's own routes as the person (the list says it waits for them; the record route, where the kind
+   * has one, gives the rest), never a web page.
+   */
+  async detail(
+    ctx: RequestContext,
+    req: ContextualRequest,
+    kind: string,
+    id: string,
+  ): Promise<{ item: ApprovalItem; detail: ApprovalDetail }> {
+    const [source] = await this.sourcesFor(ctx, kind);
+    if (!source) throw new DomainError('not-found', 'No such kind of approval', { status: 404 });
+    const list = await this.calls.call(req, source.list.method, source.list.url, source.list.body);
+    if (list.status >= 400) throw new HttpException(list.body as object, list.status);
+    const listed = source.items(list.body).find((i) => i.id === id);
+    if (!listed)
+      throw new DomainError('approvals.gone', 'This no longer waits for you.', { status: 404 });
+    let record: unknown = findRow(list.body, id);
+    const get = source.detail?.get?.(id);
+    if (get) {
+      const r = await this.calls.call(req, get.method, get.url, get.body);
+      if (r.status < 400) record = r.body;
+      else if (r.status !== 404 && r.status !== 403)
+        this.logger.warn(`approvals detail: ${kind} record ${get.url} answered ${r.status}`);
+    }
+    return {
+      item: this.shape(source, listed),
+      detail: readRecord(record, { title: listed.title, subtitle: listed.detail }, source.detail),
+    };
+  }
+
+  /** a file the item's record names: its download address (asked afresh; the record is read again first) */
+  async file(
+    ctx: RequestContext,
+    req: ContextualRequest,
+    kind: string,
+    id: string,
+    fileId: string,
+  ) {
+    const { detail } = await this.detail(ctx, req, kind, id);
+    if (!detail.files.some((f) => f.fileId === fileId))
+      throw new DomainError('not-found', 'No such file on this item', { status: 404 });
+    return this.files.downloadUrl(ctx, fileId);
   }
 }
