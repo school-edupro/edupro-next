@@ -28,7 +28,7 @@ root with the `.env` loaded:
     node scripts/ai/ai-model-admin.mjs <SCHOOL_CODE> <sub|e-mail|mobile> remove
 
 It makes the role **AI model for all schools** in that school. After that, a holder may give the role or the right to
-others on the Access pages. The person signs in again (or waits a minute) for the right to show.
+others on the Access pages. The script clears the person's cached rights, so it shows on their next page.
 
 ## 2. Set it up and test it (a holder)
 

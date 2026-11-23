@@ -7,7 +7,8 @@
  *   node scripts/ai/ai-model-admin.mjs <SCHOOL_CODE>                       who holds it in that school
  *   node scripts/ai/ai-model-admin.mjs <SCHOOL_CODE> <sub|e-mail|mobile>   gives it to that member of the school
  *   node scripts/ai/ai-model-admin.mjs <SCHOOL_CODE> <sub|e-mail|mobile> remove
- * The person signs in again (or waits a minute) for the right to show.
+ * The person's cached rights are cleared (Redis, REDIS_URL), so the right shows on their next page; without Redis it
+ * shows within 5 minutes.
  */
 import { createRequire } from 'node:module';
 
@@ -92,6 +93,23 @@ try {
     console.log(
       `${action === 'remove' ? 'Taken from' : 'Given to'} ${user[0].display_name} in ${school.code}.`,
     );
+    // the API keeps a person's rights for 5 minutes (perm:<school>:<user>): cleared so it shows at once
+    if (process.env.REDIS_URL) {
+      try {
+        const IORedis = createRequire(new URL('../../apps/api/package.json', import.meta.url))(
+          'ioredis',
+        );
+        const redis = new IORedis(process.env.REDIS_URL, {
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+        });
+        await redis.connect();
+        await redis.del(`perm:${String(school.id)}:${String(user[0].id)}`);
+        await redis.quit();
+      } catch {
+        console.log('(The cached rights could not be cleared: the change shows within 5 minutes.)');
+      }
+    }
   }
   const holders = (
     await c.query(
