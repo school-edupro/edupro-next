@@ -14,6 +14,7 @@ import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
+import 'area_entry.dart';
 import 'sheet_excel.dart';
 
 /// Picks a photo from the gallery or the camera (tests put their own in its place).
@@ -512,6 +513,14 @@ class _IndicatorSheetViewState extends ConsumerState<IndicatorSheetView> {
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: Tokens.sp2),
+        // the office reopened this section's indicators under the exam lock (docs/design/98)
+        AreaEntryNote(
+          examId: widget.examId,
+          sectionId: widget.sectionId,
+          area: 'indicators',
+          entry: sheet['entry'] is Map ? asJson(asJson(sheet['entry'])['indicators']) : null,
+          onClosed: () => ref.invalidate(indicatorSheetProvider(_key)),
+        ),
         // folded, closed, as on Height and weight: one line that opens Download and Upload (asked, 22 Nov 2026)
         SheetByExcel(
           folded: true,

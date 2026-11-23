@@ -288,6 +288,10 @@ class EduProApi {
   Future<dynamic> examStatusSendBack({required EntryStatusNoteDto body, required String id}) =>
       _t.send('POST', '/exams/${Uri.encodeComponent(id)}/entry-status/send-back', body: body.toJson());
 
+  /// POST /exams/{id}/area-entry/close — Close a section's reopened area: the class teacher's Done or the school admin's Close now (checked by the service)
+  Future<dynamic> areaEntryClose({required CloseAreaEntryDto body, required String id}) =>
+      _t.send('POST', '/exams/${Uri.encodeComponent(id)}/area-entry/close', body: body.toJson());
+
   /// GET /exams/{id}/indicators
   Future<dynamic> examEntryIndicators({required String id, required String classSectionId, String? subjectId}) =>
       _t.send('GET', '/exams/${Uri.encodeComponent(id)}/indicators', query: {'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId});
@@ -1305,6 +1309,19 @@ class EntryStatusNoteDto {
         'classSectionId': classSectionId,
         'subjectId': subjectId,
         'note': note,
+      };
+}
+
+/** The CloseAreaEntryDto the API takes. */
+class CloseAreaEntryDto {
+  const CloseAreaEntryDto({required this.classSectionId, required this.area, this.note});
+  final String classSectionId;
+  final String area;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'classSectionId': classSectionId,
+        'area': area,
+        if (note != null) 'note': note,
       };
 }
 

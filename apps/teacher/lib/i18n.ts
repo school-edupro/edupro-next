@@ -945,6 +945,15 @@ const DICT: Record<string, string> = {
   "You see this section's choices; its class teacher sets them.":
     'आप इस सेक्शन का चयन देख सकते हैं; इसे कक्षा अध्यापक भरते हैं।',
   'Opt (additional, out of total)': 'अतिरिक्त विषय (कुल में नहीं)',
+  // a section's area reopened under the exam lock (docs/design/98)
+  'Open for entry until': 'प्रविष्टि के लिए खुला, अंतिम समय',
+  'Reopened by the office': 'कार्यालय ने फिर खोला',
+  'Done — close entry': 'पूरा — प्रविष्टि बंद करें',
+  'Close entry': 'प्रविष्टि बंद करें',
+  'Finished? It locks again with the rest of the exam; only the office can reopen it. What you saved stays.':
+    'काम पूरा हो गया? यह बाकी परीक्षा के साथ फिर बंद हो जाएगा; इसे केवल कार्यालय फिर खोल सकता है। जो आपने सहेजा है वह रहेगा।',
+  'Entry closed: it is locked again with the rest of the exam; what you saved stays.':
+    'प्रविष्टि बंद: यह बाकी परीक्षा के साथ फिर बंद है; जो आपने सहेजा है वह रहेगा।',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

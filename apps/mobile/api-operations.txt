@@ -84,6 +84,7 @@ ExamEntryController_putPartMarks
 ExamStatusController_waiting
 ExamStatusController_verify
 ExamStatusController_sendBack
+AreaEntryController_close
 # indicators and the progress card as on the staff website (docs/design/96 part 12): rating, the sheet by Excel,
 # the child's, parent's and teacher's words, the portfolio photos
 ExamEntryController_indicators

@@ -10,6 +10,7 @@ import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
+import 'area_entry.dart';
 import 'indicators.dart' show examsTakingProvider;
 import 'registers.dart';
 import 'sheet_excel.dart';
@@ -477,9 +478,14 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
     _fill(reg);
     final rows = asList(reg['rows']);
     final section = asJson(reg['section']);
-    final locked = asJson(reg['exam'])['marksLocked'] == true;
     final full = widget.full;
     final showHealth = full && reg['healthVisible'] == true;
+    // each area's own lock (the exam's or the class's), net of the office's reopening (docs/design/98)
+    final examLocked = asJson(reg['exam'])['marksLocked'] == true;
+    final lockedR = areaLocked(reg, 'remarks', fallback: examLocked);
+    final lockedA = areaLocked(reg, 'attendance', fallback: examLocked);
+    final lockedH = areaLocked(reg, 'health', fallback: examLocked);
+    final locked = (!full || lockedR) && lockedA && (!showHealth || lockedH);
     final bank = asList(reg['remarkBank']);
     InputDecoration box(String label, {Widget? suffix}) => InputDecoration(
       labelText: label,
@@ -515,6 +521,15 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
               ],
             ),
             const SizedBox(height: Tokens.sp3),
+            for (final a in [if (full) 'remarks', 'attendance', if (showHealth) 'health'])
+              AreaEntryNote(
+                examId: widget.examId,
+                sectionId: widget.sectionId,
+                area: a,
+                entry: reg['entry'] is Map ? asJson(asJson(reg['entry'])[a]) : null,
+                label: full,
+                onClosed: () => ref.invalidate(examRegisterProvider(_key)),
+              ),
             for (final r in rows)
               () {
                 final id = '${r['studentId']}';
@@ -552,13 +567,13 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                         TextField(
                           key: Key('erRemark-$id'),
                           controller: _remark[id],
-                          enabled: !locked,
+                          enabled: !lockedR,
                           maxLength: 600,
                           minLines: 1,
                           maxLines: 4,
                           decoration: box(
                             s.erRemark,
-                            suffix: !locked && bank.isNotEmpty
+                            suffix: !lockedR && bank.isNotEmpty
                                 ? IconButton(
                                     key: Key('erPick-$id'),
                                     tooltip: '${s.rmChoose}: ${r['name']}',
@@ -572,7 +587,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                         TextField(
                           key: Key('erPart-$id'),
                           controller: _part[id],
-                          enabled: !locked,
+                          enabled: !lockedR,
                           maxLength: 300,
                           decoration: box(s.erTookPart).copyWith(counterText: ''),
                         ),
@@ -580,7 +595,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                         TextField(
                           key: Key('erPromoted-$id'),
                           controller: _promoted[id],
-                          enabled: !locked,
+                          enabled: !lockedR,
                           maxLength: 40,
                           decoration: box(s.erPromoted).copyWith(counterText: ''),
                         ),
@@ -592,7 +607,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                             child: TextField(
                               key: Key('eaPresent-$id'),
                               controller: _present[id],
-                              enabled: !locked,
+                              enabled: !lockedA,
                               keyboardType: TextInputType.number,
                               decoration: box(s.eaPresent),
                             ),
@@ -605,7 +620,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                             child: TextField(
                               key: Key('eaTotal-$id'),
                               controller: _total[id],
-                              enabled: !locked,
+                              enabled: !lockedA,
                               keyboardType: TextInputType.number,
                               decoration: box(s.eaTotal),
                             ),
@@ -620,7 +635,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                               child: TextField(
                                 key: Key('erHeight-$id'),
                                 controller: _height[id],
-                                enabled: !locked,
+                                enabled: !lockedH,
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 decoration: box(s.hwHeight),
                               ),
@@ -630,7 +645,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                               child: TextField(
                                 key: Key('erWeight-$id'),
                                 controller: _weight[id],
-                                enabled: !locked,
+                                enabled: !lockedH,
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 decoration: box(s.hwWeight),
                               ),
@@ -651,7 +666,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                             ])
                               DropdownMenuItem(value: b, child: Text(b)),
                           ],
-                          onChanged: locked ? null : (v) => setState(() => _bloodOf[id] = v ?? ''),
+                          onChanged: lockedH ? null : (v) => setState(() => _bloodOf[id] = v ?? ''),
                         ),
                       ],
                     ],
@@ -666,7 +681,7 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                 style: TextStyle(color: muted),
               )
             else ...[
-              if (full) ...[
+              if (full && !lockedR) ...[
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
@@ -677,21 +692,22 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                 ),
                 gap(),
               ],
-              SizedBox(
-                width: double.infinity,
-                child: full
-                    ? OutlinedButton(
-                        key: const Key('eaSave'),
-                        onPressed: _busy ? null : () => _saveAttendance(rows),
-                        child: Text(s.eaSave),
-                      )
-                    : FilledButton(
-                        key: const Key('eaSave'),
-                        onPressed: _busy ? null : () => _saveAttendance(rows),
-                        child: Text(_busy ? s.loading : s.eaSave),
-                      ),
-              ),
-              if (showHealth) ...[
+              if (!lockedA)
+                SizedBox(
+                  width: double.infinity,
+                  child: full
+                      ? OutlinedButton(
+                          key: const Key('eaSave'),
+                          onPressed: _busy ? null : () => _saveAttendance(rows),
+                          child: Text(s.eaSave),
+                        )
+                      : FilledButton(
+                          key: const Key('eaSave'),
+                          onPressed: _busy ? null : () => _saveAttendance(rows),
+                          child: Text(_busy ? s.loading : s.eaSave),
+                        ),
+                ),
+              if (showHealth && !lockedH) ...[
                 gap(),
                 SizedBox(
                   width: double.infinity,
@@ -702,43 +718,45 @@ class _ExamAttendanceViewState extends ConsumerState<ExamAttendanceView> {
                   ),
                 ),
               ],
-              const Divider(height: Tokens.sp5),
-              Text(s.eaFromDailyHelp, style: TextStyle(color: muted, fontSize: 13)),
-              gap(),
-              Wrap(
-                spacing: Tokens.sp2,
-                runSpacing: Tokens.sp2,
-                children: [
-                  OutlinedButton.icon(
-                    key: const Key('eaFrom'),
-                    onPressed: _busy ? null : () => _pickDay(true),
-                    icon: const Icon(Icons.calendar_today_outlined),
-                    label: Text('${s.fromWord}: ${_from.isEmpty ? '—' : s.date(_from)}'),
-                  ),
-                  OutlinedButton.icon(
-                    key: const Key('eaTo'),
-                    onPressed: _busy ? null : () => _pickDay(false),
-                    icon: const Icon(Icons.calendar_today_outlined),
-                    label: Text('${s.toWord}: ${_to.isEmpty ? '—' : s.date(_to)}'),
-                  ),
-                ],
-              ),
-              SwitchListTile(
-                key: const Key('eaOverwrite'),
-                contentPadding: EdgeInsets.zero,
-                title: Text(s.eaReplace),
-                value: _overwrite,
-                onChanged: _busy ? null : (v) => setState(() => _overwrite = v),
-              ),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  key: const Key('eaCount'),
-                  onPressed: _busy ? null : _count,
-                  icon: const Icon(Icons.calculate_outlined),
-                  label: Text(s.eaCount),
+              if (!lockedA) ...[
+                const Divider(height: Tokens.sp5),
+                Text(s.eaFromDailyHelp, style: TextStyle(color: muted, fontSize: 13)),
+                gap(),
+                Wrap(
+                  spacing: Tokens.sp2,
+                  runSpacing: Tokens.sp2,
+                  children: [
+                    OutlinedButton.icon(
+                      key: const Key('eaFrom'),
+                      onPressed: _busy ? null : () => _pickDay(true),
+                      icon: const Icon(Icons.calendar_today_outlined),
+                      label: Text('${s.fromWord}: ${_from.isEmpty ? '—' : s.date(_from)}'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('eaTo'),
+                      onPressed: _busy ? null : () => _pickDay(false),
+                      icon: const Icon(Icons.calendar_today_outlined),
+                      label: Text('${s.toWord}: ${_to.isEmpty ? '—' : s.date(_to)}'),
+                    ),
+                  ],
                 ),
-              ),
+                SwitchListTile(
+                  key: const Key('eaOverwrite'),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(s.eaReplace),
+                  value: _overwrite,
+                  onChanged: _busy ? null : (v) => setState(() => _overwrite = v),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('eaCount'),
+                    onPressed: _busy ? null : _count,
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: Text(s.eaCount),
+                  ),
+                ),
+              ],
             ],
           ],
         ),

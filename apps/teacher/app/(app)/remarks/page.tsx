@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { AreaEntryNote, type AreaEntryState } from '@/components/AreaEntryNote';
 import { SheetCard } from '@/components/SheetCard';
 import { saveRemarkItems } from './actions';
 
@@ -13,6 +14,8 @@ interface Exam {
   areas?: string[];
 }
 interface Sheet {
+  /** docs/design/98: the lock, net of the office's reopening of this section's remarks */
+  entry?: { remarks: AreaEntryState };
   section: { id: string; code: string };
   locked: boolean;
   /** why the teacher has nothing to write here (docs/design/71) */
@@ -55,6 +58,8 @@ export default async function RemarksPage({
     ok?: string;
     error?: string;
     detail?: string;
+    /** docs/design/98: the area just closed by Done */
+    closed?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -179,6 +184,16 @@ export default async function RemarksPage({
             )
           }
         >
+          <AreaEntryNote
+            examId={exam.id}
+            classSectionId={chosen.classSectionId}
+            area="remarks"
+            entry={sheet.entry?.remarks}
+            back={`/remarks?exam=${exam.id}&section=${chosen.classSectionId}`}
+            closed={sp.closed}
+            lang={lang}
+            label={false}
+          />
           {(sheet.categories ?? []).some((k) => !k.may) ? (
             <p className="ep-field__help" style={{ marginTop: 0 }}>
               {t(lang, 'Written by others here')}:{' '}

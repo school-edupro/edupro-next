@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { FileLinks } from '@/components/FileLinks';
 import { PortfolioUpload } from '@/components/PortfolioUpload';
+import { AreaEntryNote, type AreaEntryState } from '@/components/AreaEntryNote';
 import { SheetCard } from '@/components/SheetCard';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
@@ -36,6 +37,8 @@ interface Item {
   enteredBy?: string[];
 }
 interface Sheet {
+  /** docs/design/98: the lock, net of the office's reopening of this section's indicators */
+  entry?: { indicators: AreaEntryState };
   section: { id: string; code: string };
   locked: boolean;
   /** all: every indicator is the teacher's; mapped: those marked mine (docs/design/71) */
@@ -88,6 +91,8 @@ export default async function IndicatorsPage({
     ok?: string;
     error?: string;
     detail?: string;
+    /** docs/design/98: the area just closed by Done */
+    closed?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -294,6 +299,16 @@ export default async function IndicatorsPage({
             )
           }
         >
+          <AreaEntryNote
+            examId={exam.id}
+            classSectionId={chosen.classSectionId}
+            area="indicators"
+            entry={sheet.entry?.indicators}
+            back={`/indicators?exam=${exam.id}&section=${chosen.classSectionId}`}
+            closed={sp.closed}
+            lang={lang}
+            label={false}
+          />
           {mapped ? (
             <p className="ep-field__help" style={{ marginTop: 0 }}>
               {t(

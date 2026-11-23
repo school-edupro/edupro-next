@@ -1780,6 +1780,29 @@ class S {
     '$name: उपस्थित दिन कुल दिनों से ज़्यादा नहीं हो सकते।',
   );
   String eaNotNumber(String name) => _t('$name: write whole days.', '$name: पूरे दिन लिखें।');
+  // a section's area reopened under the exam lock (docs/design/98)
+  String aeArea(String area) => switch (area) {
+    'indicators' => _t('Indicators', 'संकेतक'),
+    'remarks' => _t('Remarks', 'टिप्पणियाँ'),
+    'attendance' => _t('Exam attendance', 'परीक्षा उपस्थिति'),
+    _ => _t('Height and weight', 'लंबाई और वज़न'),
+  };
+  String aeOpenUntil(String when) =>
+      _t('Open for entry until $when', '$when तक प्रविष्टि के लिए खुला');
+  String aeReopened(String? who, String why) => _t(
+    'Reopened by the office${who == null ? '' : ' ($who)'}: $why',
+    'कार्यालय ने फिर खोला${who == null ? '' : ' ($who)'}: $why',
+  );
+  String get aeDone => _t('Done — close entry', 'पूरा — प्रविष्टि बंद करें');
+  String get aeDoneBody => _t(
+    'Finished? It locks again with the rest of the exam; only the office can reopen it. What you saved stays.',
+    'काम पूरा हो गया? यह बाकी परीक्षा के साथ फिर बंद हो जाएगा; इसे केवल कार्यालय फिर खोल सकता है। जो आपने सहेजा है वह रहेगा।',
+  );
+  String get aeClose => _t('Close entry', 'प्रविष्टि बंद करें');
+  String get aeClosed => _t(
+    'Entry closed: it is locked again with the rest of the exam.',
+    'प्रविष्टि बंद: यह बाकी परीक्षा के साथ फिर बंद है।',
+  );
   String get eaLocked => _t(
     'The exam is locked; the coordinator can reopen it.',
     'परीक्षा बंद है; समन्वयक इसे फिर खोल सकते हैं।',

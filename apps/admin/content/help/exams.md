@@ -141,7 +141,10 @@
   to write is told why ("No remark category is set for Class VI…"). The teacher app shows a teacher's
   indicator areas as tabs, each with what is entered ("Marathi (0/40)"). Both pages have **By Excel** with
   only that teacher's columns. The teacher app's home lists **To enter**: per open exam, what is theirs
-  and not done (marks not submitted, indicators, remark categories, height and weight).
+  and not done (marks not submitted, indicators, remark categories, height and weight). While the exam is
+  locked it lists only what the office reopened, marked **Reopened**, until it closes; on the page (website
+  and phone app) the area shows **Open for entry until …** with the reason, and the class teacher's **Done —
+  close entry** (asked once more) locks it again.
 - The progress card: in the teacher app **Indicators and progress card** (or **Exams → open exam →
   Indicators**) the class teacher moves between the areas (tabs; nothing is lost) and gives each
   child a level per competency, saving every area at once

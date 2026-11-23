@@ -1,6 +1,7 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { AreaEntryNote, type AreaEntryState } from '@/components/AreaEntryNote';
 import { SheetCard } from '@/components/SheetCard';
 import { RegisterTabs } from '@/components/RegisterTabs';
 import { bff } from '@/lib/bff';
@@ -22,6 +23,8 @@ interface EntrySection {
 interface Register {
   exam: { id: string; code: string; name: string; marksLocked: boolean };
   section: { id: string; code: string };
+  /** docs/design/98: each area's lock for the section, net of the office's reopening */
+  entry?: Record<'remarks' | 'attendance' | 'health', AreaEntryState>;
   healthVisible: boolean;
   remarkBank: Array<{ code: string; text: string }>;
   rows: Array<{
@@ -64,6 +67,8 @@ export default async function ExamRegisterPage({
     ok?: string;
     error?: string;
     detail?: string;
+    /** docs/design/98: the area just closed by Done */
+    closed?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -109,8 +114,18 @@ export default async function ExamRegisterPage({
       else throw error;
     }
   }
-  const locked = !!reg?.exam.marksLocked;
   const showHealth = !!reg?.healthVisible && !only;
+  // each area's own lock (the exam's or the class's), net of the office's reopening (docs/design/98)
+  const lockOf = (a: 'remarks' | 'attendance' | 'health') =>
+    !!reg && (reg.entry ? reg.entry[a].locked : reg.exam.marksLocked);
+  const lockedR = lockOf('remarks');
+  const lockedA = lockOf('attendance');
+  const lockedH = lockOf('health');
+  const locked = (only || lockedR) && lockedA && (!showHealth || lockedH);
+  const back =
+    exam && chosen
+      ? `/exam-register?exam=${exam.id}&section=${chosen.classSectionId}${only ? '&only=attendance' : ''}`
+      : '/exam-register';
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 960, margin: '0 auto' }}>
       <PageHeader
@@ -203,6 +218,23 @@ export default async function ExamRegisterPage({
             )
           }
         >
+          {(only
+            ? (['attendance'] as const)
+            : showHealth
+              ? (['remarks', 'attendance', 'health'] as const)
+              : (['remarks', 'attendance'] as const)
+          ).map((a) => (
+            <AreaEntryNote
+              key={a}
+              examId={exam.id}
+              classSectionId={chosen.classSectionId}
+              area={a}
+              entry={reg.entry?.[a]}
+              back={back}
+              closed={sp.closed}
+              lang={lang}
+            />
+          ))}
           <form>
             <input type="hidden" name="examId" value={exam.id} />
             <input type="hidden" name="classSectionId" value={chosen.classSectionId} />
@@ -254,7 +286,7 @@ export default async function ExamRegisterPage({
                             aria-label={`${t(lang, 'Remark')} · ${r.name}`}
                             defaultValue={r.remark ?? ''}
                             maxLength={600}
-                            disabled={locked}
+                            disabled={lockedR}
                             style={{ minWidth: 220 }}
                           />
                           <input
@@ -264,7 +296,7 @@ export default async function ExamRegisterPage({
                             placeholder={t(lang, 'Took part in')}
                             defaultValue={r.participation ?? ''}
                             maxLength={300}
-                            disabled={locked}
+                            disabled={lockedR}
                             style={{ minWidth: 220, marginTop: 'var(--sp-1)' }}
                           />
                           <input
@@ -274,7 +306,7 @@ export default async function ExamRegisterPage({
                             placeholder={t(lang, 'Promoted to (final term)')}
                             defaultValue={r.promotedTo ?? ''}
                             maxLength={40}
-                            disabled={locked}
+                            disabled={lockedR}
                             style={{ minWidth: 160, marginTop: 'var(--sp-1)' }}
                           />
                         </td>
@@ -288,7 +320,7 @@ export default async function ExamRegisterPage({
                           min={0}
                           max={400}
                           defaultValue={r.daysPresent ?? ''}
-                          disabled={locked}
+                          disabled={lockedA}
                           style={{ width: 72 }}
                         />
                         {' / '}
@@ -300,7 +332,7 @@ export default async function ExamRegisterPage({
                           min={1}
                           max={400}
                           defaultValue={r.daysTotal ?? ''}
-                          disabled={locked}
+                          disabled={lockedA}
                           style={{ width: 72 }}
                         />
                       </td>
@@ -316,7 +348,7 @@ export default async function ExamRegisterPage({
                               name={`height-${r.studentId}`}
                               aria-label={`${t(lang, 'Height')} · ${r.name}`}
                               defaultValue={r.health?.heightCm ?? ''}
-                              disabled={locked}
+                              disabled={lockedH}
                               style={{ width: 84 }}
                             />
                           </td>
@@ -330,7 +362,7 @@ export default async function ExamRegisterPage({
                               name={`weight-${r.studentId}`}
                               aria-label={`${t(lang, 'Weight')} · ${r.name}`}
                               defaultValue={r.health?.weightKg ?? ''}
-                              disabled={locked}
+                              disabled={lockedH}
                               style={{ width: 84 }}
                             />
                           </td>
@@ -340,7 +372,7 @@ export default async function ExamRegisterPage({
                               name={`blood-${r.studentId}`}
                               aria-label={`${t(lang, 'Blood group')} · ${r.name}`}
                               defaultValue={r.health?.bloodGroup ?? ''}
-                              disabled={locked}
+                              disabled={lockedH}
                             >
                               <option value="">—</option>
                               {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((g) => (
@@ -367,15 +399,17 @@ export default async function ExamRegisterPage({
                   flexWrap: 'wrap',
                 }}
               >
-                {!only ? (
+                {!only && !lockedR ? (
                   <Button type="submit" formAction={saveRemarks} variant="secondary">
                     {t(lang, 'Save remarks')}
                   </Button>
                 ) : null}
-                <Button type="submit" formAction={saveAttendance} variant="secondary">
-                  {t(lang, 'Save exam attendance')}
-                </Button>
-                {showHealth ? (
+                {!lockedA ? (
+                  <Button type="submit" formAction={saveAttendance} variant="secondary">
+                    {t(lang, 'Save exam attendance')}
+                  </Button>
+                ) : null}
+                {showHealth && !lockedH ? (
                   <Button type="submit" formAction={saveHealth}>
                     {t(lang, 'Save height and weight')}
                   </Button>
@@ -387,7 +421,7 @@ export default async function ExamRegisterPage({
               </p>
             )}
           </form>
-          {!locked ? (
+          {!lockedA ? (
             <form
               action={attendanceFromDaily}
               style={{

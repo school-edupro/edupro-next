@@ -17685,3 +17685,17 @@ button.ep-shiftcal__cell:focus-visible {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.ep-area-entry__done > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.ep-area-entry__done > summary::-webkit-details-marker {
+  display: none;
+}
+.ep-area-entry__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin-top: var(--sp-2);
+}

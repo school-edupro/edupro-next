@@ -34,6 +34,21 @@ const staffProfile = {
   'hasPhoto': false,
 };
 
+/// a section's area as the sheets give it (docs/design/98)
+Map<String, Object?> areaEntry({bool open = false, bool canClose = false}) => {
+  'locked': !open,
+  'locks': {'exam': true, 'class': false},
+  'open': open
+      ? {
+          'until': '2026-11-25T04:30:00.000Z',
+          'reason': 'Two remarks were missed',
+          'openedAt': '2026-11-23T04:30:00.000Z',
+          'openedBy': 'Office Admin',
+        }
+      : null,
+  'canClose': open && canClose,
+};
+
 class School {
   School({
     this.webTab = false,
@@ -41,7 +56,13 @@ class School {
     this.lists = false,
     this.register,
     this.lessonSetup = false,
+    this.reopened = false,
   });
+
+  /// the exam is locked and the office reopened VI-A's remarks (Done open to the class teacher) and indicators
+  /// (docs/design/98)
+  final bool reopened;
+  final areaCloses = <Map<String, Object?>>[];
 
   /// the person may set who approves lessons (the set-up right; docs/design/96, part 8)
   final bool lessonSetup;
@@ -705,9 +726,10 @@ class School {
           'enteredBy': by,
         };
         return {
-          'exam': {'id': 'e2', 'code': 'IND', 'name': 'Indicators', 'marksLocked': false},
+          'exam': {'id': 'e2', 'code': 'IND', 'name': 'Indicators', 'marksLocked': reopened},
           'section': {'id': mapped ? '301' : '300', 'code': mapped ? 'VI-B' : 'VI-A'},
           'locked': false,
+          if (reopened) 'entry': {'indicators': areaEntry(open: true)},
           'reach': mapped ? 'mapped' : 'all',
           'set': {
             'id': 's1',
@@ -1060,9 +1082,16 @@ class School {
           'applied': c.body!['apply'] == true,
         };
       case 'GET /exams/e2/register':
+        final remarksOpen = reopened && !areaCloses.any((x) => x['area'] == 'remarks');
         return {
-          'exam': {'id': 'e2', 'code': 'IND', 'name': 'Indicators', 'marksLocked': false},
+          'exam': {'id': 'e2', 'code': 'IND', 'name': 'Indicators', 'marksLocked': reopened},
           'section': {'id': '300', 'code': 'VI-A'},
+          if (reopened)
+            'entry': {
+              'remarks': areaEntry(open: remarksOpen, canClose: true),
+              'attendance': areaEntry(),
+              'health': areaEntry(),
+            },
           'healthVisible': true,
           'remarkBank': [
             {'code': 'R1', 'text': 'Good effort'},
@@ -1096,6 +1125,9 @@ class School {
             },
           ],
         };
+      case 'POST /exams/e2/area-entry/close':
+        areaCloses.add(c.body!);
+        return {'area': c.body!['area'], 'section': 'VI-A', 'entry': areaEntry()};
       case 'PUT /exams/e2/attendance':
         attendancePuts.add(c.body!);
         return {'changed': (c.body!['rows'] as List).length};
@@ -3242,6 +3274,141 @@ void main() {
       }),
       ['Sr', 'Student', 'English · Term (80)', 'English · Total (100)'],
     );
+  });
+
+  // docs/design/98: the office reopened VI-A's remarks and indicators while the exam is locked
+  testWidgets(
+    'Reopened under the exam lock: that area enters, the others stay locked; Done closes it',
+    (tester) async {
+      final (_, school) = await pumpStaff(
+        tester,
+        size: const Size(420, 3200),
+        overrides: pickers,
+        with_: School(reopened: true),
+      );
+      final s = S(false);
+      await tester.tap(find.text('Classes').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Exam register'));
+      await tester.pumpAndSettle();
+      final until = s.aeOpenUntil(s.dateTime(DateTime.parse('2026-11-25T04:30:00.000Z')));
+      expect(find.byKey(const Key('aeNote-remarks')), findsOneWidget);
+      expect(find.text('${s.aeArea('remarks')} · $until'), findsOneWidget);
+      expect(find.text(s.aeReopened('Office Admin', 'Two remarks were missed')), findsOneWidget);
+      expect(find.byKey(const Key('aeNote-attendance')), findsNothing);
+      // remarks open; exam attendance and height and weight stay locked
+      expect(tester.widget<TextField>(find.byKey(const Key('erRemark-41'))).enabled, isTrue);
+      expect(tester.widget<TextField>(find.byKey(const Key('eaPresent-41'))).enabled, isFalse);
+      expect(tester.widget<TextField>(find.byKey(const Key('erHeight-41'))).enabled, isFalse);
+      expect(find.byKey(const Key('erSaveRemarks')), findsOneWidget);
+      expect(find.byKey(const Key('eaSave')), findsNothing);
+      expect(find.byKey(const Key('erSaveHealth')), findsNothing);
+      expect(find.byKey(const Key('eaCount')), findsNothing);
+      // Done, asked once more: closed and locked again
+      await tester.tap(find.byKey(const Key('aeDone-remarks')));
+      await tester.pumpAndSettle();
+      expect(find.text(s.aeDoneBody), findsOneWidget);
+      await tester.tap(find.byKey(const Key('aeConfirm')));
+      await tester.pumpAndSettle();
+      expect(school.areaCloses.single, {'classSectionId': '300', 'area': 'remarks'});
+      expect(find.text(s.aeClosed), findsOneWidget);
+      expect(find.byKey(const Key('aeNote-remarks')), findsNothing);
+      expect(tester.widget<TextField>(find.byKey(const Key('erRemark-41'))).enabled, isFalse);
+      expect(find.byKey(const Key('eaLocked')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Indicators reopened under the exam lock: the note, and no Done for one who may not close it',
+    (tester) async {
+      await pumpStaff(
+        tester,
+        size: const Size(420, 4200),
+        overrides: pickers,
+        with_: School(reopened: true),
+      );
+      final s = S(false);
+      await tester.tap(find.text('Classes').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Indicators and progress card'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('aeNote-indicators')), findsOneWidget);
+      expect(
+        find.text(s.aeOpenUntil(s.dateTime(DateTime.parse('2026-11-25T04:30:00.000Z')))),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('aeDone-indicators')), findsNothing);
+    },
+  );
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Reopened register: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(
+          tester,
+          hindi: hindi,
+          size: const Size(420, 3200),
+          overrides: pickers,
+          with_: School(reopened: true),
+        );
+        final s = S(hindi);
+        await tester.tap(find.text(s.classes).last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.menu('Exam register')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('aeNote-remarks')), findsOneWidget);
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(
+            tester,
+            meetsGuideline(g),
+            reason: 'Reopened register: ${g.description}',
+          );
+        }
+        // the Done question too
+        await tester.tap(find.byKey(const Key('aeDone-remarks')));
+        await tester.pumpAndSettle();
+        for (final g in [
+          androidTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: 'Done question: ${g.description}');
+        }
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Reopened register: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(
+      tester,
+      size: const Size(360, 780),
+      overrides: pickers,
+      with_: School(reopened: true),
+    );
+    await tester.tap(find.text('Classes').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('Exam register'));
+    await tester.tap(find.text('Exam register'));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.byKey(const Key('aeDone-remarks')));
+    expect(find.byKey(const Key('aeNote-remarks')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

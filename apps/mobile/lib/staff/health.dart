@@ -11,6 +11,7 @@ import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'indicators.dart' show examsTakingProvider;
+import 'area_entry.dart';
 import 'sheet_excel.dart';
 
 const _blood = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -308,6 +309,14 @@ class _HealthSheetViewState extends ConsumerState<HealthSheetView> {
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: Tokens.sp2),
+        // the office reopened this section's health under the exam lock (docs/design/98)
+        AreaEntryNote(
+          examId: widget.examId,
+          sectionId: widget.sectionId,
+          area: 'health',
+          entry: sheet['entry'] is Map ? asJson(asJson(sheet['entry'])['health']) : null,
+          onClosed: () => ref.invalidate(healthSheetProvider(_key)),
+        ),
         // folded, closed: one line that opens Download and Upload (asked, 22 Nov 2026)
         SheetByExcel(
           folded: true,

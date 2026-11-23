@@ -11,6 +11,7 @@ import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'indicators.dart' show examsTakingProvider;
+import 'area_entry.dart';
 import 'sheet_excel.dart';
 
 /// A section's remarks for an exam: the categories (the person may write, or who does), each pupil's remark.
@@ -298,6 +299,14 @@ class _RemarkSheetViewState extends ConsumerState<RemarkSheetView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // the office reopened this section's remarks under the exam lock (docs/design/98)
+        AreaEntryNote(
+          examId: widget.examId,
+          sectionId: widget.sectionId,
+          area: 'remarks',
+          entry: sheet['entry'] is Map ? asJson(asJson(sheet['entry'])['remarks']) : null,
+          onClosed: () => ref.invalidate(remarkSheetProvider(_key)),
+        ),
         // folded, closed, as on Height and weight: one line that opens Download and Upload (asked, 22 Nov 2026)
         SheetByExcel(
           folded: true,

@@ -55,6 +55,12 @@ ThemeData eduproTheme({required Brightness brightness, bool webFonts = true}) {
         color: Tokens.mobWhite,
       ),
     ),
+    // dialogs on the cards' surface (white; dark grey in dark mode): on the default lilac grey the cyan words of
+    // a Cancel fall to 4.0:1 (docs/design/98)
+    dialogTheme: DialogThemeData(
+      backgroundColor: dark ? Tokens.mobGray900 : Tokens.mobWhite,
+      surfaceTintColor: Colors.transparent,
+    ),
     cardTheme: CardThemeData(
       elevation: 0,
       // the rows' ink (tap, hover) keeps to the card's round corners
