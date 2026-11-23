@@ -74,3 +74,26 @@ The common pattern: the lock stays; a narrow, named exception is opened; it has 
   closing-time limits, two days by default, remarks open and attendance not, the remark categories, the To enter
   lines, indicators by the area teacher with Done by the class teacher only, Close now, a lapsed opening and a
   fresh one, unlocking the whole exam, a class lock change, the history).
+- **B (23 Nov 2026).** Admin: `components/exams/AreaEntryBar.tsx` on the Indicators, Remarks, Attendance and Health pages
+  (section picked): while the exam's or the class's lock holds and the person has the lock right, **Reopen for entry**
+  — a `ConfirmAction` with the reason and a new optional date-time field (`when`: two days ahead, from ten minutes to
+  30 days, the school's clock; the action sends it as `+05:30`), and the class's published card named; once open,
+  "Open for entry until …", who reopened it and why, and **Close now**. The exam's **Marks status** page ends with
+  `AreaOpeningsCard`: each opening (section, area, why, opened, until, open with Close now, or how it closed). Words
+  in `examHub.reopen` (English, Hindi); help in `exams.md`; Alpha's wholly locked Term I (437) area pages joined the
+  admin accessibility list. Checked on a throwaway test school (desktop and phone): the dialog, a real reopen
+  closing at 10:00 the next day, the Status list; axe clean.
+- **C (23 Nov 2026).** Staff website: `components/AreaEntryNote.tsx` on Indicators, Remarks, Height and weight and the
+  Exam register — the area, "Open for entry until …", "Reopened by the office (who): why", and for the class teacher
+  **Done — close entry** (a fold whose **Close entry** confirms; `lib/area-entry-actions.ts`), after which the page
+  says the entry closed. The Exam register's Fill tab locks each part on its own (remarks, exam attendance, height
+  and weight: their boxes, Save buttons and the count from daily attendance). App: `lib/staff/area_entry.dart`
+  (`AreaEntryNote`, `areaLocked`) on the same four screens; Done asks once more, calls `AreaEntryController_close`,
+  and refreshes the sheet. App dialogs now sit on the cards' surface (white / dark grey): on the default lilac grey a
+  Cancel's cyan words were 4.0:1. Checked on the test school as its class teacher (desktop and phone): Home's line
+  "(Reopened)", remarks and attendance open, height and weight locked, Done closing the remarks; axe clean.
+- **D (23 Nov 2026).** Tests: API `entry-by-mapping` (above) and the exam suites (105 tests), database 151; app 292
+  (the reopened register with Done, Indicators without Done for one who may not close it, light / dark / Hindi with
+  the Done question, twice the text); admin and staff accessibility lists (the staff Daily work report's links in
+  its meta line are now underlined — axe link-in-text-block, seen on this run); the web preview rebuilt.
+

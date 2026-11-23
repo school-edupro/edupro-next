@@ -6570,6 +6570,10 @@ a.ep-tabs__tab {
   font-size: var(--fs-caption);
   color: var(--text-body);
 }
+/* a link in the line (the staff report's actions) reads as a link, not only by colour (axe link-in-text-block) */
+.ep-sheet__meta a {
+  text-decoration: underline;
+}
 .ep-sheet__foot {
   display: flex;
   flex-wrap: wrap;
