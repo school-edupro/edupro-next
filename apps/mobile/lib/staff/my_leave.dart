@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:uuid/uuid.dart';
 
 import '../api/api_transport.dart';
 import '../api/endpoints.g.dart';
 import '../app_services.dart';
+import '../family/attendance.dart' show leaveFilePickerProvider;
 import '../family/common.dart';
 import '../l10n/strings.dart';
 import '../theme/tokens.g.dart';
@@ -21,7 +21,8 @@ Tone staffLeaveTone(String status) => switch (status) {
 
 /// A leave application: the kind (type to search), the days or a half day, the reason. The API may ask to confirm
 /// that the leave bridges a holiday or is split (loss of pay); the person sees its words and goes ahead or not.
-/// A kind that needs a document goes to the web page, where the file is attached.
+/// A kind that needs a document (a certificate or letter) takes it here: a PDF or photo of up to 5 MB from the phone,
+/// uploaded once and sent with the application (as on the staff website; no web page).
 class StaffLeaveForm extends ConsumerStatefulWidget {
   const StaffLeaveForm({super.key, required this.types});
   final List<Json> types;
@@ -40,6 +41,10 @@ class _StaffLeaveFormState extends ConsumerState<StaffLeaveForm> {
   String? _error;
   bool _busy = false;
 
+  /// the document picked, and its file once uploaded (a confirmed resend does not upload it again)
+  PickedFile? _doc;
+  String? _docId;
+
   @override
   void dispose() {
     _reason.dispose();
@@ -48,15 +53,38 @@ class _StaffLeaveFormState extends ConsumerState<StaffLeaveForm> {
 
   Json? get _kind => widget.types.where((t) => '${t['id']}' == _type).firstOrNull;
 
+  /// a certificate or letter from the phone: a PDF or a photo, 5 MB at most
+  Future<void> _pickDoc() async {
+    final s = ref.read(stringsProvider);
+    final picked = await ref.read(leaveFilePickerProvider)();
+    final f = picked.firstOrNull;
+    if (f == null || !mounted) return;
+    if (!RegExp(r'^(application/pdf|image/(png|jpeg|webp))$').hasMatch(f.contentType)) {
+      return setState(() => _error = s.leaveFileType);
+    }
+    if (f.bytes.length > 5 * 1024 * 1024) return setState(() => _error = s.leaveFileTooBig);
+    setState(() {
+      _doc = f;
+      _docId = null;
+      _error = null;
+    });
+  }
+
   Future<void> _send({bool bridgeOk = false, bool splitOk = false}) async {
     final s = ref.read(stringsProvider);
     if (_type == null) return setState(() => _error = s.chooseLeaveType);
     if (_reason.text.trim().length < 3) return setState(() => _error = s.reasonNeeded);
+    final needsDoc = _kind?['documentNeeded'] == true;
+    if (needsDoc && _doc == null) return setState(() => _error = s.addCertificate);
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
+      // the document goes up first; its id rides with the application
+      if (needsDoc && _doc != null && _docId == null) {
+        _docId = await uploadFile(ref.read(apiProvider), ref.read(transportProvider), _doc!);
+      }
       final r = asJson(
         await withCall(
           // a new key a try: a confirmed resend is another request
@@ -71,6 +99,7 @@ class _StaffLeaveFormState extends ConsumerState<StaffLeaveForm> {
                   halfDay: _half,
                   session: _half ? _session : null,
                   reason: _reason.text.trim(),
+                  documentFileId: needsDoc ? _docId : null,
                   bridgeOk: bridgeOk,
                   splitOk: splitOk,
                 ),
@@ -207,21 +236,43 @@ class _StaffLeaveFormState extends ConsumerState<StaffLeaveForm> {
         if (kind?['documentNeeded'] == true) ...[
           Notice(text: s.documentNeeded),
           const SizedBox(height: Tokens.sp2),
-          FilledButton(
-            onPressed: () => context.push(
-              Uri(
-                path: '/web',
-                queryParameters: {'app': 'teacher', 'to': '/my-leave', 'title': s.applyLeave},
-              ).toString(),
+          if (_doc == null)
+            OutlinedButton.icon(
+              key: const Key('staffLeaveDoc'),
+              icon: const Icon(Icons.attach_file),
+              label: Text(s.attachDocument),
+              onPressed: _busy ? null : _pickDoc,
+            )
+          else
+            Card(
+              key: const Key('staffLeaveDocPicked'),
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                leading: Icon(
+                  _doc!.contentType == 'application/pdf'
+                      ? Icons.picture_as_pdf_outlined
+                      : Icons.image_outlined,
+                ),
+                title: Text(_doc!.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+                trailing: TextButton(
+                  key: const Key('staffLeaveDocRemove'),
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                          _doc = null;
+                          _docId = null;
+                        }),
+                  child: Text(s.remove),
+                ),
+              ),
             ),
-            child: Text(s.applyOnWeb),
-          ),
-        ] else
-          FilledButton(
-            key: const Key('sendStaffLeave'),
-            onPressed: _busy ? null : () => _send(),
-            child: Text(s.send),
-          ),
+          const SizedBox(height: Tokens.sp3),
+        ],
+        FilledButton(
+          key: const Key('sendStaffLeave'),
+          onPressed: _busy ? null : () => _send(),
+          child: Text(_busy ? s.loading : s.send),
+        ),
       ],
     );
   }

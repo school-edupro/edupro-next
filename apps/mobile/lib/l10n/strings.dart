@@ -255,7 +255,6 @@ class S {
     'This leave needs a certificate or letter: add it below.',
     'इस अवकाश के लिए प्रमाण-पत्र या पत्र चाहिए: नीचे जोड़ें।',
   );
-  String get applyOnWeb => _t('Apply on the web page', 'वेब पेज पर आवेदन करें');
   String leaveStatus(String status) => switch (status) {
     'pending' => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा में'),
     'approved' => _t('Approved', 'स्वीकृत'),
@@ -989,9 +988,10 @@ class S {
   String get secondHalf => _t('Second half', 'दूसरा भाग');
   String get confirm => _t('Go ahead', 'आगे बढ़ें');
   String get documentNeeded => _t(
-    'This leave needs a document. Apply on the web page to attach it.',
-    'इस अवकाश के लिए दस्तावेज़ चाहिए। उसे लगाने के लिए वेब पेज पर आवेदन करें।',
+    'This leave needs a document: attach the certificate or letter (a PDF or a photo, up to 5 MB).',
+    'इस अवकाश के लिए दस्तावेज़ चाहिए: प्रमाण-पत्र या पत्र लगाएँ (PDF या फ़ोटो, 5 MB तक)।',
   );
+  String get attachDocument => _t('Attach the document', 'दस्तावेज़ लगाएँ');
   String get askCancel => _t('Ask to cancel', 'रद्द करने का अनुरोध');
   String staffLeaveStatus(String status) => switch (status) {
     'pending' => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा में'),

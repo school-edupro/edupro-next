@@ -5,6 +5,7 @@ import 'package:edupro/app.dart';
 import 'package:edupro/app_services.dart';
 import 'package:edupro/auth/session_store.dart';
 import 'package:edupro/l10n/strings.dart';
+import 'package:edupro/family/attendance.dart' show leaveFilePickerProvider;
 import 'package:edupro/staff/data.dart';
 import 'package:edupro/staff/indicators.dart';
 import 'package:edupro/staff/register_sheet.dart';
@@ -1510,6 +1511,13 @@ class School {
               'keepsBalance': true,
             },
             {'id': 't2', 'code': 'OD', 'name': 'On duty', 'keepsBalance': false, 'maxDays': 3},
+            {
+              'id': 't3',
+              'code': 'SL',
+              'name': 'Sick leave',
+              'keepsBalance': false,
+              'documentNeeded': true,
+            },
           ],
           'rows': [
             {
@@ -1634,6 +1642,16 @@ class School {
           'contentType': 'application/pdf',
           'base64': base64Encode(utf8.encode('%PDF-1.4 sample')),
         };
+      // a leave's document, uploaded from the phone (docs/design/99)
+      case 'POST /platform/files':
+        return {
+          'file': {'id': '77'},
+          'upload': {'url': '/upload/77', 'method': 'PUT'},
+        };
+      case 'PUT /upload/77':
+        return null;
+      case 'POST /platform/files/77/complete':
+        return {'ok': true};
       case 'POST /leave/apply':
         applies++;
         if (c.body!['bridgeOk'] != true) {
@@ -2320,6 +2338,59 @@ void main() {
       final list = t.calls.lastWhere((c) => c.path == '/leave/mine' && c.query?['page'] != null);
       expect(list.query?['from'], endsWith('-04-01'));
       expect(list.query?['to'], endsWith('-03-31'));
+    },
+  );
+
+  testWidgets(
+    'A leave that needs a document takes it on the phone: picked, uploaded, sent (no web page)',
+    (tester) async {
+      final (t, school) = await pumpStaff(
+        tester,
+        size: const Size(420, 2600),
+        overrides: [
+          leaveFilePickerProvider.overrideWithValue(
+            () async => const [
+              PickedFile(
+                name: 'doctor-note.pdf',
+                bytes: [37, 80, 68, 70],
+                contentType: 'application/pdf',
+              ),
+            ],
+          ),
+        ],
+      );
+      final s = S(false);
+      await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('applyStaffLeave')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('staffLeaveType')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sick leave').last);
+      await tester.pumpAndSettle();
+      expect(find.text(s.documentNeeded), findsOneWidget);
+      // no web page any more: the document is attached here
+      expect(find.textContaining('web page'), findsNothing);
+      await tester.enterText(find.byKey(const Key('staffLeaveReason')), 'Fever, doctor’s rest');
+      await tester.tap(find.byKey(const Key('sendStaffLeave')));
+      await tester.pumpAndSettle();
+      expect(find.text(s.addCertificate), findsOneWidget);
+      expect(t.calls.any((c) => c.path == '/leave/apply'), isFalse);
+      await tester.tap(find.byKey(const Key('staffLeaveDoc')));
+      await tester.pumpAndSettle();
+      expect(find.text('doctor-note.pdf'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('sendStaffLeave')));
+      await tester.pumpAndSettle();
+      expect(t.uploads['/upload/77'], [37, 80, 68, 70]);
+      // the school asks about the Sunday first; going ahead sends the same document, not uploaded again
+      await tester.tap(find.byKey(const Key('confirmLeave')));
+      await tester.pumpAndSettle();
+      final sent = t.calls.where((c) => c.path == '/leave/apply').toList();
+      expect(sent.last.body, containsPair('documentFileId', '77'));
+      expect(sent.last.body, containsPair('leaveTypeId', 't3'));
+      expect(t.calls.where((c) => c.path == '/platform/files').length, 1);
+      expect(school.applies, 2);
+      expect(find.text('Leave application sent.'), findsOneWidget);
     },
   );
 
