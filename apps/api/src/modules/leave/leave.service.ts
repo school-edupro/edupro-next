@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { MessagesService } from '../comms/messages.service';
+import { FilesService } from '../files/files.service';
 import { fyStart } from '../purchase/purchase-reports.service';
 import { istToday } from '../purchase/purchase-stock-core';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
@@ -178,6 +179,7 @@ export class LeaveService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
     private readonly messages: MessagesService,
+    private readonly files: FilesService,
   ) {}
 
   onModuleInit() {
@@ -1512,6 +1514,17 @@ export class LeaveService implements OnModuleInit {
         },
       };
     });
+  }
+
+  /**
+   * A leave's document (the staff app's leave Details): its download address, for whoever may see the leave — the
+   * employee, the approvers, the reporting manager, the leave office (the same check as `get`).
+   */
+  async document(ctx: RequestContext, id: string) {
+    const d = await this.get(ctx, id);
+    if (!d.documentFileId)
+      throw new DomainError('not-found', 'This leave has no document', { status: 404 });
+    return this.files.downloadUrl(ctx, d.documentFileId);
   }
 
   /** The signed-in employee's page: balances, the types they may apply for, their leave, what waits for them. */

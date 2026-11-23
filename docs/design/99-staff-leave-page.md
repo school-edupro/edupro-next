@@ -80,4 +80,13 @@ two screens (My leave, My attendance).
   dark / Hindi on each tab; twice the text, where the tab row is reached by scrolling and a tab wider than the phone
   is tapped at its start); API leave suites (61) and permission coverage; the admin's leave accessibility walk; help
   (`leave.md`); the web preview rebuilt.
-
+- **Leave details in the app (23 Nov 2026, asked after D).** "In this page required a detail of leave": the app's
+  leave cards (My Leave and Reporties Leave) have **View**, and a tap on the card, opening `LeaveDetailScreen`
+  (`lib/staff/leave_detail.dart`) — the website's leave page, native: the figures (days, applied on, From, To), where
+  it waits, the actions the record allows (`can`: withdraw, ask to cancel, decide, decide a cancellation), the facts
+  (type, entered by, reason, counted, loss of pay, decision) and the document in the app's viewer; folded, open while
+  they matter: the days counted, who approves, the cancellation, the changes. API: `GET /leave/requests/:id/document`
+  (`LeaveService.document`: the leave's own check — the employee, the approvers, the reporting manager, the leave
+  office — then the download address; before, only one's own upload or the files right opened it). Tests: API
+  `leave-gaps` (the employee and the office open it, another teacher gets 404); app (the details, the document, a
+  withdrawal and an approval from there; light / dark / Hindi; twice the text) — 326 app tests. Help: `leave.md`.

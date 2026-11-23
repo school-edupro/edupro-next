@@ -40,6 +40,83 @@ const staffProfile = {
   'hasPhoto': false,
 };
 
+/// one leave as `GET /leave/requests/:id` gives it: mine (with a document, withdraw) or a reportee's (decide)
+Map<String, Object?> leaveDetail(String id, {required bool mine}) => {
+  'id': id,
+  'number': 'LV/2026-27/00$id',
+  'employee': mine
+      ? {'id': 'e7', 'name': 'Asha Teacher', 'code': 'E015', 'department': 'English'}
+      : {'id': 'e20', 'name': 'Ravi Kumar', 'code': 'E020', 'department': 'Maths'},
+  'leaveType': {'id': 't1', 'code': 'CL', 'name': 'Casual leave', 'lossOfPay': false},
+  'from': day(5),
+  'to': day(6),
+  'days': 1.5,
+  'halfDay': false,
+  'session': null,
+  'reason': 'A wedding in the family',
+  'documentFileId': mine ? '77' : null,
+  'status': 'pending',
+  'source': 'self',
+  'sourceWords': 'Applied',
+  'appliedBy': mine ? 'Asha Teacher' : 'Ravi Kumar',
+  'note': null,
+  'decidedAt': null,
+  'decidedBy': null,
+  'decisionNote': null,
+  'cancelStatus': null,
+  'cancelReason': null,
+  'appliedAt': '2026-11-20T04:30:00.000Z',
+  'waitingWith': 'Vice Principal: Pia Sample',
+  'level': 1,
+  'levels': 2,
+  'lopPart': null,
+  'dayRows': [
+    {'day': day(5), 'portion': 1, 'session': null, 'kind': 'work', 'status': 'pending'},
+    {'day': day(6), 'portion': 0.5, 'session': 'first', 'kind': 'work', 'status': 'pending'},
+  ],
+  'approval': [
+    {
+      'level': 1,
+      'name': 'Reporting manager',
+      'people': ['E030 — Pia Sample'],
+      'status': 'pending',
+      'actedBy': null,
+      'actedAt': null,
+      'note': null,
+      'overdue': true,
+    },
+    {
+      'level': 2,
+      'name': 'Principal',
+      'people': <String>[],
+      'status': 'pending',
+      'actedBy': null,
+      'actedAt': null,
+      'note': null,
+      'overdue': false,
+    },
+  ],
+  'cancellation': <Object>[],
+  'changes': [
+    {
+      'from': '${day(5)} to ${day(7)} (3)',
+      'to': '${day(5)} to ${day(6)} (1.5)',
+      'reason': 'Back a day early',
+      'by': null,
+      'at': '2026-11-21T04:30:00.000Z',
+    },
+  ],
+  'can': {
+    'withdraw': mine,
+    'requestCancel': false,
+    'decide': !mine,
+    'decideCancel': false,
+    'cancel': false,
+    'override': false,
+    'trim': false,
+  },
+};
+
 /// a section's area as the sheets give it (docs/design/98)
 Map<String, Object?> areaEntry({bool open = false, bool canClose = false}) => {
   'locked': !open,
@@ -1724,6 +1801,22 @@ class School {
         return {'id': '802', 'status': 'pending', 'days': 3};
       case 'POST /leave/requests/801/withdraw':
         return {'status': 'withdrawn'};
+      // one leave's details and its document (the app's leave Details)
+      case 'GET /leave/requests/801':
+        return leaveDetail('801', mine: true);
+      case 'GET /leave/requests/811':
+        return leaveDetail('811', mine: false);
+      case 'GET /leave/requests/801/document':
+        return {
+          'file': {'id': '77', 'originalName': 'doctor-note.pdf', 'contentType': 'application/pdf'},
+          'download': {'url': '/files/77'},
+        };
+      case 'GET /files/77':
+        return const ApiFile(
+          bytes: [37, 80, 68, 70],
+          contentType: 'application/pdf',
+          name: 'doctor-note.pdf',
+        );
       case 'GET /staff-attendance/mine':
         return {
           'employee': {'id': 'e7', 'name': 'Asha Teacher', 'code': 'E015'},
@@ -2627,6 +2720,143 @@ void main() {
     await tester.pumpAndSettle();
     expect(school.leaveDecisions.last, {'outcome': 'rejected', 'note': 'Exams that week'});
     expect(find.text(s.lvRejected), findsOneWidget);
+  });
+
+  testWidgets(
+    'My Leave: a leave’s details — figures, where it waits, facts, the document, days, who approves; withdraw',
+    (tester) async {
+      final (t, _) = await pumpStaff(tester, size: const Size(420, 2600));
+      final s = S(false);
+      await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+      await tester.pumpAndSettle();
+      await lvTab(tester, s.lvTabLeave);
+      await tester.ensureVisible(find.byKey(const Key('lvView-801')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lvView-801')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ldScreen')), findsOneWidget);
+      expect(find.text('LV/2026-27/00801 · Casual leave'), findsOneWidget);
+      expect(find.text('Asha Teacher (E015) · English'), findsOneWidget);
+      // the figures, then where it waits
+      expect(find.byKey(const Key('ldFigures')), findsOneWidget);
+      expect(find.text('1.5'), findsOneWidget);
+      expect(find.text(s.ldWaitingWith('Vice Principal: Pia Sample', 1, 2)), findsOneWidget);
+      expect(find.text('A wedding in the family'), findsOneWidget);
+      // who approves is open while it waits; the days and the changes are folded
+      expect(find.text('1. Reporting manager'), findsOneWidget);
+      expect(find.text('E030 — Pia Sample'), findsOneWidget);
+      expect(find.text(s.ldOverdue), findsOneWidget);
+      expect(find.textContaining(s.lvHalf('first')), findsNothing);
+      await tester.tap(find.text(s.ldDaysCounted(2)));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(s.lvHalf('first')), findsOneWidget);
+      await tester.tap(find.text(s.ldChanges(1)));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Back a day early'), findsOneWidget);
+      // the document opens in the app's viewer, asked of the leave
+      await tester.tap(find.byKey(const Key('view-ldDocument')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/leave/requests/801/document'), isTrue);
+      expect(t.calls.any((c) => c.path == '/files/77'), isTrue);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // withdraw from the details
+      expect(find.byKey(const Key('ldApprove')), findsNothing);
+      await tester.tap(find.byKey(const Key('ldWithdraw')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lvReasonOk')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/leave/requests/801/withdraw'), isTrue);
+      expect(find.text(s.done), findsOneWidget);
+      expect(t.calls.any((c) => c.path.startsWith('/web')), isFalse);
+    },
+  );
+
+  testWidgets('Reporties Leave: a tap on the leave opens its details; approve there', (
+    tester,
+  ) async {
+    final (_, school) = await pumpStaff(tester, size: const Size(420, 2600));
+    final s = S(false);
+    await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+    await tester.pumpAndSettle();
+    await lvTab(tester, s.lvTabTeamLeave(1));
+    await tester.tap(find.text('Family function'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ldScreen')), findsOneWidget);
+    expect(find.text('Ravi Kumar (E020) · Maths'), findsOneWidget);
+    // no document, nothing of the employee's to do
+    expect(find.byKey(const Key('view-ldDocument')), findsNothing);
+    expect(find.byKey(const Key('ldWithdraw')), findsNothing);
+    await tester.tap(find.byKey(const Key('ldApprove')));
+    await tester.pumpAndSettle();
+    expect(school.leaveDecisions.last, {'outcome': 'approved'});
+    expect(find.text(s.lvApproved), findsOneWidget);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'Leave details: accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''})',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpStaff(tester, hindi: hindi, size: const Size(420, 2600));
+        final s = S(hindi);
+        await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+        await tester.pumpAndSettle();
+        await lvTab(tester, s.lvTabLeave);
+        await tester.ensureVisible(find.byKey(const Key('lvView-801')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('lvView-801')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(s.ldDaysCounted(2)));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('ldScreen')), findsOneWidget);
+        for (final g in [
+          androidTapTargetGuideline,
+          iOSTapTargetGuideline,
+          labeledTapTargetGuideline,
+          textContrastGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g), reason: 'details: ${g.description}');
+        }
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('Leave details: large text (twice the size) lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpStaff(tester, size: const Size(360, 780));
+    final s = S(false);
+    await scrollTo(tester, find.byKey(const Key('shortcut-myLeave')));
+    await tester.tap(find.byKey(const Key('shortcut-myLeave')));
+    await tester.pumpAndSettle();
+    await lvTab(tester, s.lvTabLeave);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('lvView-801')),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const PageStorageKey('lvLeave')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lvView-801')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ldScreen')), findsOneWidget);
+    for (var i = 0; i < 8; i++) {
+      await tester.drag(find.byKey(const Key('ldScreen')), const Offset(0, -500));
+      await tester.pumpAndSettle();
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Reporties Attendance: all of them a column a day; one person day by day', (

@@ -14,6 +14,7 @@ import '../ui/file_screen.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'my_attendance.dart' show CorrectionForm, dayTone;
+import 'leave_detail.dart';
 import 'my_leave.dart' show StaffLeaveForm, staffLeaveTone;
 
 /// The four tabs, as the admin's Employee Leave / Attendance (docs/design/99).
@@ -717,8 +718,9 @@ class _MyAttendanceTabState extends ConsumerState<_MyAttendanceTab> {
 
 /// A leave as a card: its number and status, type, dates and days, half day, reason, applied, who acted.
 class _LeaveCard extends ConsumerWidget {
-  const _LeaveCard({required this.r, this.who, this.actions = const []});
+  const _LeaveCard({required this.r, required this.profile, this.who, this.actions = const []});
   final Json r;
+  final Profile profile;
 
   /// the employee (Reporties Leave)
   final Json? who;
@@ -732,60 +734,83 @@ class _LeaveCard extends ConsumerWidget {
     final status = '${r['status']}';
     final from = '${r['from']}';
     final to = '${r['to']}';
+    // the leave's details in the app (as the website's leave page): a tap on the card, or View
+    void open() => Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LeaveDetailScreen(profile: profile, id: '${r['id']}'),
+      ),
+    );
     return Card(
       key: Key('lvLeave-${r['id']}'),
-      child: Padding(
-        padding: const EdgeInsets.all(Tokens.sp3),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: Tokens.sp2,
-              runSpacing: Tokens.sp1,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text('${r['number'] ?? ''}', style: const TextStyle(fontWeight: Tokens.fwSemibold)),
-                StatusChip(s.staffLeaveStatus(status), staffLeaveTone(status)),
-              ],
-            ),
-            if (who != null)
-              Text(
-                '${who!['name']} (${who!['code']})${who!['department'] == null ? '' : ' · ${who!['department']}'}',
-                style: const TextStyle(fontWeight: Tokens.fwSemibold),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: open,
+        child: Padding(
+          padding: const EdgeInsets.all(Tokens.sp3),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: Tokens.sp2,
+                runSpacing: Tokens.sp1,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    '${r['number'] ?? ''}',
+                    style: const TextStyle(fontWeight: Tokens.fwSemibold),
+                  ),
+                  StatusChip(s.staffLeaveStatus(status), staffLeaveTone(status)),
+                ],
               ),
-            Text('${type['code'] ?? ''} — ${type['name'] ?? ''}'),
-            Text(
-              [
-                from == to ? s.date(from) : '${s.date(from)} – ${s.date(to)}',
-                if (r['days'] != null) s.lvDays('${r['days']}'),
-                if (r['halfDay'] == true) s.lvHalf('${r['session']}'),
-              ].join(' · '),
-            ),
-            if ('${r['reason'] ?? ''}'.isNotEmpty) Text('${r['reason']}'),
-            if (r['what'] == 'cancellation' && r['cancelReason'] != null)
+              if (who != null)
+                Text(
+                  '${who!['name']} (${who!['code']})${who!['department'] == null ? '' : ' · ${who!['department']}'}',
+                  style: const TextStyle(fontWeight: Tokens.fwSemibold),
+                ),
+              Text('${type['code'] ?? ''} — ${type['name'] ?? ''}'),
               Text(
-                s.lvToCancel('${r['cancelReason']}'),
+                [
+                  from == to ? s.date(from) : '${s.date(from)} – ${s.date(to)}',
+                  if (r['days'] != null) s.lvDays('${r['days']}'),
+                  if (r['halfDay'] == true) s.lvHalf('${r['session']}'),
+                ].join(' · '),
+              ),
+              if ('${r['reason'] ?? ''}'.isNotEmpty) Text('${r['reason']}'),
+              if (r['what'] == 'cancellation' && r['cancelReason'] != null)
+                Text(
+                  s.lvToCancel('${r['cancelReason']}'),
+                  style: TextStyle(color: muted, fontSize: 13),
+                ),
+              Text(
+                [
+                  if (r['appliedAt'] != null)
+                    s.lvApplied(s.dateTime(DateTime.parse('${r['appliedAt']}'))),
+                  if (r['source'] == 'on_behalf') s.lvOnBehalf,
+                  if (r['decidedBy'] != null)
+                    s.lvActionBy(
+                      '${r['decidedBy']}',
+                      r['decidedAt'] == null ? '' : s.dateTime(DateTime.parse('${r['decidedAt']}')),
+                    ),
+                  if (status == 'pending' && r['waitingWith'] != null) '${r['waitingWith']}',
+                ].join(' · '),
                 style: TextStyle(color: muted, fontSize: 13),
               ),
-            Text(
-              [
-                if (r['appliedAt'] != null)
-                  s.lvApplied(s.dateTime(DateTime.parse('${r['appliedAt']}'))),
-                if (r['source'] == 'on_behalf') s.lvOnBehalf,
-                if (r['decidedBy'] != null)
-                  s.lvActionBy(
-                    '${r['decidedBy']}',
-                    r['decidedAt'] == null ? '' : s.dateTime(DateTime.parse('${r['decidedAt']}')),
-                  ),
-                if (status == 'pending' && r['waitingWith'] != null) '${r['waitingWith']}',
-              ].join(' · '),
-              style: TextStyle(color: muted, fontSize: 13),
-            ),
-            if (actions.isNotEmpty) ...[
               const SizedBox(height: Tokens.sp2),
-              Wrap(spacing: Tokens.sp2, runSpacing: Tokens.sp2, children: actions),
+              Wrap(
+                spacing: Tokens.sp2,
+                runSpacing: Tokens.sp2,
+                children: [
+                  OutlinedButton.icon(
+                    key: Key('lvView-${r['id']}'),
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: Text(s.view),
+                    onPressed: open,
+                  ),
+                  ...actions,
+                ],
+              ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -793,7 +818,7 @@ class _LeaveCard extends ConsumerWidget {
 }
 
 /// Asks for a reason in a window; `required`: 3 letters or more.
-Future<String?> _reasonDialog(
+Future<String?> leaveReasonDialog(
   BuildContext context,
   S s, {
   required String title,
@@ -901,6 +926,7 @@ class _MyLeaveTabState extends ConsumerState<_MyLeaveTab> {
           for (final r in asList(async.value!['rows']))
             _LeaveCard(
               r: r,
+              profile: widget.profile,
               actions: [
                 if (asJson(r['can'])['withdraw'] == true)
                   OutlinedButton(
@@ -928,7 +954,7 @@ class _MyLeaveTabState extends ConsumerState<_MyLeaveTab> {
 
   Future<void> _withdraw(Json r) async {
     final s = ref.read(stringsProvider);
-    final why = await _reasonDialog(
+    final why = await leaveReasonDialog(
       context,
       s,
       title: '${s.withdraw} ${r['number'] ?? ''}',
@@ -954,7 +980,7 @@ class _MyLeaveTabState extends ConsumerState<_MyLeaveTab> {
 
   Future<void> _askCancel(Json r) async {
     final s = ref.read(stringsProvider);
-    final why = await _reasonDialog(
+    final why = await leaveReasonDialog(
       context,
       s,
       title: '${s.askCancel} ${r['number'] ?? ''}',
@@ -1136,6 +1162,7 @@ class _TeamLeaveTabState extends ConsumerState<_TeamLeaveTab> {
               final cancellation = can['decide'] != true && can['decideCancel'] == true;
               return _LeaveCard(
                 r: r,
+                profile: widget.profile,
                 who: asJson(r['employee']),
                 actions: [
                   if (can['decide'] == true || can['decideCancel'] == true) ...[
@@ -1162,7 +1189,7 @@ class _TeamLeaveTabState extends ConsumerState<_TeamLeaveTab> {
   Future<void> _reject(Json r, bool cancellation) async {
     final s = ref.read(stringsProvider);
     final name = '${asJson(r['employee'])['name'] ?? ''}';
-    final why = await _reasonDialog(
+    final why = await leaveReasonDialog(
       context,
       s,
       title: s.lvRejectTitle('${r['number'] ?? ''}'),

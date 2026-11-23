@@ -365,6 +365,14 @@ cards with **Leave Details**, **Download Leave**, **Download Attendance** and **
 Reporties Leave approves or rejects in the row. On the phone the files open in the app's file viewer, and a tab
 row wider than the screen slides sideways.
 
+**A leave's details on the phone.** In My Leave and Reporties Leave, **View** (or a tap on the leave) opens its
+details in the app: the days, the date applied, From and To; where it waits (level of levels); the buttons you may
+use (Withdraw, Ask to cancel, Approve / Reject, or decide a cancellation); the type, who entered it, the reason,
+what was counted, the loss-of-pay part, the decision and its remark, and the document (View and Download in the
+app). Below, folded: the days counted (half days, a weekly off or holiday taken in between), **Who approves** (open
+while it waits: each level, who sits there, its state, who acted and when, the remark, past its time limit), the
+cancellation (open while one is asked) and the changes to its dates. No web page opens.
+
 Under the leave cards, **My leave** has four tabs. Each list shows **Records per page** (25, 50 or 100),
 "Showing 1 – 50 of N results", the page numbers, and **Excel** and **PDF** of everything the filters
 match (the letterhead, the filters, Prepared by and Checked by).

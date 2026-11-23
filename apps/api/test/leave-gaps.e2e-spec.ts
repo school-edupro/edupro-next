@@ -576,16 +576,25 @@ describe('the leave module against its plan (e2e)', () => {
           })
         ).json().detail,
       ).toMatch(/PDF or image of up to 5 MB/);
+    const withDoc = await apply(t2, {
+      leaveTypeId: ids.CL,
+      from: W(7, 0),
+      to: W(7, 0),
+      documentFileId: await file('application/pdf', 1000),
+    });
+    expect(withDoc.json().status).toBe('pending');
+    // the staff app's leave Details opens the document: whoever may see the leave, nobody else
+    const doc = await call(t2, 'GET', `/leave/requests/${withDoc.json().id as string}/document`);
+    expect(doc.statusCode).toBe(200);
+    expect(doc.json().download.url).toEqual(expect.any(String));
+    expect(doc.json().file).toMatchObject({ contentType: 'application/pdf' });
     expect(
-      (
-        await apply(t2, {
-          leaveTypeId: ids.CL,
-          from: W(7, 0),
-          to: W(7, 0),
-          documentFileId: await file('application/pdf', 1000),
-        })
-      ).json().status,
-    ).toBe('pending');
+      (await call(office, 'GET', `/leave/requests/${withDoc.json().id as string}/document`))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await call(t3, 'GET', `/leave/requests/${withDoc.json().id as string}/document`)).statusCode,
+    ).toBe(404);
   });
 
   it('the calendar: an optional holiday is not a day off, the sandwich takes it when the policy says; 2nd and 4th Saturday and dated offs', async () => {

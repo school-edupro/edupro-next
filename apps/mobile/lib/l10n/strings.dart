@@ -1881,6 +1881,65 @@ class S {
   );
   String get lvEmployeeCol => _t('Employee', 'कर्मचारी');
   String get lvSent => _t('Sent.', 'भेजा गया।');
+
+  // one leave's details (as the website's leave page)
+  String get ldTitle => _t('Leave details', 'अवकाश विवरण');
+  String ldWaitingWith(String who, Object? level, Object? levels) => level == null || levels == null
+      ? _t('Waiting with $who.', '$who के पास प्रतीक्षा में।')
+      : _t(
+          'Waiting with $who (level $level of $levels).',
+          '$who के पास प्रतीक्षा में (स्तर $level / $levels)।',
+        );
+  String ldCancelAsked(String why) =>
+      _t('A cancellation is asked: $why', 'रद्द करने का अनुरोध किया गया है: $why');
+  String get ldDays => _t('Days', 'दिन');
+  String get ldApplied => _t('Applied on', 'आवेदन तिथि');
+  String get ldTheLeave => _t('The leave', 'अवकाश');
+  String get ldType => _t('Type', 'प्रकार');
+  String get ldEntered => _t('Entered', 'दर्ज');
+  String ldSource(String source) => switch (source) {
+    'self' => _t('Applied by the employee', 'कर्मचारी द्वारा आवेदन'),
+    'on_behalf' => _t('By the office', 'कार्यालय द्वारा'),
+    'auto_late' => _t('Late marks', 'देर से आने के निशान'),
+    'auto_missing' => _t('Missing punches', 'छूटे पंच'),
+    'auto_absent' => _t('Absent, no application', 'अनुपस्थित, कोई आवेदन नहीं'),
+    'auto_rule' => _t('Late / early rule', 'देर / जल्दी नियम'),
+    'import' => _t('Imported', 'आयात किया गया'),
+    _ => source,
+  };
+  String get ldCounted => _t('Counted', 'गिना गया');
+  String get ldLop => _t('Loss of pay', 'वेतन कटौती');
+  String ldLopText(String number, String days) => _t(
+    '$number: $days days (the balance was short); decided with this leave',
+    '$number: $days दिन (शेष कम था); इसी अवकाश के साथ निर्णय',
+  );
+  String get ldDecided => _t('Decided', 'निर्णय');
+  String get ldDocument => _t('Document', 'दस्तावेज़');
+  String ldDocumentOf(String number) => _t('the document of $number', '$number का दस्तावेज़');
+  String ldDaysCounted(int n) => _t('Days counted ($n)', 'गिने गए दिन ($n)');
+  String ldDayKind(String kind) => switch (kind) {
+    'weekoff' => _t('weekly off (sandwich)', 'साप्ताहिक अवकाश (सैंडविच)'),
+    'holiday' => _t('holiday (sandwich)', 'छुट्टी (सैंडविच)'),
+    'optional' => _t('optional holiday', 'वैकल्पिक छुट्टी'),
+    _ => '',
+  };
+  String ldWhoApproves(int n) =>
+      _t('Who approves ($n ${n == 1 ? 'level' : 'levels'})', 'कौन स्वीकृत करता है ($n स्तर)');
+  String get ldCancellation => _t('The cancellation', 'रद्दीकरण');
+  String ldChanges(int n) => _t('Changes ($n)', 'बदलाव ($n)');
+  String ldStep(String status) => switch (status) {
+    'pending' => _t('Waiting', 'प्रतीक्षा में'),
+    'approved' => _t('Approved', 'स्वीकृत'),
+    'rejected' => _t('Not approved', 'स्वीकृत नहीं'),
+    'skipped' => _t('Passed on', 'आगे बढ़ाया गया'),
+    _ => status,
+  };
+  String get ldOverdue => _t('past its time limit', 'समय सीमा पार');
+  String get ldOffice => _t('the office', 'कार्यालय');
+  String get ldNotFound => _t(
+    'This leave is not there or not yours to see.',
+    'यह अवकाश नहीं मिला या आप इसे नहीं देख सकते।',
+  );
   String lvWaitingFor(String who) => _t('Waiting for $who', '$who की प्रतीक्षा');
   String get lvWaitingApprover => _t('Waiting for the approver', 'स्वीकर्ता की प्रतीक्षा');
   String lvApprovedBy(String who, String when) => _t(

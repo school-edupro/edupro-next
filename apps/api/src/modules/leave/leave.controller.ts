@@ -150,6 +150,15 @@ export class StaffLeaveController {
     return this.leave.get(ctx, id);
   }
 
+  @Get('requests/:id/document')
+  @ApiOperation({
+    summary: "A leave's document: its download address, for whoever may see the leave",
+  })
+  @AuthenticatedOnly()
+  document(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.leave.document(ctx, id);
+  }
+
   @Post('requests/:id/decide')
   @AuthenticatedOnly()
   decide(

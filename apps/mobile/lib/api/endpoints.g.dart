@@ -532,6 +532,10 @@ class EduProApi {
   Future<dynamic> staffLeaveGet({required String id}) =>
       _t.send('GET', '/leave/requests/${Uri.encodeComponent(id)}');
 
+  /// GET /leave/requests/{id}/document — A leave's document: its download address, for whoever may see the leave
+  Future<dynamic> staffLeaveDocument({required String id}) =>
+      _t.send('GET', '/leave/requests/${Uri.encodeComponent(id)}/document');
+
   /// POST /leave/apply — Apply for my leave (may answer with a question: the sandwich, the split)
   Future<dynamic> staffLeaveApply({required StaffLeaveApplyDto body}) =>
       _t.send('POST', '/leave/apply', body: body.toJson());
