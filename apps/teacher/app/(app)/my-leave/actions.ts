@@ -51,8 +51,16 @@ export async function applyMyLeave(fd: FormData): Promise<ApplyResult> {
   }
 }
 
-async function act(id: string, path: string, body: unknown, done: string) {
+/** where to go after acting: the list it was done from (docs/design/99), else the leave's own page */
+const backTo = (fd: FormData | undefined, id: string) => {
+  const b = String(fd?.get('back') ?? '');
+  return b.startsWith('/') && !b.startsWith('//') ? b : `/my-leave/${id}`;
+};
+const withParams = (path: string, q: string) => `${path}${path.includes('?') ? '&' : '?'}${q}`;
+
+async function act(id: string, path: string, body: unknown, done: string, fd?: FormData) {
   if (!okId(id)) return;
+  const back = backTo(fd, id);
   try {
     await bff.api.fetch(`/leave/requests/${id}/${path}`, {
       method: 'POST',
@@ -61,13 +69,16 @@ async function act(id: string, path: string, body: unknown, done: string) {
   } catch (e) {
     if (e instanceof ApiError)
       redirect(
-        `/my-leave/${id}?error=${encodeURIComponent(e.problem.type)}&detail=${encodeURIComponent(detailOf(e).slice(0, 300))}`,
+        withParams(
+          back,
+          `error=${encodeURIComponent(e.problem.type)}&detail=${encodeURIComponent(detailOf(e).slice(0, 300))}`,
+        ),
       );
     throw e;
   }
   revalidatePath('/my-leave');
   revalidatePath('/leave-approvals');
-  redirect(`/my-leave/${id}?ok=1&detail=${encodeURIComponent(done)}`);
+  redirect(withParams(back, `ok=1&detail=${encodeURIComponent(done)}`));
 }
 
 export async function decideMyLeave(id: string, fd: FormData) {
@@ -77,6 +88,7 @@ export async function decideMyLeave(id: string, fd: FormData) {
     'decide',
     { outcome, note: String(fd.get('note') ?? '').trim() },
     outcome === 'approved' ? 'Approved.' : 'Not approved: the employee is told.',
+    fd,
   );
 }
 export async function decideMyLeaveCancel(id: string, fd: FormData) {
@@ -86,6 +98,7 @@ export async function decideMyLeaveCancel(id: string, fd: FormData) {
     'cancel-decide',
     { outcome, note: String(fd.get('note') ?? '').trim() },
     outcome === 'approved' ? 'The cancellation is approved.' : 'The cancellation is not approved.',
+    fd,
   );
 }
 export async function withdrawMyLeave(id: string, fd: FormData) {
@@ -94,6 +107,7 @@ export async function withdrawMyLeave(id: string, fd: FormData) {
     'withdraw',
     { reason: String(fd.get('reason') ?? '').trim() },
     'Withdrawn: the days are given back.',
+    fd,
   );
 }
 export async function askCancelMyLeave(id: string, fd: FormData) {
@@ -102,5 +116,6 @@ export async function askCancelMyLeave(id: string, fd: FormData) {
     'cancel-request',
     { reason: String(fd.get('reason') ?? '').trim() },
     'The cancellation is sent to your approvers.',
+    fd,
   );
 }

@@ -233,11 +233,14 @@ export function LeaveTabsNav({
   base,
   waitingWithMe,
   team,
+  hrefOf,
 }: {
   tab: LeaveTab;
   month: string;
   /** the page's address: /leave (admin), /my-leave (staff) */
   base: string;
+  /** each tab's own address (the staff website: My attendance and My team's attendance are menu pages) */
+  hrefOf?: (tab: LeaveTab, month: string) => string;
   waitingWithMe: number;
   team: number;
 }) {
@@ -250,7 +253,11 @@ export function LeaveTabsNav({
             role="tab"
             aria-selected={tab === t.id}
             className="ep-tabs__tab"
-            href={`${base}?tab=${t.id}${t.id === 'attendance' ? `&month=${month}` : ''}`}
+            href={
+              hrefOf
+                ? hrefOf(t.id, month)
+                : `${base}?tab=${t.id}${t.id === 'attendance' ? `&month=${month}` : ''}`
+            }
           >
             {t.label}
             {t.id === 'team-leave' && waitingWithMe
