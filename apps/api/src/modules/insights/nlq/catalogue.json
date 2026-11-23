@@ -1,0 +1,2331 @@
+{
+  "views": [
+    {
+      "view": "academic_years",
+      "area": "Students",
+      "oneRowIs": "one academic year of the school",
+      "rights": [
+        "platform.year.view",
+        "people.student.view",
+        "attendance.session.view",
+        "admissions.application.view"
+      ],
+      "columns": {
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "name": "label",
+        "start_date": "date",
+        "end_date": "date",
+        "status": "label",
+        "is_current": "flag"
+      },
+      "examples": [
+        {
+          "question": "Which is the current academic year and when does it end?",
+          "sql": "SELECT academic_year, name, start_date, end_date FROM nlq.academic_years WHERE is_current"
+        },
+        {
+          "question": "List all academic years with their status",
+          "sql": "SELECT academic_year, name, status, start_date, end_date FROM nlq.academic_years ORDER BY start_date DESC"
+        },
+        {
+          "question": "How many days are left in this session?",
+          "sql": "SELECT academic_year, end_date, end_date - (now() AT TIME ZONE 'Asia/Kolkata')::date AS days_left FROM nlq.academic_years WHERE is_current"
+        }
+      ]
+    },
+    {
+      "view": "students",
+      "area": "Students",
+      "oneRowIs": "one pupil in one academic year (class, section, roll number)",
+      "rights": ["people.student.view"],
+      "columns": {
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "gender": "label",
+        "category": "label",
+        "house": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "roll_no": "number",
+        "enrolment_status": "label",
+        "joined_on": "date",
+        "ended_on": "date",
+        "is_current": "flag"
+      },
+      "examples": [
+        {
+          "question": "How many pupils are there in each class now?",
+          "sql": "SELECT class, count(*) AS pupils FROM nlq.students WHERE is_current GROUP BY class, class_order ORDER BY class_order"
+        },
+        {
+          "question": "Boys and girls in each section",
+          "sql": "SELECT class_section, count(*) FILTER (WHERE gender = 'male') AS boys, count(*) FILTER (WHERE gender = 'female') AS girls, count(*) AS total FROM nlq.students WHERE is_current GROUP BY class_section, class_order, section ORDER BY class_order, section"
+        },
+        {
+          "question": "Category-wise strength of class X",
+          "sql": "SELECT COALESCE(category, 'Not recorded') AS category, count(*) AS pupils FROM nlq.students WHERE is_current AND class = 'X' GROUP BY 1 ORDER BY pupils DESC"
+        },
+        {
+          "question": "How many pupils left the school this year, and how?",
+          "sql": "SELECT s.enrolment_status, count(*) AS pupils FROM nlq.students s JOIN nlq.academic_years y ON y.academic_year_id = s.academic_year_id WHERE y.is_current AND s.enrolment_status IN ('withdrawn', 'transferred', 'left') GROUP BY s.enrolment_status ORDER BY pupils DESC"
+        },
+        {
+          "question": "House-wise strength of the school",
+          "sql": "SELECT COALESCE(house, 'No house') AS house, count(*) AS pupils FROM nlq.students WHERE is_current GROUP BY 1 ORDER BY pupils DESC"
+        }
+      ]
+    },
+    {
+      "view": "class_sections",
+      "area": "Students",
+      "oneRowIs": "one class-section of one academic year",
+      "rights": ["people.student.view", "academics.class_section.view"],
+      "columns": {
+        "class_section_id": "id",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_teacher": "label",
+        "class_teacher_id": "id",
+        "capacity": "number",
+        "strength": "count",
+        "boys": "count",
+        "girls": "count",
+        "is_current_year": "flag"
+      },
+      "examples": [
+        {
+          "question": "Who is the class teacher of each section, and how many pupils are there?",
+          "sql": "SELECT class_section, class_teacher, strength FROM nlq.class_sections WHERE is_current_year ORDER BY class_order, section"
+        },
+        {
+          "question": "Which sections have vacant seats?",
+          "sql": "SELECT class_section, capacity, strength, capacity - strength AS vacant FROM nlq.class_sections WHERE is_current_year AND capacity > strength ORDER BY vacant DESC"
+        },
+        {
+          "question": "Sections without a class teacher",
+          "sql": "SELECT class_section, strength FROM nlq.class_sections WHERE is_current_year AND class_teacher IS NULL ORDER BY class_order, section"
+        },
+        {
+          "question": "Class strength this year against last year",
+          "sql": "SELECT cs.class, cs.class_order, sum(cs.strength) FILTER (WHERE y.is_current) AS this_year, sum(cs.strength) FILTER (WHERE NOT y.is_current) AS last_year FROM nlq.class_sections cs JOIN nlq.academic_years y ON y.academic_year_id = cs.academic_year_id WHERE y.start_date BETWEEN (SELECT c.start_date - interval '1 year' FROM nlq.academic_years c WHERE c.is_current) AND (SELECT c.start_date FROM nlq.academic_years c WHERE c.is_current) GROUP BY cs.class, cs.class_order ORDER BY cs.class_order"
+        }
+      ]
+    },
+    {
+      "view": "staff",
+      "area": "Staff",
+      "oneRowIs": "one employee of the school (current or former)",
+      "rights": ["people.employee.view", "leave.office.manage", "leave.report.view"],
+      "columns": {
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "gender": "label",
+        "staff_type": "label",
+        "staff_group": "label",
+        "department": "label",
+        "designation": "label",
+        "joined_on": "date",
+        "left_on": "date",
+        "status": "label",
+        "is_current": "flag",
+        "has_login": "flag"
+      },
+      "examples": [
+        {
+          "question": "How many staff do we have in each department?",
+          "sql": "SELECT department, count(*) AS staff FROM nlq.staff WHERE is_current GROUP BY department ORDER BY staff DESC"
+        },
+        {
+          "question": "Teaching and non-teaching staff by gender",
+          "sql": "SELECT staff_group, gender, count(*) AS staff FROM nlq.staff WHERE is_current GROUP BY staff_group, gender ORDER BY staff_group, gender"
+        },
+        {
+          "question": "Who joined this financial year?",
+          "sql": "SELECT employee_code, employee_name, department, designation, joined_on FROM nlq.staff WHERE joined_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31' ORDER BY joined_on"
+        },
+        {
+          "question": "How many staff left each month this year?",
+          "sql": "SELECT date_trunc('month', left_on)::date AS month, count(*) AS leavers FROM nlq.staff WHERE left_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31' GROUP BY 1 ORDER BY 1"
+        },
+        {
+          "question": "Which staff have no EduPro login?",
+          "sql": "SELECT employee_code, employee_name, department FROM nlq.staff WHERE is_current AND NOT has_login ORDER BY department, employee_name"
+        }
+      ]
+    },
+    {
+      "view": "admission_applications",
+      "area": "Admissions",
+      "oneRowIs": "one child's admission application (registration) in one session",
+      "rights": ["admissions.application.view"],
+      "columns": {
+        "application_id": "id",
+        "registration_no": "label",
+        "cycle_id": "id",
+        "admission_session": "label",
+        "session_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "fee_category": "label",
+        "gender": "label",
+        "status": "label",
+        "status_label": "label",
+        "stage": "label",
+        "level_no": "number",
+        "waiting_since_on": "date",
+        "is_registered": "flag",
+        "is_in_process": "flag",
+        "is_selected": "flag",
+        "is_admitted": "flag",
+        "in_student_master": "flag",
+        "ever_admitted": "flag",
+        "is_closed": "flag",
+        "online_form": "flag",
+        "entered_at_desk": "flag",
+        "possible_duplicate": "flag",
+        "started_on": "date",
+        "submitted_on": "date",
+        "registered_on": "date",
+        "month": "month",
+        "offered_on": "date",
+        "offer_expires_on": "date",
+        "fee_paid_on": "date",
+        "admitted_on": "date",
+        "cancelled_on": "date",
+        "registration_fee": "money",
+        "admission_fee": "money",
+        "registration_fee_paid": "money",
+        "admission_fee_paid": "money",
+        "refunded": "money",
+        "moved_out": "money",
+        "transfer_credit": "money",
+        "form_points": "number",
+        "merit": "number",
+        "wait_rank": "number",
+        "admission_no": "label",
+        "student_id": "id"
+      },
+      "examples": [
+        {
+          "question": "Class-wise registrations, in process, admitted and closed for the 2027-28 admissions",
+          "sql": "SELECT class, count(*) FILTER (WHERE is_registered) AS registered, count(*) FILTER (WHERE is_in_process) AS in_process, count(*) FILTER (WHERE is_selected) AS selected_or_waiting, count(*) FILTER (WHERE is_admitted) AS admitted, count(*) FILTER (WHERE is_closed) AS closed FROM nlq.admission_applications WHERE admission_session = '2027-28' GROUP BY class, class_order ORDER BY class_order"
+        },
+        {
+          "question": "Registration and admission fee collected by class for the 2027-28 admissions",
+          "sql": "SELECT class, sum(registration_fee_paid) AS registration_fees, sum(admission_fee_paid) AS admission_fees, sum(refunded) AS refunded, sum(registration_fee_paid + admission_fee_paid - refunded) AS net FROM nlq.admission_applications WHERE admission_session = '2027-28' GROUP BY class, class_order ORDER BY class_order"
+        },
+        {
+          "question": "Offers not yet paid that expire this week",
+          "sql": "SELECT registration_no, class, admission_fee, admission_fee_paid, offer_expires_on FROM nlq.admission_applications WHERE status = 'offered' AND offer_expires_on BETWEEN (now() AT TIME ZONE 'Asia/Kolkata')::date AND (now() AT TIME ZONE 'Asia/Kolkata')::date + 7 ORDER BY offer_expires_on"
+        },
+        {
+          "question": "Registrations completed each day this month",
+          "sql": "SELECT registered_on, count(*) AS registrations, count(*) FILTER (WHERE entered_at_desk) AS at_desk FROM nlq.admission_applications WHERE registered_on >= date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date GROUP BY registered_on ORDER BY registered_on"
+        },
+        {
+          "question": "Where are registrations waiting for a decision, and for how long?",
+          "sql": "SELECT class, stage, level_no, count(*) AS waiting, max((now() AT TIME ZONE 'Asia/Kolkata')::date - waiting_since_on) AS longest_wait_days FROM nlq.admission_applications WHERE stage IS NOT NULL GROUP BY class, class_order, stage, level_no ORDER BY class_order, stage, level_no"
+        }
+      ]
+    },
+    {
+      "view": "admission_enquiries",
+      "area": "Admissions",
+      "oneRowIs": "one admission enquiry (lead)",
+      "rights": ["admissions.enquiry.manage"],
+      "columns": {
+        "enquiry_id": "id",
+        "enquired_on": "date",
+        "month": "month",
+        "cycle_id": "id",
+        "admission_session": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "source": "label",
+        "campaign": "label",
+        "from_website": "flag",
+        "status": "label",
+        "stage": "label",
+        "stage_kind": "label",
+        "is_open": "flag",
+        "is_lost": "flag",
+        "is_registered": "flag",
+        "is_admitted": "flag",
+        "score": "label",
+        "counsellor": "label",
+        "is_escalated": "flag",
+        "next_follow_up_on": "date",
+        "follow_up_overdue": "flag",
+        "first_contact_on": "date",
+        "hours_to_first_contact": "number",
+        "first_contact_late": "flag",
+        "last_contact_on": "date",
+        "contacts": "count",
+        "converted_on": "date",
+        "application_id": "id",
+        "registration_no": "label"
+      },
+      "examples": [
+        {
+          "question": "Enquiries by source for the 2027-28 admissions, with registrations and admissions",
+          "sql": "SELECT source, count(*) AS enquiries, count(*) FILTER (WHERE is_registered) AS registered, count(*) FILTER (WHERE is_admitted) AS admitted, count(*) FILTER (WHERE is_lost) AS lost FROM nlq.admission_enquiries WHERE admission_session = '2027-28' GROUP BY source ORDER BY enquiries DESC"
+        },
+        {
+          "question": "Open enquiries and overdue follow-ups for each counsellor",
+          "sql": "SELECT COALESCE(counsellor, 'Unassigned') AS counsellor, count(*) AS open_enquiries, count(*) FILTER (WHERE follow_up_overdue) AS overdue, count(*) FILTER (WHERE score = 'hot') AS hot FROM nlq.admission_enquiries WHERE is_open GROUP BY 1 ORDER BY open_enquiries DESC"
+        },
+        {
+          "question": "Enquiries received each month",
+          "sql": "SELECT month, count(*) AS enquiries, count(*) FILTER (WHERE from_website) AS from_website FROM nlq.admission_enquiries WHERE enquired_on > (now() AT TIME ZONE 'Asia/Kolkata')::date - 365 GROUP BY month ORDER BY month"
+        },
+        {
+          "question": "How quickly do counsellors make the first contact?",
+          "sql": "SELECT COALESCE(counsellor, 'Unassigned') AS counsellor, count(*) FILTER (WHERE first_contact_on IS NOT NULL) AS contacted, round(avg(hours_to_first_contact), 1) AS avg_hours_to_first_contact, count(*) FILTER (WHERE first_contact_late) AS late_now FROM nlq.admission_enquiries GROUP BY 1 ORDER BY avg_hours_to_first_contact NULLS LAST"
+        }
+      ]
+    },
+    {
+      "view": "assets",
+      "area": "Purchase",
+      "oneRowIs": "one unit of an asset item in the asset register (one tag)",
+      "rights": ["purchase.store.view", "purchase.report.view"],
+      "columns": {
+        "asset_id": "id",
+        "asset_code": "label",
+        "item_id": "id",
+        "item_code": "label",
+        "item": "label",
+        "category": "label",
+        "sub_category": "label",
+        "make": "label",
+        "model": "label",
+        "status": "label",
+        "is_on_books": "flag",
+        "condition": "label",
+        "store_id": "id",
+        "store": "label",
+        "department_id": "id",
+        "department": "label",
+        "location": "label",
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "source": "label",
+        "vendor_id": "id",
+        "vendor": "label",
+        "po_no": "label",
+        "bought_on": "date",
+        "put_to_use_on": "date",
+        "cost": "money",
+        "book_value": "money",
+        "depreciation_to_date": "money",
+        "book_value_year": "label",
+        "warranty_until": "date",
+        "insured_value": "money",
+        "insurance_renewal": "date",
+        "left_on": "date",
+        "book_value_at_exit": "money"
+      },
+      "examples": [
+        {
+          "question": "How many assets do we hold in each category and what are they worth?",
+          "sql": "SELECT category, count(*) AS assets, sum(cost) AS cost, sum(book_value) AS book_value FROM nlq.assets WHERE is_on_books GROUP BY category ORDER BY book_value DESC"
+        },
+        {
+          "question": "Which assets does each department hold?",
+          "sql": "SELECT department, item, count(*) AS assets FROM nlq.assets WHERE is_on_books AND department IS NOT NULL GROUP BY department, item ORDER BY department, item"
+        },
+        {
+          "question": "Which assets are under repair or lost, and who had them?",
+          "sql": "SELECT asset_code, item, status, department, employee_name FROM nlq.assets WHERE status IN ('under_repair', 'lost') ORDER BY status, asset_code"
+        },
+        {
+          "question": "Which assets go out of warranty in the next 60 days?",
+          "sql": "SELECT asset_code, item, department, warranty_until FROM nlq.assets WHERE is_on_books AND warranty_until BETWEEN current_date AND current_date + 60 ORDER BY warranty_until"
+        },
+        {
+          "question": "Which assets are still with staff who have left?",
+          "sql": "SELECT a.employee_name, a.employee_code, s.left_on, a.asset_code, a.item, a.book_value FROM nlq.assets a JOIN nlq.staff s ON s.employee_id = a.employee_id WHERE a.is_on_books AND NOT s.is_current ORDER BY a.employee_name, a.asset_code"
+        }
+      ]
+    },
+    {
+      "view": "attendance_days",
+      "area": "Attendance",
+      "oneRowIs": "one pupil's mark in the day register of one school day",
+      "rights": ["attendance.session.view"],
+      "columns": {
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "on_date": "date",
+        "month": "month",
+        "code": "label",
+        "status": "label",
+        "is_present": "flag",
+        "is_absent": "flag",
+        "is_leave": "flag",
+        "is_late": "flag",
+        "source": "label",
+        "gate_in_time": "text",
+        "gate_out_time": "text"
+      },
+      "examples": [
+        {
+          "question": "Who was absent today?",
+          "sql": "SELECT class_section, admission_no, student_name FROM nlq.attendance_days WHERE on_date = (now() AT TIME ZONE 'Asia/Kolkata')::date AND is_absent ORDER BY class_order, section, student_name"
+        },
+        {
+          "question": "Attendance % of each class this month",
+          "sql": "SELECT class, round(100.0 * count(*) FILTER (WHERE is_present) / count(*), 1) AS attendance_pct, count(*) FILTER (WHERE is_absent) AS absences FROM nlq.attendance_days WHERE on_date >= date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date AND on_date <= (now() AT TIME ZONE 'Asia/Kolkata')::date GROUP BY class, class_order ORDER BY class_order"
+        },
+        {
+          "question": "Pupils with attendance below 75% this year",
+          "sql": "SELECT a.class_section, a.admission_no, a.student_name, count(*) AS days, count(*) FILTER (WHERE a.is_present) AS present, round(100.0 * count(*) FILTER (WHERE a.is_present) / count(*), 1) AS attendance_pct FROM nlq.attendance_days a JOIN nlq.academic_years y ON y.academic_year_id = a.academic_year_id WHERE y.is_current GROUP BY a.class_section, a.class_order, a.section, a.admission_no, a.student_name HAVING count(*) >= 20 AND 100.0 * count(*) FILTER (WHERE a.is_present) / count(*) < 75 ORDER BY attendance_pct"
+        },
+        {
+          "question": "Girls' and boys' attendance this month",
+          "sql": "SELECT s.gender, round(100.0 * count(*) FILTER (WHERE a.is_present) / count(*), 1) AS attendance_pct FROM nlq.attendance_days a JOIN nlq.students s ON s.student_id = a.student_id AND s.academic_year_id = a.academic_year_id WHERE a.on_date >= date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date GROUP BY s.gender ORDER BY s.gender"
+        },
+        {
+          "question": "Late arrivals by class this week",
+          "sql": "SELECT class, count(*) AS late_marks FROM nlq.attendance_days WHERE is_late AND on_date > (now() AT TIME ZONE 'Asia/Kolkata')::date - 7 GROUP BY class, class_order ORDER BY class_order"
+        }
+      ]
+    },
+    {
+      "view": "certificates",
+      "area": "Certificates",
+      "oneRowIs": "one certificate paper in the register (an original or a duplicate), for a student or a staff member",
+      "rights": ["certificate.register.view"],
+      "columns": {
+        "certificate_id": "id",
+        "type_code": "label",
+        "type": "label",
+        "audience": "label",
+        "number": "label",
+        "copy_no": "number",
+        "is_duplicate": "flag",
+        "original_id": "id",
+        "status": "label",
+        "is_valid": "flag",
+        "issued_on": "date",
+        "month": "month",
+        "first_issued_on": "date",
+        "cancelled_on": "date",
+        "academic_year": "label",
+        "academic_year_id": "id",
+        "book_no": "number",
+        "sl_no": "number",
+        "revision": "number",
+        "is_corrected": "flag",
+        "is_reissue": "flag",
+        "reissue_of_number": "label",
+        "reissued_as_number": "label",
+        "is_override": "flag",
+        "is_old_system": "flag",
+        "requested_via": "label",
+        "is_bulk": "flag",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "person_name": "label",
+        "issued_by": "label"
+      },
+      "examples": [
+        {
+          "question": "How many certificates of each type were issued this academic year?",
+          "sql": "SELECT type, count(*) FILTER (WHERE copy_no = 0) AS issued, count(*) FILTER (WHERE is_duplicate) AS duplicates, count(*) FILTER (WHERE copy_no = 0 AND status = 'cancelled') AS cancelled FROM nlq.certificates WHERE academic_year = '2026-27' GROUP BY type ORDER BY issued DESC"
+        },
+        {
+          "question": "How many TCs were issued in each class this academic year?",
+          "sql": "SELECT c.class, c.class_order, count(*) AS tcs FROM nlq.certificates c JOIN nlq.academic_years y ON y.academic_year_id = c.academic_year_id WHERE y.is_current AND c.type_code = 'TC' AND c.is_valid GROUP BY c.class, c.class_order ORDER BY c.class_order"
+        },
+        {
+          "question": "How many certificates did we issue each month since April?",
+          "sql": "SELECT month, count(*) AS issued FROM nlq.certificates WHERE copy_no = 0 AND issued_on >= DATE '2026-04-01' GROUP BY month ORDER BY month"
+        },
+        {
+          "question": "Which certificates were issued although a check failed?",
+          "sql": "SELECT number, type, person_name, issued_on, issued_by FROM nlq.certificates WHERE is_override ORDER BY issued_on DESC"
+        },
+        {
+          "question": "Who in the office issued the most certificates this month?",
+          "sql": "SELECT issued_by, count(*) AS issued FROM nlq.certificates WHERE copy_no = 0 AND month = date_trunc('month', current_date)::date GROUP BY issued_by ORDER BY issued DESC"
+        }
+      ]
+    },
+    {
+      "view": "exam_marks",
+      "area": "Exams",
+      "oneRowIs": "one pupil's paper (subject) in one exam — pupil × exam × subject",
+      "rights": ["exams.marks.view", "insights.results.view"],
+      "columns": {
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "enrolment_status": "label",
+        "exam_id": "id",
+        "exam_code": "label",
+        "exam_name": "label",
+        "exam_type": "label",
+        "exam_starts_on": "date",
+        "subject_id": "id",
+        "subject_code": "label",
+        "subject_name": "label",
+        "subject_order": "number",
+        "taken_as": "label",
+        "paper_on": "date",
+        "max_marks": "number",
+        "pass_marks": "number",
+        "marks": "number",
+        "percent": "percent",
+        "code": "label",
+        "code_name": "label",
+        "grade": "label",
+        "is_entered": "flag",
+        "entry_status": "label",
+        "is_verified": "flag",
+        "counts_in_total": "flag",
+        "marks_counted": "number",
+        "is_failed": "flag"
+      },
+      "examples": [
+        {
+          "question": "Subject-wise average, highest, absentees and failures of Class IX in Term 1 (verified marks)",
+          "sql": "SELECT m.subject_name, count(*) AS pupils, count(*) FILTER (WHERE m.is_entered) AS entered, round(avg(m.percent), 1) AS average_percent, max(m.marks) AS highest, count(*) FILTER (WHERE m.code = 'AB') AS absent, count(*) FILTER (WHERE m.is_failed) AS failed FROM nlq.exam_marks m JOIN nlq.academic_years y ON y.academic_year_id = m.academic_year_id AND y.is_current WHERE m.exam_code = 'T1' AND m.class = 'Class IX' AND m.is_verified GROUP BY m.subject_order, m.subject_name ORDER BY m.subject_order"
+        },
+        {
+          "question": "Which Term 1 marks sheets are not verified yet, and how many marks are still missing?",
+          "sql": "SELECT m.class_section, m.subject_name, m.entry_status, count(*) AS pupils, count(*) FILTER (WHERE NOT m.is_entered) AS marks_missing FROM nlq.exam_marks m JOIN nlq.academic_years y ON y.academic_year_id = m.academic_year_id AND y.is_current WHERE m.exam_code = 'T1' AND NOT m.is_verified AND m.enrolment_status = 'active' GROUP BY m.class_order, m.class_section, m.subject_order, m.subject_name, m.entry_status ORDER BY m.class_order, m.class_section, m.subject_order"
+        },
+        {
+          "question": "Who was absent in any paper of PT1?",
+          "sql": "SELECT m.class_section, m.admission_no, m.student_name, string_agg(m.subject_name, ', ' ORDER BY m.subject_order) AS absent_in FROM nlq.exam_marks m JOIN nlq.academic_years y ON y.academic_year_id = m.academic_year_id AND y.is_current WHERE m.exam_code = 'PT1' AND m.code = 'AB' GROUP BY m.class_order, m.class_section, m.admission_no, m.student_name ORDER BY m.class_order, m.class_section, m.student_name"
+        },
+        {
+          "question": "Which pupils failed Mathematics in Term 1?",
+          "sql": "SELECT m.class_section, m.admission_no, m.student_name, m.marks, m.max_marks, m.pass_marks, m.code FROM nlq.exam_marks m JOIN nlq.academic_years y ON y.academic_year_id = m.academic_year_id AND y.is_current WHERE m.exam_code = 'T1' AND m.subject_name = 'Mathematics' AND m.is_failed ORDER BY m.class_order, m.class_section, m.marks NULLS FIRST"
+        },
+        {
+          "question": "Average English marks in Term 1 by class, boys and girls",
+          "sql": "SELECT m.class, s.gender, round(avg(m.percent), 1) AS average_percent, count(*) AS pupils FROM nlq.exam_marks m JOIN nlq.students s ON s.student_id = m.student_id AND s.academic_year_id = m.academic_year_id JOIN nlq.academic_years y ON y.academic_year_id = m.academic_year_id AND y.is_current WHERE m.exam_code = 'T1' AND m.subject_name = 'English' AND m.is_verified AND m.marks IS NOT NULL GROUP BY m.class_order, m.class, s.gender ORDER BY m.class_order, s.gender"
+        }
+      ]
+    },
+    {
+      "view": "exam_results",
+      "area": "Exams",
+      "oneRowIs": "one pupil's overall result in one exam (as last computed)",
+      "rights": ["exams.marks.view", "insights.results.view"],
+      "columns": {
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "enrolment_status": "label",
+        "exam_id": "id",
+        "exam_code": "label",
+        "exam_name": "label",
+        "exam_type": "label",
+        "exam_starts_on": "date",
+        "subjects_counted": "count",
+        "subjects_entered": "count",
+        "subjects_absent": "count",
+        "subjects_excluded": "count",
+        "failed_subjects": "count",
+        "total": "number",
+        "max_total": "number",
+        "percent": "percent",
+        "grade": "label",
+        "grade_points": "number",
+        "result": "label",
+        "rank_in_section": "number",
+        "rank_in_class": "number",
+        "computed_on": "date"
+      },
+      "examples": [
+        {
+          "question": "Class-wise pass percentage and average percent in Term 1",
+          "sql": "SELECT r.class, count(*) FILTER (WHERE r.result IN ('pass', 'fail')) AS pupils_with_result, count(*) FILTER (WHERE r.result = 'pass') AS passed, round(100.0 * count(*) FILTER (WHERE r.result = 'pass') / NULLIF(count(*) FILTER (WHERE r.result IN ('pass', 'fail')), 0), 1) AS pass_percent, round(avg(r.percent) FILTER (WHERE r.result IN ('pass', 'fail')), 1) AS average_percent, count(*) FILTER (WHERE r.result = 'incomplete') AS incomplete FROM nlq.exam_results r JOIN nlq.academic_years y ON y.academic_year_id = r.academic_year_id AND y.is_current WHERE r.exam_code = 'T1' GROUP BY r.class_order, r.class ORDER BY r.class_order"
+        },
+        {
+          "question": "Top three in each section of Class X in Term 1",
+          "sql": "SELECT r.class_section, r.rank_in_section, r.admission_no, r.student_name, r.total, r.max_total, r.percent, r.grade FROM nlq.exam_results r JOIN nlq.academic_years y ON y.academic_year_id = r.academic_year_id AND y.is_current WHERE r.exam_code = 'T1' AND r.class = 'Class X' AND r.rank_in_section <= 3 ORDER BY r.class_section, r.rank_in_section, r.student_name"
+        },
+        {
+          "question": "Pupils who failed two or more papers in Term 1",
+          "sql": "SELECT r.class_section, r.admission_no, r.student_name, r.failed_subjects, r.percent FROM nlq.exam_results r JOIN nlq.academic_years y ON y.academic_year_id = r.academic_year_id AND y.is_current WHERE r.exam_code = 'T1' AND r.failed_subjects >= 2 ORDER BY r.class_order, r.class_section, r.failed_subjects DESC, r.student_name"
+        },
+        {
+          "question": "Grade-wise number of pupils in Class VI for PT1",
+          "sql": "SELECT r.class_section, COALESCE(r.grade, 'No grade') AS grade, count(*) AS pupils FROM nlq.exam_results r JOIN nlq.academic_years y ON y.academic_year_id = r.academic_year_id AND y.is_current WHERE r.exam_code = 'PT1' AND r.class = 'Class VI' AND r.result <> 'incomplete' GROUP BY r.class_section, r.grade ORDER BY r.class_section, r.grade"
+        },
+        {
+          "question": "Average Term 1 percent of boys and girls in each section",
+          "sql": "SELECT r.class_section, s.gender, count(*) AS pupils, round(avg(r.percent), 1) AS average_percent FROM nlq.exam_results r JOIN nlq.students s ON s.student_id = r.student_id AND s.academic_year_id = r.academic_year_id JOIN nlq.academic_years y ON y.academic_year_id = r.academic_year_id AND y.is_current WHERE r.exam_code = 'T1' AND r.result IN ('pass', 'fail') GROUP BY r.class_order, r.class_section, s.gender ORDER BY r.class_order, r.class_section, s.gender"
+        }
+      ]
+    },
+    {
+      "view": "fee_bills",
+      "area": "Fees",
+      "oneRowIs": "one bill line of a pupil: one fee head for one fee month of one academic year (school or hostel ledger)",
+      "rights": ["fees.ledger.view", "fees.demand.view"],
+      "columns": {
+        "bill_line_id": "id",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class_section_id": "id",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "fee_month": "month",
+        "fee_month_name": "label",
+        "fee_month_no": "number",
+        "instalment": "number",
+        "due_on": "date",
+        "due_month": "month",
+        "head_code": "label",
+        "head": "label",
+        "head_kind": "label",
+        "ledger": "label",
+        "source": "label",
+        "gross": "money",
+        "concession": "money",
+        "net": "money",
+        "paid": "money",
+        "balance": "money",
+        "status": "label",
+        "is_overdue": "flag",
+        "days_overdue": "number"
+      },
+      "examples": [
+        {
+          "question": "Which classes have the most overdue fee this year?",
+          "sql": "SELECT class, sum(balance) AS overdue\n  FROM nlq.fee_bills\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n   AND due_on < (now() AT TIME ZONE 'Asia/Kolkata')::date\n GROUP BY class, class_order\nHAVING sum(balance) > 0\n ORDER BY class_order"
+        },
+        {
+          "question": "Top 20 pupils with the highest overdue fee",
+          "sql": "SELECT admission_no, student_name, class_section,\n       sum(balance) AS overdue,\n       min(due_on) FILTER (WHERE balance > 0) AS oldest_unpaid_due\n  FROM nlq.fee_bills\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n   AND due_on < (now() AT TIME ZONE 'Asia/Kolkata')::date\n GROUP BY student_id, admission_no, student_name, class_section\nHAVING sum(balance) > 0\n ORDER BY overdue DESC\n LIMIT 20"
+        },
+        {
+          "question": "School fee billed and collected month by month this year",
+          "sql": "SELECT fee_month,\n       sum(net) AS billed,\n       sum(paid) AS collected,\n       sum(balance) AS balance,\n       round(100 * sum(paid) / NULLIF(sum(net), 0), 1) AS collected_pct\n  FROM nlq.fee_bills\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n   AND ledger = 'school'\n GROUP BY fee_month\n ORDER BY fee_month"
+        },
+        {
+          "question": "Ageing of unpaid hostel fee",
+          "sql": "SELECT CASE WHEN days_overdue = 0 THEN 'Not yet due'\n            WHEN days_overdue <= 30 THEN '1-30 days'\n            WHEN days_overdue <= 60 THEN '31-60 days'\n            WHEN days_overdue <= 90 THEN '61-90 days'\n            ELSE 'Over 90 days' END AS ageing,\n       count(DISTINCT student_id) AS pupils,\n       sum(balance) AS balance\n  FROM nlq.fee_bills\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n   AND ledger = 'hostel'\n   AND balance > 0\n GROUP BY 1\n ORDER BY min(days_overdue)"
+        },
+        {
+          "question": "Which pupils of VI-A have paid nothing so far this year?",
+          "sql": "SELECT admission_no, student_name, sum(net) AS billed_so_far\n  FROM nlq.fee_bills\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n   AND class_section = 'VI-A'\n   AND due_on < (now() AT TIME ZONE 'Asia/Kolkata')::date\n GROUP BY student_id, admission_no, student_name\nHAVING sum(paid) = 0 AND sum(net) > 0\n ORDER BY student_name"
+        }
+      ]
+    },
+    {
+      "view": "fee_concessions",
+      "area": "Fees",
+      "oneRowIs": "one bill line with something taken off it, split into waivers and other concession, with the pupil's concession types",
+      "rights": ["fees.ledger.view", "fees.demand.view"],
+      "columns": {
+        "bill_line_id": "id",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class_section_id": "id",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "fee_month": "month",
+        "due_on": "date",
+        "head_code": "label",
+        "head": "label",
+        "head_kind": "label",
+        "ledger": "label",
+        "gross": "money",
+        "concession": "money",
+        "waived": "money",
+        "other_concession": "money",
+        "net": "money",
+        "discount_types": "label",
+        "has_discount_type": "flag",
+        "fee_group": "label"
+      },
+      "examples": [
+        {
+          "question": "How much concession did each concession type give this year?",
+          "sql": "SELECT COALESCE(discount_types, 'No concession type (waiver, write-off or refund)') AS concession_type,\n       count(DISTINCT student_id) AS pupils,\n       sum(concession) AS concession\n  FROM nlq.fee_concessions\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n   AND concession > 0\n GROUP BY 1\n ORDER BY concession DESC"
+        },
+        {
+          "question": "Fee waivers approved this year, by class",
+          "sql": "SELECT class, count(DISTINCT student_id) AS pupils_waived, sum(waived) AS waived\n  FROM nlq.fee_concessions\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n   AND waived > 0\n GROUP BY class, class_order\n ORDER BY class_order"
+        },
+        {
+          "question": "Concession on each fee head as a share of the fee",
+          "sql": "SELECT head, sum(gross) AS gross, sum(concession) AS concession,\n       round(100 * sum(concession) / NULLIF(sum(gross), 0), 1) AS concession_pct\n  FROM nlq.fee_concessions\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n GROUP BY head\n ORDER BY concession DESC"
+        },
+        {
+          "question": "Pupils with the highest concession this year",
+          "sql": "SELECT admission_no, student_name, class_section, discount_types, sum(concession) AS concession\n  FROM nlq.fee_concessions\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n GROUP BY student_id, admission_no, student_name, class_section, discount_types\n ORDER BY concession DESC\n LIMIT 20"
+        }
+      ]
+    },
+    {
+      "view": "fee_receipt_heads",
+      "area": "Fees",
+      "oneRowIs": "the part of one fee receipt set against one fee head for one fee month (plus late fee and advance rows)",
+      "rights": ["fees.ledger.view"],
+      "columns": {
+        "receipt_id": "id",
+        "receipt_no": "label",
+        "received_on": "date",
+        "month": "month",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "class_section_id": "id",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "ledger": "label",
+        "mode": "label",
+        "mode_name": "label",
+        "line_kind": "label",
+        "head_code": "label",
+        "head": "label",
+        "head_kind": "label",
+        "fee_month": "month",
+        "amount": "money"
+      },
+      "examples": [
+        {
+          "question": "Head-wise fee collection this month",
+          "sql": "SELECT ledger, head, sum(amount) AS collected\n  FROM nlq.fee_receipt_heads\n WHERE month = date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date\n GROUP BY ledger, head\n ORDER BY ledger, collected DESC"
+        },
+        {
+          "question": "Transport fee collected by class this financial year",
+          "sql": "SELECT class, sum(amount) AS transport_collected\n  FROM nlq.fee_receipt_heads\n WHERE head_kind = 'transport'\n   AND received_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n GROUP BY class, class_order\n ORDER BY class_order"
+        },
+        {
+          "question": "How much of this month's collection was for earlier months, this month or ahead?",
+          "sql": "SELECT CASE WHEN line_kind <> 'fee' THEN line_kind\n            WHEN fee_month < month THEN 'fee of earlier months'\n            WHEN fee_month = month THEN 'fee of this month'\n            ELSE 'fee paid ahead' END AS part,\n       sum(amount) AS amount\n  FROM nlq.fee_receipt_heads\n WHERE month = date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date\n GROUP BY 1\n ORDER BY amount DESC"
+        },
+        {
+          "question": "Late fee collected each month this financial year",
+          "sql": "SELECT month, ledger, sum(amount) AS late_fee_collected\n  FROM nlq.fee_receipt_heads\n WHERE line_kind = 'late_fee'\n   AND received_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n GROUP BY month, ledger\n ORDER BY month, ledger"
+        }
+      ]
+    },
+    {
+      "view": "fee_receipts",
+      "area": "Fees",
+      "oneRowIs": "one fee receipt (school or hostel ledger) that counts as money received",
+      "rights": ["fees.ledger.view"],
+      "columns": {
+        "receipt_id": "id",
+        "receipt_no": "label",
+        "received_on": "date",
+        "month": "month",
+        "financial_year": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "class_section_id": "id",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "ledger": "label",
+        "mode": "label",
+        "mode_name": "label",
+        "is_online": "flag",
+        "amount": "money",
+        "fee_part": "money",
+        "late_fee": "money",
+        "advance": "money",
+        "refunded": "money",
+        "net_amount": "money",
+        "convenience_charge": "money",
+        "status": "label",
+        "cleared_on": "date",
+        "is_uncleared_cheque": "flag",
+        "received_by": "label"
+      },
+      "examples": [
+        {
+          "question": "Fee collected this month by payment mode",
+          "sql": "SELECT mode_name, count(*) AS receipts, sum(amount) AS collected\n  FROM nlq.fee_receipts\n WHERE month = date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date\n GROUP BY mode_name\n ORDER BY collected DESC"
+        },
+        {
+          "question": "Fee collection by class: this month against last month",
+          "sql": "SELECT class,\n       COALESCE(sum(amount) FILTER (WHERE month = date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date), 0) AS this_month,\n       COALESCE(sum(amount) FILTER (WHERE month = (date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date) - interval '1 month')::date), 0) AS last_month\n  FROM nlq.fee_receipts\n WHERE received_on >= (date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date) - interval '1 month')::date\n GROUP BY class, class_order\n ORDER BY class_order"
+        },
+        {
+          "question": "Fee received, refunded and net, month by month this financial year",
+          "sql": "WITH rec AS (\n  SELECT month, sum(amount) AS received\n    FROM nlq.fee_receipts\n   WHERE received_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n   GROUP BY month),\nref AS (\n  SELECT month, sum(amount) AS refunded\n    FROM nlq.fee_refunds\n   WHERE paid_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n   GROUP BY month)\nSELECT COALESCE(rec.month, ref.month) AS month,\n       COALESCE(rec.received, 0) AS received,\n       COALESCE(ref.refunded, 0) AS refunded,\n       COALESCE(rec.received, 0) - COALESCE(ref.refunded, 0) AS net_received\n  FROM rec FULL JOIN ref ON ref.month = rec.month\n ORDER BY 1"
+        },
+        {
+          "question": "Which cheques have not been cleared by the bank yet?",
+          "sql": "SELECT receipt_no, received_on, student_name, class_section, mode_name, amount\n  FROM nlq.fee_receipts\n WHERE is_uncleared_cheque\n ORDER BY received_on"
+        },
+        {
+          "question": "Which pupils of VI-A have no fee receipt this year?",
+          "sql": "SELECT st.admission_no, st.student_name\n  FROM nlq.students st\n WHERE st.is_current\n   AND st.class_section = 'VI-A'\n   AND NOT EXISTS (SELECT 1 FROM nlq.fee_receipts r\n                    WHERE r.student_id = st.student_id AND r.academic_year_id = st.academic_year_id)\n ORDER BY st.student_name"
+        }
+      ]
+    },
+    {
+      "view": "fee_refunds",
+      "area": "Fees",
+      "oneRowIs": "one fee refund paid out to a family (from a receipt, or last year's advance)",
+      "rights": ["fees.refund.request", "fees.ledger.view"],
+      "columns": {
+        "refund_id": "id",
+        "voucher_no": "label",
+        "paid_on": "date",
+        "month": "month",
+        "kind": "label",
+        "fee_action": "label",
+        "mode": "label",
+        "amount": "money",
+        "ledger": "label",
+        "receipt_id": "id",
+        "receipt_no": "label",
+        "receipt_received_on": "date",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class_section_id": "id",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "is_withdrawal": "flag",
+        "requested_on": "date",
+        "approved_on": "date"
+      },
+      "examples": [
+        {
+          "question": "Refunds paid each month this financial year by mode",
+          "sql": "SELECT month, mode, count(*) AS refunds, sum(amount) AS refunded\n  FROM nlq.fee_refunds\n WHERE paid_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n GROUP BY month, mode\n ORDER BY month, mode"
+        },
+        {
+          "question": "Refunds paid on withdrawals this year, by class",
+          "sql": "SELECT class, count(DISTINCT student_id) AS pupils, sum(amount) AS refunded\n  FROM nlq.fee_refunds\n WHERE is_withdrawal\n   AND academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n GROUP BY class, class_order\n ORDER BY class_order"
+        },
+        {
+          "question": "Largest refunds paid this month",
+          "sql": "SELECT voucher_no, paid_on, student_name, class_section, kind, fee_action, mode, amount\n  FROM nlq.fee_refunds\n WHERE month = date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date\n ORDER BY amount DESC\n LIMIT 10"
+        }
+      ]
+    },
+    {
+      "view": "gate_passes",
+      "area": "Engagement",
+      "oneRowIs": "one gate pass (pupil early leave or late arrival, boarder's hostel leave, staff RGP / NRGP)",
+      "rights": ["engagement.gate_pass.view"],
+      "columns": {
+        "pass_id": "id",
+        "pass_no": "label",
+        "pass_on": "date",
+        "month": "month",
+        "pass_time": "label",
+        "kind": "label",
+        "person_type": "label",
+        "state": "label",
+        "approved": "flag",
+        "through_the_gate": "flag",
+        "still_open": "flag",
+        "source": "label",
+        "collected_by": "label",
+        "asked_on": "date",
+        "minutes_to_decide": "number",
+        "out_on": "date",
+        "out_time": "label",
+        "back_on": "date",
+        "back_time": "label",
+        "due_back_on": "date",
+        "overdue_now": "flag",
+        "was_overdue": "flag",
+        "late_minutes": "number",
+        "items_out": "count",
+        "items_not_back": "count",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "department": "label",
+        "designation": "label"
+      },
+      "examples": [
+        {
+          "question": "Early leaves by class this month: asked, approved and rejected",
+          "sql": "SELECT class, class_order, count(*) AS asked, count(*) FILTER (WHERE approved) AS approved, count(*) FILTER (WHERE state = 'rejected') AS rejected FROM nlq.gate_passes WHERE kind = 'early_leave' AND month = date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata')::date GROUP BY class, class_order ORDER BY class_order"
+        },
+        {
+          "question": "Which pupils left early most often since October?",
+          "sql": "SELECT admission_no, student_name, class_section, count(*) AS early_leaves FROM nlq.gate_passes WHERE kind = 'early_leave' AND through_the_gate AND pass_on >= DATE '2026-10-01' GROUP BY admission_no, student_name, class_section ORDER BY early_leaves DESC LIMIT 10"
+        },
+        {
+          "question": "Which staff are out on a returnable gate pass now, and are they overdue?",
+          "sql": "SELECT employee_code, employee_name, department, pass_no, pass_on, due_back_on, overdue_now, items_not_back FROM nlq.gate_passes WHERE kind = 'rgp' AND state = 'out' ORDER BY due_back_on NULLS LAST"
+        },
+        {
+          "question": "How long do gate pass approvals take, kind by kind, this month?",
+          "sql": "SELECT kind, count(*) AS asked, count(*) FILTER (WHERE approved) AS approved, round(avg(minutes_to_decide)) AS avg_minutes_to_decide FROM nlq.gate_passes WHERE month = date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata')::date GROUP BY kind ORDER BY kind"
+        },
+        {
+          "question": "Which boarders came back late from home leave this month?",
+          "sql": "SELECT student_name, class_section, pass_no, due_back_on, back_on, late_minutes FROM nlq.gate_passes WHERE kind = 'hostel_home' AND (late_minutes > 0 OR was_overdue) AND month = date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata')::date ORDER BY late_minutes DESC NULLS LAST"
+        }
+      ]
+    },
+    {
+      "view": "helpdesk_queries",
+      "area": "Engagement",
+      "oneRowIs": "one helpdesk ticket (parent, staff, provider, hostel or admission desk)",
+      "rights": ["helpdesk.ticket.viewall"],
+      "columns": {
+        "query_id": "id",
+        "number": "label",
+        "desk": "label",
+        "kind": "label",
+        "head": "label",
+        "head_code": "label",
+        "status": "label",
+        "is_open": "flag",
+        "overdue": "flag",
+        "priority": "label",
+        "level": "number",
+        "escalated": "flag",
+        "breached": "flag",
+        "closed_within_sla": "flag",
+        "opened_on": "date",
+        "month": "month",
+        "first_response_on": "date",
+        "hours_to_first_response": "number",
+        "closed_on": "date",
+        "hours_to_close": "number",
+        "due_on": "date",
+        "reopened_count": "count",
+        "rating": "number",
+        "assigned_role": "label",
+        "assigned_to": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "department": "label",
+        "hostel": "label"
+      },
+      "examples": [
+        {
+          "question": "How many parent queries are open and overdue under each head?",
+          "sql": "SELECT head, count(*) FILTER (WHERE is_open) AS open, count(*) FILTER (WHERE overdue) AS overdue FROM nlq.helpdesk_queries WHERE desk = 'parent' GROUP BY head ORDER BY open DESC"
+        },
+        {
+          "question": "How fast does each desk answer and close tickets, month by month?",
+          "sql": "SELECT month, desk, count(*) AS raised, round(avg(hours_to_first_response), 1) AS avg_hours_to_first_answer, round(avg(hours_to_close), 1) AS avg_hours_to_close, round(100.0 * count(*) FILTER (WHERE closed_within_sla) / NULLIF(count(*) FILTER (WHERE status = 'closed'), 0), 0) AS within_sla_pct FROM nlq.helpdesk_queries WHERE opened_on >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata')::date - interval '5 months' GROUP BY month, desk ORDER BY month, desk"
+        },
+        {
+          "question": "Which classes have raised the most complaints this year?",
+          "sql": "SELECT h.class, h.class_order, count(*) AS complaints, count(*) FILTER (WHERE h.is_open) AS still_open FROM nlq.helpdesk_queries h JOIN nlq.academic_years y ON y.academic_year_id = h.academic_year_id WHERE y.is_current AND h.desk = 'parent' AND h.kind = 'complaint' GROUP BY h.class, h.class_order ORDER BY complaints DESC"
+        },
+        {
+          "question": "Which tickets are overdue now, and whom are they waiting on?",
+          "sql": "SELECT number, desk, head, opened_on, due_on, level, COALESCE(assigned_to, assigned_role) AS waiting_on FROM nlq.helpdesk_queries WHERE overdue ORDER BY due_on, number"
+        },
+        {
+          "question": "Parent queries by house this session, with their average rating",
+          "sql": "SELECT st.house, count(*) AS queries, round(avg(q.rating), 1) AS avg_rating FROM nlq.helpdesk_queries q JOIN nlq.students st ON st.student_id = q.student_id AND st.academic_year_id = q.academic_year_id WHERE q.desk = 'parent' AND q.opened_on >= DATE '2026-04-01' GROUP BY st.house ORDER BY queries DESC"
+        }
+      ]
+    },
+    {
+      "view": "homework",
+      "area": "Students",
+      "oneRowIs": "one daily-work post (homework, classwork or assignment) to one section",
+      "rights": ["academics.daily_work.view"],
+      "columns": {
+        "homework_id": "id",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "kind": "label",
+        "title": "text",
+        "subject_id": "id",
+        "subject_code": "label",
+        "subject_name": "label",
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "assigned_on": "date",
+        "month": "month",
+        "due_on": "date",
+        "published_on": "date",
+        "is_published": "flag",
+        "ack_required": "flag",
+        "acknowledged": "count",
+        "attachments": "count"
+      },
+      "examples": [
+        {
+          "question": "How much homework has each section got this week?",
+          "sql": "SELECT h.class_section, count(*) AS homework_posts, count(DISTINCT h.subject_name) AS subjects FROM nlq.homework h WHERE h.kind = 'homework' AND h.is_published AND h.assigned_on >= date_trunc('week', current_date)::date GROUP BY h.class_order, h.class_section ORDER BY h.class_order, h.class_section"
+        },
+        {
+          "question": "Which teachers posted the most homework this month?",
+          "sql": "SELECT h.employee_name, count(*) AS homework_posts, count(DISTINCT h.class_section_id) AS sections FROM nlq.homework h WHERE h.kind = 'homework' AND h.month = date_trunc('month', current_date)::date AND h.employee_id IS NOT NULL GROUP BY h.employee_id, h.employee_name ORDER BY homework_posts DESC, h.employee_name"
+        },
+        {
+          "question": "Which sections got no homework in the last 7 days?",
+          "sql": "SELECT c.class_section, c.class_teacher, count(h.homework_id) AS homework_last_7_days FROM nlq.class_sections c LEFT JOIN nlq.homework h ON h.class_section_id = c.class_section_id AND h.kind = 'homework' AND h.is_published AND h.assigned_on >= current_date - 7 WHERE c.is_current_year GROUP BY c.class_order, c.class_section, c.class_teacher HAVING count(h.homework_id) = 0 ORDER BY c.class_order, c.class_section"
+        },
+        {
+          "question": "How many families acknowledged the homework that asked for it in the last two weeks?",
+          "sql": "SELECT h.assigned_on, h.class_section, h.subject_name, h.title, h.acknowledged, c.strength, round(100.0 * h.acknowledged / NULLIF(c.strength, 0), 1) AS acknowledged_percent FROM nlq.homework h JOIN nlq.class_sections c ON c.class_section_id = h.class_section_id WHERE h.ack_required AND h.is_published AND h.assigned_on >= current_date - 14 ORDER BY h.assigned_on DESC, h.class_order, h.class_section"
+        },
+        {
+          "question": "Subject-wise homework, classwork and assignments for Class VIII this month",
+          "sql": "SELECT h.subject_name, h.kind, count(*) AS posts FROM nlq.homework h JOIN nlq.academic_years y ON y.academic_year_id = h.academic_year_id AND y.is_current WHERE h.class = 'Class VIII' AND h.month = date_trunc('month', current_date)::date GROUP BY h.subject_name, h.kind ORDER BY posts DESC"
+        }
+      ]
+    },
+    {
+      "view": "hostel_beds",
+      "area": "Hostel",
+      "oneRowIs": "one bed of a hostel room with today’s occupancy",
+      "rights": ["hostel.room.view"],
+      "columns": {
+        "bed_id": "id",
+        "hostel_id": "id",
+        "hostel": "label",
+        "hostel_code": "label",
+        "hostel_for": "label",
+        "hostel_status": "label",
+        "block": "label",
+        "floor": "number",
+        "room_no": "label",
+        "room_status": "label",
+        "room_type": "label",
+        "seater": "number",
+        "is_ac": "flag",
+        "bed": "label",
+        "bed_status": "label",
+        "is_usable": "flag",
+        "is_occupied": "flag",
+        "is_free": "flag",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "occupied_since": "date",
+        "occupied_until": "date"
+      },
+      "examples": [
+        {
+          "question": "How many beds are there in each hostel, and how many are full and free?",
+          "sql": "SELECT hostel, count(*) FILTER (WHERE is_usable) AS beds,\n       count(*) FILTER (WHERE is_occupied) AS occupied,\n       count(*) FILTER (WHERE is_free) AS free\n  FROM nlq.hostel_beds\n GROUP BY hostel\n ORDER BY hostel"
+        },
+        {
+          "question": "Which room types have free beds?",
+          "sql": "SELECT hostel, room_type, count(*) FILTER (WHERE is_free) AS free_beds\n  FROM nlq.hostel_beds\n GROUP BY hostel, room_type\nHAVING count(*) FILTER (WHERE is_free) > 0\n ORDER BY hostel, room_type"
+        },
+        {
+          "question": "Which rooms still have a free bed?",
+          "sql": "SELECT hostel, block, room_no, room_type, count(*) FILTER (WHERE is_free) AS free_beds\n  FROM nlq.hostel_beds\n WHERE room_status = 'active' AND hostel_status = 'active'\n GROUP BY hostel, block, room_no, room_type\nHAVING count(*) FILTER (WHERE is_free) > 0\n ORDER BY hostel, block, room_no"
+        },
+        {
+          "question": "What is the occupancy percent of each hostel?",
+          "sql": "SELECT hostel,\n       round(100.0 * count(*) FILTER (WHERE is_occupied) / NULLIF(count(*) FILTER (WHERE is_usable), 0), 1) AS occupancy_percent\n  FROM nlq.hostel_beds\n GROUP BY hostel\n ORDER BY hostel"
+        }
+      ]
+    },
+    {
+      "view": "hostel_stays",
+      "area": "Hostel",
+      "oneRowIs": "one stay of one boarder on one hostel bed",
+      "rights": ["hostel.room.view"],
+      "columns": {
+        "stay_id": "id",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "gender": "label",
+        "hostel_id": "id",
+        "hostel": "label",
+        "hostel_code": "label",
+        "block": "label",
+        "floor": "number",
+        "room_no": "label",
+        "room_type": "label",
+        "bed_id": "id",
+        "bed": "label",
+        "from_date": "date",
+        "to_date": "date",
+        "from_month": "month",
+        "started_by": "label",
+        "ended_by": "label",
+        "ended_by_hostel_withdrawal": "flag",
+        "is_staying": "flag",
+        "is_upcoming": "flag",
+        "days_stayed": "number",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id"
+      },
+      "examples": [
+        {
+          "question": "How many boarders does each hostel have today?",
+          "sql": "SELECT hostel, count(DISTINCT student_id) AS boarders\n  FROM nlq.hostel_stays\n WHERE is_staying\n GROUP BY hostel\n ORDER BY hostel"
+        },
+        {
+          "question": "How many boys and girls board, class by class?",
+          "sql": "SELECT class, count(DISTINCT student_id) FILTER (WHERE gender = 'male') AS boys,\n       count(DISTINCT student_id) FILTER (WHERE gender = 'female') AS girls,\n       count(DISTINCT student_id) AS boarders\n  FROM nlq.hostel_stays\n WHERE is_staying\n GROUP BY class, class_order\n ORDER BY class_order"
+        },
+        {
+          "question": "Who left the hostel this session?",
+          "sql": "SELECT student_name, admission_no, class_section, hostel, to_date AS left_on, ended_by\n  FROM nlq.hostel_stays\n WHERE ended_by IN ('left_hostel', 'left_school')\n   AND to_date BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n ORDER BY to_date DESC"
+        },
+        {
+          "question": "How many new boarders joined each month this session?",
+          "sql": "SELECT from_month, count(DISTINCT student_id) AS new_boarders\n  FROM nlq.hostel_stays\n WHERE started_by = 'allot' AND from_date >= DATE '2026-04-01'\n GROUP BY from_month\n ORDER BY from_month"
+        },
+        {
+          "question": "How many boarders were in each hostel on 1 October 2026?",
+          "sql": "SELECT hostel, count(DISTINCT student_id) AS boarders_on_day\n  FROM nlq.hostel_stays\n WHERE from_date <= DATE '2026-10-01' AND (to_date IS NULL OR to_date >= DATE '2026-10-01')\n GROUP BY hostel\n ORDER BY hostel"
+        }
+      ]
+    },
+    {
+      "view": "library_copies",
+      "area": "Library",
+      "oneRowIs": "one physical copy (accession number) in the library",
+      "rights": ["library.catalogue.view"],
+      "columns": {
+        "copy_id": "id",
+        "accession_no": "label",
+        "title_id": "id",
+        "title_code": "label",
+        "title": "label",
+        "authors": "text",
+        "subject": "label",
+        "material_type": "label",
+        "language": "label",
+        "publisher": "label",
+        "publication_year": "number",
+        "isbn": "label",
+        "for_class": "label",
+        "is_reference": "flag",
+        "library": "label",
+        "library_code": "label",
+        "shelf": "label",
+        "rack": "label",
+        "status": "label",
+        "is_holding": "flag",
+        "is_available": "flag",
+        "is_on_loan": "flag",
+        "on_loan_due_on": "date",
+        "is_overdue": "flag",
+        "status_on": "date",
+        "accessioned_on": "date",
+        "accessioned_month": "month",
+        "acquisition": "label",
+        "vendor": "label",
+        "price": "money",
+        "book_value": "money",
+        "last_verified_on": "date",
+        "times_issued": "count",
+        "last_issued_on": "date"
+      },
+      "examples": [
+        {
+          "question": "How many books, titles and how much stock value does each library have?",
+          "sql": "SELECT library, count(*) FILTER (WHERE is_holding) AS copies,\n       count(DISTINCT title_id) FILTER (WHERE is_holding) AS titles,\n       sum(book_value) FILTER (WHERE is_holding) AS stock_value_rupees\n  FROM nlq.library_copies\n GROUP BY library\n ORDER BY library"
+        },
+        {
+          "question": "How many copies were added each month this session, bought or donated?",
+          "sql": "SELECT accessioned_month, acquisition, count(*) AS copies_added, sum(price) AS cost_rupees\n  FROM nlq.library_copies\n WHERE accessioned_on >= DATE '2026-04-01'\n GROUP BY accessioned_month, acquisition\n ORDER BY accessioned_month, acquisition"
+        },
+        {
+          "question": "How many books do we have by subject?",
+          "sql": "SELECT COALESCE(subject, 'No subject') AS subject, count(*) AS copies, count(DISTINCT title_id) AS titles\n  FROM nlq.library_copies\n WHERE is_holding\n GROUP BY 1\n ORDER BY copies DESC"
+        },
+        {
+          "question": "How many copies are lost or damaged, and what are they worth?",
+          "sql": "SELECT status, count(*) AS copies, sum(book_value) AS value_rupees\n  FROM nlq.library_copies\n WHERE status IN ('lost', 'damaged')\n GROUP BY status"
+        },
+        {
+          "question": "Which books have never been issued?",
+          "sql": "SELECT accession_no, title, authors, library, accessioned_on\n  FROM nlq.library_copies\n WHERE is_holding AND times_issued = 0 AND NOT is_reference\n ORDER BY accessioned_on"
+        }
+      ]
+    },
+    {
+      "view": "library_loans",
+      "area": "Library",
+      "oneRowIs": "one issue of one library copy to a pupil or staff member",
+      "rights": ["library.catalogue.view", "library.loan.circulate"],
+      "columns": {
+        "loan_id": "id",
+        "copy_id": "id",
+        "accession_no": "label",
+        "title_id": "id",
+        "title": "label",
+        "library": "label",
+        "borrower_kind": "label",
+        "borrower_name": "label",
+        "student_id": "id",
+        "admission_no": "label",
+        "employee_id": "id",
+        "employee_code": "label",
+        "issued_on": "date",
+        "issued_month": "month",
+        "due_on": "date",
+        "returned_on": "date",
+        "renewals": "count",
+        "is_out": "flag",
+        "is_overdue": "flag",
+        "is_lost": "flag",
+        "is_returned": "flag",
+        "days_late": "number",
+        "late_fine": "money",
+        "late_fine_paid": "money",
+        "late_fine_due": "money",
+        "fine_waived": "money",
+        "book_charge": "money",
+        "book_charge_paid": "money",
+        "book_charge_due": "money",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id"
+      },
+      "examples": [
+        {
+          "question": "Which books are overdue now, and with whom?",
+          "sql": "SELECT borrower_name, borrower_kind, class_section, accession_no, title, due_on, days_late\n  FROM nlq.library_loans\n WHERE is_overdue\n ORDER BY days_late DESC"
+        },
+        {
+          "question": "How many books were issued each month to pupils and to staff this session?",
+          "sql": "SELECT issued_month, count(*) FILTER (WHERE borrower_kind = 'student') AS issued_to_pupils,\n       count(*) FILTER (WHERE borrower_kind = 'employee') AS issued_to_staff\n  FROM nlq.library_loans\n WHERE issued_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n GROUP BY issued_month\n ORDER BY issued_month"
+        },
+        {
+          "question": "Which sections have the most overdue books?",
+          "sql": "SELECT class_section, count(*) AS overdue_books, count(DISTINCT student_id) AS pupils\n  FROM nlq.library_loans\n WHERE is_overdue AND borrower_kind = 'student'\n GROUP BY class_section, class_order\n ORDER BY class_order, class_section"
+        },
+        {
+          "question": "How much library late fine is still due, class by class?",
+          "sql": "SELECT class, sum(late_fine) AS late_fines, sum(late_fine_paid) AS paid, sum(late_fine_due) AS still_due\n  FROM nlq.library_loans\n WHERE borrower_kind = 'student' AND issued_on >= DATE '2026-04-01'\n GROUP BY class, class_order\n ORDER BY class_order"
+        },
+        {
+          "question": "What are the ten most borrowed books this session?",
+          "sql": "SELECT title, count(*) AS issues, count(DISTINCT student_id) AS pupil_readers\n  FROM nlq.library_loans\n WHERE issued_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n GROUP BY title_id, title\n ORDER BY issues DESC\n LIMIT 10"
+        }
+      ]
+    },
+    {
+      "view": "messages",
+      "area": "Engagement",
+      "oneRowIs": "one outgoing message (one address on one channel; one push per device)",
+      "rights": ["comms.report.view", "comms.message.view"],
+      "columns": {
+        "message_id": "id",
+        "created_on": "date",
+        "month": "month",
+        "sent_on": "date",
+        "channel": "label",
+        "status": "label",
+        "went_out": "flag",
+        "delivered": "flag",
+        "failed": "flag",
+        "read_on_whatsapp": "flag",
+        "kind": "label",
+        "template_code": "label",
+        "template_name": "label",
+        "category": "label",
+        "request_id": "id",
+        "request_title": "label",
+        "sender_employee_id": "id",
+        "sender_name": "label",
+        "units": "number",
+        "cost_estimate": "money"
+      },
+      "examples": [
+        {
+          "question": "How did our messages do this month, channel by channel?",
+          "sql": "SELECT channel, count(*) AS messages, count(*) FILTER (WHERE went_out) AS went_out, count(*) FILTER (WHERE delivered) AS delivered, count(*) FILTER (WHERE failed) AS failed FROM nlq.messages WHERE month = date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata')::date GROUP BY channel ORDER BY channel"
+        },
+        {
+          "question": "How many SMS units did we use each month this year, and what did they cost?",
+          "sql": "SELECT month, sum(units) AS sms_units, sum(cost_estimate) AS cost FROM nlq.messages WHERE channel = 'sms' AND went_out AND created_on >= DATE '2026-04-01' GROUP BY month ORDER BY month"
+        },
+        {
+          "question": "Which circulars went out in the last week, and how many failed?",
+          "sql": "SELECT request_id, request_title, sender_name, min(created_on) AS sent_on, count(*) AS messages, count(*) FILTER (WHERE went_out) AS went_out, count(*) FILTER (WHERE failed) AS failed FROM nlq.messages WHERE kind = 'bulk send' AND created_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 7 GROUP BY request_id, request_title, sender_name ORDER BY sent_on DESC"
+        },
+        {
+          "question": "Which automatic alerts went out most in the last 30 days?",
+          "sql": "SELECT template_name, channel, count(*) AS messages FROM nlq.messages WHERE kind = 'alert' AND created_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 30 GROUP BY template_name, channel ORDER BY messages DESC LIMIT 10"
+        },
+        {
+          "question": "What share of WhatsApp messages were delivered each day in the last two weeks?",
+          "sql": "SELECT created_on, count(*) FILTER (WHERE went_out) AS went_out, count(*) FILTER (WHERE delivered) AS delivered, round(100.0 * count(*) FILTER (WHERE delivered) / NULLIF(count(*) FILTER (WHERE went_out), 0), 1) AS delivered_pct FROM nlq.messages WHERE channel = 'whatsapp' AND created_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 13 GROUP BY created_on ORDER BY created_on"
+        }
+      ]
+    },
+    {
+      "view": "misc_fee_dues",
+      "area": "Fees",
+      "oneRowIs": "one pupil's or staff member's line of an announced misc fee",
+      "rights": ["fees.misc.view", "fees.ledger.view"],
+      "columns": {
+        "misc_fee_line_id": "id",
+        "misc_fee_id": "id",
+        "misc_fee": "label",
+        "head_code": "label",
+        "head": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "fee_status": "label",
+        "is_mandatory": "flag",
+        "seats": "count",
+        "announced_on": "date",
+        "payer_type": "label",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "class_section_id": "id",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "amount": "money",
+        "paid": "money",
+        "balance": "money",
+        "status": "label",
+        "last_date": "date",
+        "is_closed": "flag",
+        "is_overdue": "flag",
+        "paid_on": "date"
+      },
+      "examples": [
+        {
+          "question": "Status of each misc fee this year: billed, collected, still due",
+          "sql": "SELECT misc_fee, fee_status, last_date,\n       count(*) AS people,\n       count(*) FILTER (WHERE status = 'paid') AS paid_in_full,\n       sum(amount) AS billed,\n       sum(paid) AS collected,\n       sum(balance) FILTER (WHERE status = 'open' AND NOT is_closed) AS still_due\n  FROM nlq.misc_fee_dues\n WHERE academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n GROUP BY misc_fee_id, misc_fee, fee_status, last_date\n ORDER BY last_date"
+        },
+        {
+          "question": "Who has not yet paid for the trip?",
+          "sql": "SELECT class_section, admission_no, student_name, amount, paid, balance, last_date\n  FROM nlq.misc_fee_dues\n WHERE misc_fee ILIKE '%trip%'\n   AND academic_year_id = (SELECT academic_year_id FROM nlq.academic_years WHERE is_current)\n   AND status = 'open' AND NOT is_closed\n ORDER BY class_order, class_section, student_name"
+        },
+        {
+          "question": "Overdue misc fees by class",
+          "sql": "SELECT COALESCE(class, 'Staff') AS class, count(*) AS unpaid_lines, sum(balance) AS overdue\n  FROM nlq.misc_fee_dues\n WHERE is_overdue\n GROUP BY class, class_order\n ORDER BY class_order NULLS LAST"
+        }
+      ]
+    },
+    {
+      "view": "misc_receipts",
+      "area": "Fees",
+      "oneRowIs": "one posted misc receipt (misc fee, registration or admission fee, or other income)",
+      "rights": ["fees.misc.view", "fees.ledger.view"],
+      "columns": {
+        "misc_receipt_id": "id",
+        "receipt_no": "label",
+        "received_on": "date",
+        "month": "month",
+        "financial_year": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "ledger": "label",
+        "purpose": "label",
+        "head_code": "label",
+        "head": "label",
+        "misc_fee_id": "id",
+        "misc_fee": "label",
+        "misc_fee_line_id": "id",
+        "payer_kind": "label",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "class_section_id": "id",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "application_id": "id",
+        "application_no": "label",
+        "mode": "label",
+        "mode_name": "label",
+        "amount": "money",
+        "refunded": "money",
+        "net_amount": "money",
+        "convenience_charge": "money",
+        "cleared_on": "date",
+        "received_by": "label"
+      },
+      "examples": [
+        {
+          "question": "Misc income this month by purpose and head",
+          "sql": "SELECT purpose, head, count(*) AS receipts, sum(amount) AS received, sum(net_amount) AS kept\n  FROM nlq.misc_receipts\n WHERE month = date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date\n GROUP BY purpose, head\n ORDER BY received DESC"
+        },
+        {
+          "question": "Registration and admission fees collected each month this financial year",
+          "sql": "SELECT month, head, count(*) AS receipts, sum(net_amount) AS collected\n  FROM nlq.misc_receipts\n WHERE purpose = 'admission_fee'\n   AND received_on BETWEEN DATE '2026-04-01' AND DATE '2027-03-31'\n GROUP BY month, head\n ORDER BY month, head"
+        },
+        {
+          "question": "Misc collection by mode for 1 to 23 November 2026, leaving out transfers",
+          "sql": "SELECT mode_name, count(*) AS receipts, sum(amount) AS received\n  FROM nlq.misc_receipts\n WHERE received_on BETWEEN DATE '2026-11-01' AND DATE '2026-11-23'\n   AND mode <> 'transfer'\n GROUP BY mode_name\n ORDER BY received DESC"
+        }
+      ]
+    },
+    {
+      "view": "payslip_lines",
+      "area": "Payroll",
+      "oneRowIs": "one pay head of one employee x one pay month (all runs of the month summed)",
+      "rights": ["payroll.run.view"],
+      "columns": {
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "department": "label",
+        "designation": "label",
+        "staff_group": "label",
+        "month": "month",
+        "financial_year": "label",
+        "pay_head_code": "label",
+        "pay_head": "label",
+        "kind": "label",
+        "category": "label",
+        "print_order": "number",
+        "amount": "money",
+        "arrear_amount": "money",
+        "is_taxable": "flag",
+        "is_final": "flag"
+      },
+      "examples": [
+        {
+          "question": "How much did we pay under each pay head (basic, DA, HRA, PF, TDS ...) in October 2026?",
+          "sql": "SELECT kind, pay_head, count(*) AS staff, sum(amount) AS amount FROM nlq.payslip_lines WHERE month = DATE '2026-10-01' AND is_final GROUP BY kind, pay_head ORDER BY kind, min(print_order), pay_head"
+        },
+        {
+          "question": "How much PF and voluntary PF was deducted from staff each month this year?",
+          "sql": "SELECT month, sum(amount) FILTER (WHERE pay_head_code = 'PF') AS pf, sum(amount) FILTER (WHERE pay_head_code = 'VPF') AS vpf FROM nlq.payslip_lines WHERE financial_year = '2026-27' AND pay_head_code IN ('PF', 'VPF') GROUP BY month ORDER BY month"
+        },
+        {
+          "question": "Arrears paid this financial year, by pay head",
+          "sql": "SELECT pay_head, count(DISTINCT employee_id) AS staff, sum(arrear_amount) AS arrears_paid FROM nlq.payslip_lines WHERE financial_year = '2026-27' AND arrear_amount <> 0 AND is_final GROUP BY pay_head ORDER BY arrears_paid DESC"
+        },
+        {
+          "question": "Basic pay as a share of gross salary by department for October 2026",
+          "sql": "SELECT p.department, sum(p.gross_pay) AS gross, COALESCE(sum(l.amount), 0) AS basic, round(100 * COALESCE(sum(l.amount), 0) / NULLIF(sum(p.gross_pay), 0), 1) AS basic_percent_of_gross FROM nlq.payslips p LEFT JOIN nlq.payslip_lines l ON l.employee_id = p.employee_id AND l.month = p.month AND l.pay_head_code = 'BASIC' WHERE p.month = DATE '2026-10-01' GROUP BY p.department ORDER BY gross DESC"
+        },
+        {
+          "question": "Who had a loan or advance instalment recovered from their October 2026 salary?",
+          "sql": "SELECT employee_code, employee_name, department, pay_head, amount FROM nlq.payslip_lines WHERE month = DATE '2026-10-01' AND category = 'LOAN' ORDER BY amount DESC"
+        }
+      ]
+    },
+    {
+      "view": "payslips",
+      "area": "Payroll",
+      "oneRowIs": "one employee x one pay month (all runs of the month summed)",
+      "rights": ["payroll.run.view"],
+      "columns": {
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "department": "label",
+        "designation": "label",
+        "staff_group": "label",
+        "pay_mode": "label",
+        "tax_regime": "label",
+        "month": "month",
+        "financial_year": "label",
+        "records_in_month": "count",
+        "month_days": "number",
+        "paid_days": "number",
+        "lop_days": "number",
+        "fixed_gross": "money",
+        "lop_amount": "money",
+        "gross_pay": "money",
+        "total_deductions": "money",
+        "net_pay": "money",
+        "tds": "money",
+        "profession_tax": "money",
+        "employee_pf": "money",
+        "employee_esi": "money",
+        "employer_pf": "money",
+        "employer_esi": "money",
+        "employer_other": "money",
+        "cost_to_school": "money",
+        "is_final": "flag",
+        "is_paid": "flag",
+        "is_held": "flag",
+        "pay_status": "label",
+        "paid_on": "date",
+        "has_full_and_final": "flag",
+        "from_old_payroll": "flag"
+      },
+      "examples": [
+        {
+          "question": "What was the salary bill (gross, deductions, net, cost to school) each month this financial year?",
+          "sql": "SELECT month, count(*) AS staff_paid, sum(gross_pay) AS gross, sum(total_deductions) AS deductions, sum(net_pay) AS net, sum(cost_to_school) AS cost_to_school, bool_and(is_final) AS all_final FROM nlq.payslips WHERE financial_year = '2026-27' GROUP BY month ORDER BY month"
+        },
+        {
+          "question": "Salary cost by department for October 2026, with the school's PF and ESI share",
+          "sql": "SELECT department, count(*) AS staff, sum(gross_pay) AS gross, sum(employer_pf + employer_esi + employer_other) AS employer_share, sum(cost_to_school) AS cost_to_school FROM nlq.payslips WHERE month = DATE '2026-10-01' GROUP BY department ORDER BY cost_to_school DESC"
+        },
+        {
+          "question": "Whose October 2026 salary is held or not yet paid?",
+          "sql": "SELECT employee_code, employee_name, department, pay_mode, pay_status, net_pay FROM nlq.payslips WHERE month = DATE '2026-10-01' AND pay_status IN ('held', 'to_pay') ORDER BY net_pay DESC"
+        },
+        {
+          "question": "How much income tax (TDS) has been deducted from each employee this financial year?",
+          "sql": "SELECT employee_id, max(employee_code) AS employee_code, max(employee_name) AS employee_name, sum(gross_pay) AS gross, sum(tds) AS tds_deducted FROM nlq.payslips WHERE financial_year = '2026-27' AND is_final GROUP BY employee_id ORDER BY tds_deducted DESC"
+        },
+        {
+          "question": "Average take-home pay of current teaching staff in October 2026, by gender",
+          "sql": "SELECT s.gender, count(*) AS staff, round(avg(p.net_pay), 2) AS average_net_pay FROM nlq.payslips p JOIN nlq.staff s ON s.employee_id = p.employee_id WHERE p.month = DATE '2026-10-01' AND p.staff_group = 'teaching' AND s.is_current GROUP BY s.gender ORDER BY s.gender"
+        }
+      ]
+    },
+    {
+      "view": "purchase_order_lines",
+      "area": "Purchase",
+      "oneRowIs": "one item line of a placed purchase order",
+      "rights": ["purchase.report.view", "purchase.indent.view"],
+      "columns": {
+        "order_line_id": "id",
+        "order_id": "id",
+        "po_no": "label",
+        "po_date": "date",
+        "month": "month",
+        "financial_year": "label",
+        "order_status": "label",
+        "vendor_id": "id",
+        "vendor": "label",
+        "department_id": "id",
+        "department": "label",
+        "line_no": "number",
+        "item_id": "id",
+        "item_code": "label",
+        "item": "label",
+        "category": "label",
+        "sub_category": "label",
+        "item_type": "label",
+        "hsn_code": "label",
+        "qty": "number",
+        "unit": "label",
+        "rate": "money",
+        "discount_pct": "percent",
+        "gst_rate": "percent",
+        "amount": "money",
+        "tax": "money",
+        "line_total": "money",
+        "is_rate_contract": "flag",
+        "accepted_qty": "number",
+        "qty_still_to_come": "number",
+        "qty_in_store_units": "number"
+      },
+      "examples": [
+        {
+          "question": "What did we spend on each item category this financial year?",
+          "sql": "SELECT category, sum(amount) AS before_gst, sum(line_total) AS with_gst FROM nlq.purchase_order_lines WHERE financial_year = '2026-27' GROUP BY category ORDER BY with_gst DESC"
+        },
+        {
+          "question": "At what rates have we bought paper, and from whom?",
+          "sql": "SELECT po_date, po_no, vendor, item, qty, unit, rate FROM nlq.purchase_order_lines WHERE item ILIKE '%paper%' ORDER BY po_date DESC"
+        },
+        {
+          "question": "What is still to be delivered on our orders?",
+          "sql": "SELECT vendor, po_no, item, qty_still_to_come, unit FROM nlq.purchase_order_lines WHERE qty_still_to_come > 0 ORDER BY vendor, po_no"
+        },
+        {
+          "question": "Which 10 items did we spend most on this year?",
+          "sql": "SELECT item, category, sum(qty) AS qty, min(unit) AS unit, sum(line_total) AS spend FROM nlq.purchase_order_lines WHERE financial_year = '2026-27' GROUP BY item, category ORDER BY spend DESC LIMIT 10"
+        }
+      ]
+    },
+    {
+      "view": "purchase_orders",
+      "area": "Purchase",
+      "oneRowIs": "a placed purchase order (approved, sent or closed; the revision in force)",
+      "rights": ["purchase.report.view", "purchase.indent.view"],
+      "columns": {
+        "order_id": "id",
+        "po_no": "label",
+        "revision": "number",
+        "po_date": "date",
+        "month": "month",
+        "financial_year": "label",
+        "status": "label",
+        "is_emergency": "flag",
+        "vendor_id": "id",
+        "vendor_code": "label",
+        "vendor": "label",
+        "vendor_msme_type": "label",
+        "vendor_gst_status": "label",
+        "gst_supply": "label",
+        "department_id": "id",
+        "department": "label",
+        "requisition_no": "label",
+        "delivery_date": "date",
+        "receipt_status": "label",
+        "is_delivery_late": "flag",
+        "approved_on": "date",
+        "sent_on": "date",
+        "closed_on": "date",
+        "taxable": "money",
+        "tax": "money",
+        "reverse_charge_gst": "money",
+        "total": "money"
+      },
+      "examples": [
+        {
+          "question": "How much has each department spent on purchases this financial year?",
+          "sql": "SELECT department, count(*) AS orders, sum(total) AS spend FROM nlq.purchase_orders WHERE financial_year = '2026-27' GROUP BY department ORDER BY spend DESC"
+        },
+        {
+          "question": "Show purchase spend month by month this financial year.",
+          "sql": "SELECT month, count(*) AS orders, sum(total) AS spend FROM nlq.purchase_orders WHERE financial_year = '2026-27' GROUP BY month ORDER BY month"
+        },
+        {
+          "question": "Who are our top 10 vendors by purchases this year, and which are MSMEs?",
+          "sql": "SELECT vendor, vendor_msme_type, count(*) AS orders, sum(total) AS spend FROM nlq.purchase_orders WHERE po_date >= DATE '2026-04-01' GROUP BY vendor, vendor_msme_type ORDER BY spend DESC LIMIT 10"
+        },
+        {
+          "question": "Which purchase orders are late for delivery?",
+          "sql": "SELECT po_no, vendor, department, delivery_date, receipt_status, total FROM nlq.purchase_orders WHERE is_delivery_late ORDER BY delivery_date"
+        }
+      ]
+    },
+    {
+      "view": "section_attendance",
+      "area": "Attendance",
+      "oneRowIs": "one class-section's day register on one school day",
+      "rights": ["attendance.session.view"],
+      "columns": {
+        "class_section_id": "id",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "on_date": "date",
+        "month": "month",
+        "marked": "count",
+        "present": "count",
+        "absent": "count",
+        "on_leave": "count",
+        "late": "count",
+        "half_day": "count",
+        "present_pct": "percent",
+        "marked_late": "flag",
+        "is_locked": "flag",
+        "source": "label",
+        "marked_by": "label"
+      },
+      "examples": [
+        {
+          "question": "Attendance by section today",
+          "sql": "SELECT class_section, marked, present, absent, on_leave, present_pct FROM nlq.section_attendance WHERE on_date = (now() AT TIME ZONE 'Asia/Kolkata')::date ORDER BY class_order, section"
+        },
+        {
+          "question": "Which sections have not marked attendance today?",
+          "sql": "SELECT cs.class_section, cs.class_teacher FROM nlq.class_sections cs WHERE cs.is_current_year AND cs.strength > 0 AND NOT EXISTS (SELECT 1 FROM nlq.section_attendance sa WHERE sa.class_section_id = cs.class_section_id AND sa.on_date = (now() AT TIME ZONE 'Asia/Kolkata')::date) ORDER BY cs.class_order, cs.section"
+        },
+        {
+          "question": "School attendance % day by day for the last 30 days",
+          "sql": "SELECT on_date, sum(present) AS present, sum(marked) AS marked, round(100.0 * sum(present) / NULLIF(sum(marked), 0), 1) AS present_pct FROM nlq.section_attendance WHERE on_date > (now() AT TIME ZONE 'Asia/Kolkata')::date - 30 GROUP BY on_date ORDER BY on_date"
+        },
+        {
+          "question": "Month-wise attendance % of each class this year",
+          "sql": "SELECT sa.class, sa.month, round(100.0 * sum(sa.present) / NULLIF(sum(sa.marked), 0), 1) AS present_pct FROM nlq.section_attendance sa JOIN nlq.academic_years y ON y.academic_year_id = sa.academic_year_id WHERE y.is_current GROUP BY sa.class, sa.class_order, sa.month ORDER BY sa.class_order, sa.month"
+        },
+        {
+          "question": "Registers saved after the marking time this month, by who marked them",
+          "sql": "SELECT marked_by, count(*) AS registers FROM nlq.section_attendance WHERE marked_late AND on_date >= date_trunc('month', (now() AT TIME ZONE 'Asia/Kolkata')::date)::date GROUP BY marked_by ORDER BY registers DESC"
+        }
+      ]
+    },
+    {
+      "view": "staff_attendance_days",
+      "area": "Staff",
+      "oneRowIs": "one employee's worked-out attendance day (a day with no row is not marked)",
+      "rights": ["leave.office.manage", "leave.report.view"],
+      "columns": {
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "department": "label",
+        "designation": "label",
+        "attendance_date": "date",
+        "month": "month",
+        "financial_year": "label",
+        "day_type": "label",
+        "day_status": "label",
+        "leave_type": "label",
+        "leave_type_name": "label",
+        "leave_days": "number",
+        "present_days": "number",
+        "is_present": "flag",
+        "is_absent": "flag",
+        "on_leave": "flag",
+        "is_half_day": "flag",
+        "is_off_day": "flag",
+        "is_salary_hold": "flag",
+        "paid_leave_days": "number",
+        "loss_of_pay_days": "number",
+        "in_time": "text",
+        "out_time": "text",
+        "worked_hours": "number",
+        "overtime_hours": "number",
+        "late_minutes": "number",
+        "early_minutes": "number",
+        "is_late": "flag",
+        "missing_punch": "label",
+        "shift": "label",
+        "worked_out_from": "label",
+        "set_by_hand": "flag",
+        "month_locked": "flag",
+        "counted_in_reports": "flag"
+      },
+      "examples": [
+        {
+          "question": "October attendance summary for every employee",
+          "sql": "SELECT employee_code, employee_name, sum(present_days) AS present, count(*) FILTER (WHERE is_absent) AS absent, sum(paid_leave_days) AS paid_leave, count(*) FILTER (WHERE is_late) AS late_days FROM nlq.staff_attendance_days WHERE month = DATE '2026-10-01' AND counted_in_reports GROUP BY employee_code, employee_name ORDER BY employee_name"
+        },
+        {
+          "question": "How many staff were present, absent and on leave on 20 November, by department?",
+          "sql": "SELECT department, count(*) FILTER (WHERE is_present) AS present, count(*) FILTER (WHERE is_absent) AS absent, count(*) FILTER (WHERE on_leave) AS on_leave FROM nlq.staff_attendance_days WHERE attendance_date = DATE '2026-11-20' AND counted_in_reports GROUP BY department ORDER BY department"
+        },
+        {
+          "question": "Who came late most often this month?",
+          "sql": "SELECT employee_code, employee_name, count(*) AS late_days, round(avg(late_minutes)) AS avg_minutes_late FROM nlq.staff_attendance_days WHERE is_late AND attendance_date BETWEEN DATE '2026-11-01' AND DATE '2026-11-30' GROUP BY employee_code, employee_name ORDER BY late_days DESC LIMIT 10"
+        },
+        {
+          "question": "Staff attendance % month by month this year",
+          "sql": "SELECT month, round(100 * (sum(present_days) + sum(paid_leave_days)) / NULLIF(count(*) FILTER (WHERE NOT is_off_day), 0), 1) AS attendance_pct FROM nlq.staff_attendance_days WHERE financial_year = '2026-27' AND counted_in_reports GROUP BY month ORDER BY month"
+        },
+        {
+          "question": "Absent days in October, teaching vs non-teaching",
+          "sql": "SELECT s.staff_group, count(*) FILTER (WHERE a.is_absent) AS absent_days FROM nlq.staff_attendance_days a JOIN nlq.staff s ON s.employee_id = a.employee_id WHERE a.month = DATE '2026-10-01' GROUP BY s.staff_group ORDER BY absent_days DESC"
+        }
+      ]
+    },
+    {
+      "view": "staff_leave_balances",
+      "area": "Staff",
+      "oneRowIs": "the leave ledger of one employee × leave type × month (balance-keeping types only)",
+      "rights": ["leave.office.manage", "leave.report.view"],
+      "columns": {
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "department": "label",
+        "designation": "label",
+        "employee_is_current": "flag",
+        "leave_type": "label",
+        "leave_type_name": "label",
+        "month": "month",
+        "financial_year": "label",
+        "opening": "number",
+        "credited": "number",
+        "used": "number",
+        "used_pending": "number",
+        "correction": "number",
+        "lapsed": "number",
+        "balance": "number",
+        "is_closed": "flag",
+        "is_imported": "flag",
+        "is_latest": "flag"
+      },
+      "examples": [
+        {
+          "question": "What CL and EL balance does each employee have now?",
+          "sql": "SELECT employee_code, employee_name, leave_type, balance, used_pending FROM nlq.staff_leave_balances WHERE is_latest AND employee_is_current AND leave_type IN ('CL', 'EL') ORDER BY employee_name, leave_type"
+        },
+        {
+          "question": "Who has less than 2 days of casual leave left?",
+          "sql": "SELECT employee_code, employee_name, department, balance FROM nlq.staff_leave_balances WHERE is_latest AND employee_is_current AND leave_type = 'CL' AND balance < 2 ORDER BY balance, employee_name"
+        },
+        {
+          "question": "Total leave days left by department and leave type",
+          "sql": "SELECT department, leave_type, sum(balance) AS days_left, count(*) AS staff FROM nlq.staff_leave_balances WHERE is_latest AND employee_is_current GROUP BY department, leave_type ORDER BY department, leave_type"
+        },
+        {
+          "question": "How many leave days lapsed at the end of last leave year?",
+          "sql": "SELECT leave_type, sum(lapsed) AS days_lapsed, count(*) FILTER (WHERE lapsed > 0) AS staff_who_lost_days FROM nlq.staff_leave_balances WHERE month = DATE '2026-03-01' GROUP BY leave_type ORDER BY days_lapsed DESC"
+        },
+        {
+          "question": "Show employee E0123's leave ledger month by month this year",
+          "sql": "SELECT month, leave_type, opening, credited, used, correction, lapsed, balance FROM nlq.staff_leave_balances WHERE employee_code = 'E0123' AND financial_year = '2026-27' ORDER BY leave_type, month"
+        }
+      ]
+    },
+    {
+      "view": "staff_leave_days",
+      "area": "Staff",
+      "oneRowIs": "one approved day (or half day) of staff leave: employee × day × leave application",
+      "rights": ["leave.office.manage", "leave.report.view"],
+      "columns": {
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "department": "label",
+        "designation": "label",
+        "leave_date": "date",
+        "month": "month",
+        "financial_year": "label",
+        "leave_type": "label",
+        "leave_type_name": "label",
+        "days": "number",
+        "is_half_day": "flag",
+        "half": "label",
+        "is_paid": "flag",
+        "is_loss_of_pay": "flag",
+        "counts_as_present": "flag",
+        "pay_percent": "percent",
+        "day_kind": "label",
+        "is_working_day": "flag",
+        "request_id": "id",
+        "leave_number": "label",
+        "leave_from": "date",
+        "leave_to": "date",
+        "applied_on": "date",
+        "how_applied": "label",
+        "is_system_deduction": "flag",
+        "cancellation_asked": "flag",
+        "counted_in_reports": "flag"
+      },
+      "examples": [
+        {
+          "question": "How many days of each leave type were taken this year?",
+          "sql": "SELECT leave_type, leave_type_name, sum(days) AS days_taken, count(DISTINCT employee_id) AS staff FROM nlq.staff_leave_days WHERE financial_year = '2026-27' AND counted_in_reports GROUP BY leave_type, leave_type_name ORDER BY days_taken DESC"
+        },
+        {
+          "question": "Who is on leave today?",
+          "sql": "SELECT employee_name, department, leave_type, half FROM nlq.staff_leave_days WHERE leave_date = DATE '2026-11-23' AND is_working_day AND NOT counts_as_present ORDER BY department, employee_name"
+        },
+        {
+          "question": "Leave days by department, month by month this year",
+          "sql": "SELECT department, month, sum(days) AS leave_days FROM nlq.staff_leave_days WHERE financial_year = '2026-27' AND NOT counts_as_present GROUP BY department, month ORDER BY department, month"
+        },
+        {
+          "question": "Which 10 staff took the most leave this year?",
+          "sql": "SELECT employee_code, employee_name, sum(days) AS leave_days FROM nlq.staff_leave_days WHERE financial_year = '2026-27' AND NOT counts_as_present GROUP BY employee_code, employee_name ORDER BY leave_days DESC LIMIT 10"
+        },
+        {
+          "question": "Loss-of-pay days per employee in October, and how many the system charged",
+          "sql": "SELECT employee_code, employee_name, sum(days) AS lop_days, sum(days) FILTER (WHERE is_system_deduction) AS charged_by_system FROM nlq.staff_leave_days WHERE is_loss_of_pay AND month = DATE '2026-10-01' GROUP BY employee_code, employee_name ORDER BY lop_days DESC"
+        }
+      ]
+    },
+    {
+      "view": "stock_balances",
+      "area": "Purchase",
+      "oneRowIs": "an item in a store now (in hand, reserved, free, value, reorder level)",
+      "rights": ["purchase.store.view", "purchase.report.view"],
+      "columns": {
+        "store_id": "id",
+        "store": "label",
+        "store_kind": "label",
+        "item_id": "id",
+        "item_code": "label",
+        "item": "label",
+        "category": "label",
+        "sub_category": "label",
+        "item_type": "label",
+        "unit": "label",
+        "qty": "number",
+        "reserved_qty": "number",
+        "free_qty": "number",
+        "value": "money",
+        "avg_rate": "money",
+        "last_move_on": "date",
+        "reorder_level": "number",
+        "reorder_qty": "number",
+        "max_qty": "number",
+        "below_reorder": "flag"
+      },
+      "examples": [
+        {
+          "question": "What is our stock worth in each store?",
+          "sql": "SELECT store, sum(value) AS stock_value, count(*) FILTER (WHERE qty > 0) AS items_in_stock FROM nlq.stock_balances GROUP BY store ORDER BY stock_value DESC"
+        },
+        {
+          "question": "Which items are at or below their reorder level?",
+          "sql": "SELECT store, item, free_qty, reorder_level, reorder_qty, unit FROM nlq.stock_balances WHERE below_reorder ORDER BY store, item"
+        },
+        {
+          "question": "What is the stock value by item category?",
+          "sql": "SELECT category, sum(value) AS stock_value FROM nlq.stock_balances GROUP BY category ORDER BY stock_value DESC"
+        },
+        {
+          "question": "Which items in stock have not moved for 90 days?",
+          "sql": "SELECT store, item, qty, unit, value, last_move_on FROM nlq.stock_balances WHERE qty > 0 AND last_move_on < current_date - 90 ORDER BY value DESC"
+        }
+      ]
+    },
+    {
+      "view": "stock_ledger",
+      "area": "Purchase",
+      "oneRowIs": "one move of an item into or out of a store (signed, store units)",
+      "rights": ["purchase.store.view", "purchase.report.view"],
+      "columns": {
+        "move_id": "id",
+        "moved_on": "date",
+        "month": "month",
+        "financial_year": "label",
+        "store_id": "id",
+        "store": "label",
+        "item_id": "id",
+        "item_code": "label",
+        "item": "label",
+        "category": "label",
+        "item_type": "label",
+        "kind": "label",
+        "kind_words": "label",
+        "direction": "label",
+        "qty": "number",
+        "unit": "label",
+        "rate": "money",
+        "value": "money",
+        "batch_no": "label",
+        "expiry_date": "date",
+        "document_no": "label",
+        "department_id": "id",
+        "department": "label",
+        "other_store": "label",
+        "is_internal": "flag",
+        "is_consumption": "flag"
+      },
+      "examples": [
+        {
+          "question": "How much stock did each department consume this month?",
+          "sql": "SELECT department, -sum(value) AS consumed_value FROM nlq.stock_ledger WHERE is_consumption AND moved_on >= date_trunc('month', current_date)::date GROUP BY department ORDER BY consumed_value DESC"
+        },
+        {
+          "question": "What value of goods came into the stores each month this financial year?",
+          "sql": "SELECT month, sum(value) AS received_value FROM nlq.stock_ledger WHERE kind = 'receipt' AND financial_year = '2026-27' GROUP BY month ORDER BY month"
+        },
+        {
+          "question": "What was the stock worth in each store on 31 March 2026?",
+          "sql": "SELECT store, sum(value) AS stock_value FROM nlq.stock_ledger WHERE moved_on <= DATE '2026-03-31' GROUP BY store ORDER BY store"
+        },
+        {
+          "question": "What was written off or lost in physical counts this year?",
+          "sql": "SELECT kind_words, item, sum(qty) AS qty, min(unit) AS unit, sum(value) AS value FROM nlq.stock_ledger WHERE kind IN ('write_off', 'adjustment') AND financial_year = '2026-27' GROUP BY kind_words, item ORDER BY value"
+        }
+      ]
+    },
+    {
+      "view": "student_leaves",
+      "area": "Attendance",
+      "oneRowIs": "one leave application for a pupil",
+      "rights": ["attendance.setup.manage", "attendance.session.view"],
+      "columns": {
+        "leave_id": "id",
+        "leave_no": "label",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "leave_type": "label",
+        "leave_type_name": "label",
+        "from_date": "date",
+        "to_date": "date",
+        "last_date": "date",
+        "month": "month",
+        "days": "number",
+        "days_taken": "number",
+        "is_long": "flag",
+        "status": "label",
+        "waiting_at": "label",
+        "ended_early": "flag",
+        "applied_on": "date",
+        "decided_on": "date"
+      },
+      "examples": [
+        {
+          "question": "Which pupils are on leave today?",
+          "sql": "SELECT class_section, admission_no, student_name, leave_type_name, from_date, last_date FROM nlq.student_leaves WHERE status = 'approved' AND from_date <= (now() AT TIME ZONE 'Asia/Kolkata')::date AND last_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date ORDER BY class_order, section, student_name"
+        },
+        {
+          "question": "Pending leave applications and where they wait",
+          "sql": "SELECT waiting_at, count(*) AS leaves, min(applied_on) AS oldest_applied FROM nlq.student_leaves WHERE status = 'pending' GROUP BY waiting_at ORDER BY leaves DESC"
+        },
+        {
+          "question": "Leave applications by type this year with how many were approved",
+          "sql": "SELECT l.leave_type_name, count(*) AS applications, count(*) FILTER (WHERE l.status = 'approved') AS approved, sum(l.days_taken) AS days_taken FROM nlq.student_leaves l JOIN nlq.academic_years y ON y.academic_year_id = l.academic_year_id WHERE y.is_current GROUP BY l.leave_type_name ORDER BY applications DESC"
+        },
+        {
+          "question": "Approved leave days by class, month by month",
+          "sql": "SELECT l.class, l.month, count(*) AS leaves, sum(l.days_taken) AS days_taken FROM nlq.student_leaves l JOIN nlq.academic_years y ON y.academic_year_id = l.academic_year_id WHERE y.is_current AND l.status = 'approved' GROUP BY l.class, l.class_order, l.month ORDER BY l.class_order, l.month"
+        }
+      ]
+    },
+    {
+      "view": "teacher_subjects",
+      "area": "Staff",
+      "oneRowIs": "one live teacher assignment: teacher × class section × subject (or class teacher / coordinator role) in an academic year",
+      "rights": ["academics.teacher_assignment.view", "people.employee.view"],
+      "columns": {
+        "employee_id": "id",
+        "employee_code": "label",
+        "employee_name": "label",
+        "department": "label",
+        "designation": "label",
+        "employee_is_current": "flag",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class_section_id": "id",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "subject_id": "id",
+        "subject": "label",
+        "subject_code": "label",
+        "kind": "label",
+        "role": "label",
+        "is_class_teacher": "flag",
+        "can_mark_attendance": "flag",
+        "from_date": "date"
+      },
+      "examples": [
+        {
+          "question": "Who teaches Mathematics, and in which sections, this year?",
+          "sql": "SELECT employee_name, string_agg(class_section, ', ' ORDER BY class_order, section) AS sections FROM nlq.teacher_subjects WHERE academic_year = '2026-27' AND subject = 'Mathematics' AND kind = 'subject_teacher' GROUP BY employee_name ORDER BY employee_name"
+        },
+        {
+          "question": "List the class teacher of every section",
+          "sql": "SELECT class_section, employee_name AS class_teacher FROM nlq.teacher_subjects WHERE academic_year = '2026-27' AND is_class_teacher ORDER BY class_order, section"
+        },
+        {
+          "question": "How many sections and subjects does each teacher take?",
+          "sql": "SELECT employee_code, employee_name, count(DISTINCT class_section_id) AS sections, count(DISTINCT subject_id) AS subjects FROM nlq.teacher_subjects WHERE academic_year = '2026-27' AND kind = 'subject_teacher' GROUP BY employee_code, employee_name ORDER BY sections DESC"
+        },
+        {
+          "question": "Which teachers who have left still hold classes?",
+          "sql": "SELECT employee_code, employee_name, role, class_section, subject FROM nlq.teacher_subjects WHERE academic_year = '2026-27' AND NOT employee_is_current ORDER BY employee_name, class_order"
+        },
+        {
+          "question": "Who teaches what in Class X, with their designation?",
+          "sql": "SELECT t.class_section, t.subject, t.employee_name, s.designation FROM nlq.teacher_subjects t JOIN nlq.staff s ON s.employee_id = t.employee_id WHERE t.academic_year = '2026-27' AND t.class = 'Class X' AND t.kind = 'subject_teacher' ORDER BY t.section, t.subject"
+        }
+      ]
+    },
+    {
+      "view": "term_results",
+      "area": "Exams",
+      "oneRowIs": "one pupil's term or annual result from the class's locked result register",
+      "rights": ["exams.marks.view", "exams.registers.manage", "exams.report_card.view"],
+      "columns": {
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id",
+        "enrolment_status": "label",
+        "term_code": "label",
+        "register_name": "label",
+        "total": "number",
+        "max_total": "number",
+        "percent": "percent",
+        "grade": "label",
+        "division": "label",
+        "result": "label",
+        "failed_count": "count",
+        "failed_subjects": "text",
+        "rank_in_section": "number",
+        "rank_in_class": "number",
+        "computed_on": "date"
+      },
+      "examples": [
+        {
+          "question": "List of pupils with compartment or fail in the final result",
+          "sql": "SELECT t.class_section, t.admission_no, t.student_name, t.result, t.failed_count, t.failed_subjects, t.percent FROM nlq.term_results t JOIN nlq.academic_years y ON y.academic_year_id = t.academic_year_id AND y.is_current WHERE t.term_code = 'FINAL' AND t.result IN ('compartment', 'fail') ORDER BY t.class_order, t.class_section, t.result, t.student_name"
+        },
+        {
+          "question": "Pass, compartment and fail count by class for Term 1",
+          "sql": "SELECT t.class, count(*) FILTER (WHERE t.result = 'pass') AS passed, count(*) FILTER (WHERE t.result = 'compartment') AS compartment, count(*) FILTER (WHERE t.result = 'fail') AS failed, count(*) FILTER (WHERE t.result IN ('absent', 'incomplete')) AS no_result_yet FROM nlq.term_results t JOIN nlq.academic_years y ON y.academic_year_id = t.academic_year_id AND y.is_current WHERE t.term_code = 'T1' GROUP BY t.class_order, t.class ORDER BY t.class_order"
+        },
+        {
+          "question": "Division-wise number of pupils who passed the final result, by class",
+          "sql": "SELECT t.class, COALESCE(t.division, 'No division') AS division, count(*) AS pupils FROM nlq.term_results t JOIN nlq.academic_years y ON y.academic_year_id = t.academic_year_id AND y.is_current WHERE t.term_code = 'FINAL' AND t.result = 'pass' GROUP BY t.class_order, t.class, t.division ORDER BY t.class_order, t.division"
+        },
+        {
+          "question": "Who topped each class in the final result?",
+          "sql": "SELECT t.class, t.admission_no, t.student_name, t.class_section, t.total, t.max_total, t.percent FROM nlq.term_results t JOIN nlq.academic_years y ON y.academic_year_id = t.academic_year_id AND y.is_current WHERE t.term_code = 'FINAL' AND t.rank_in_class = 1 ORDER BY t.class_order, t.student_name"
+        }
+      ]
+    },
+    {
+      "view": "transport_riders",
+      "area": "Transport",
+      "oneRowIs": "one pupil in one month they ride the school bus",
+      "rights": ["transport.route.view", "transport.request.view"],
+      "columns": {
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label",
+        "academic_year_id": "id",
+        "academic_year": "label",
+        "month": "month",
+        "is_current_month": "flag",
+        "service": "label",
+        "route_id": "id",
+        "route_code": "label",
+        "route_name": "label",
+        "stop_name": "label",
+        "pick_route_id": "id",
+        "pick_route_code": "label",
+        "pick_stop_name": "label",
+        "pickup_time": "text",
+        "drop_route_id": "id",
+        "drop_route_code": "label",
+        "drop_stop_name": "label",
+        "drop_time": "text",
+        "rides_morning": "flag",
+        "rides_afternoon": "flag",
+        "monthly_amount": "money",
+        "class": "label",
+        "class_order": "number",
+        "section": "label",
+        "class_section": "label",
+        "class_section_id": "id"
+      },
+      "examples": [
+        {
+          "question": "How many pupils use the school bus this month?",
+          "sql": "SELECT count(DISTINCT student_id) AS pupils_on_bus\n  FROM nlq.transport_riders\n WHERE is_current_month"
+        },
+        {
+          "question": "How many bus pupils are there in each class this month?",
+          "sql": "SELECT class, count(DISTINCT student_id) AS pupils_on_bus\n  FROM nlq.transport_riders\n WHERE is_current_month\n GROUP BY class, class_order\n ORDER BY class_order"
+        },
+        {
+          "question": "How has the number of bus pupils changed month by month?",
+          "sql": "SELECT academic_year, month, count(DISTINCT student_id) AS pupils_on_bus\n  FROM nlq.transport_riders\n GROUP BY academic_year, month\n ORDER BY month"
+        },
+        {
+          "question": "Which pupils board route R01 in the morning, and at which stop?",
+          "sql": "SELECT student_name, admission_no, class_section, pick_stop_name, pickup_time\n  FROM nlq.transport_riders\n WHERE is_current_month AND rides_morning AND pick_route_code = 'R01'\n ORDER BY pickup_time, student_name"
+        },
+        {
+          "question": "What is the expected transport amount per route this month?",
+          "sql": "SELECT route_code, route_name, count(DISTINCT student_id) AS pupils, sum(monthly_amount) AS expected_monthly_rupees\n  FROM nlq.transport_riders\n WHERE is_current_month\n GROUP BY route_code, route_name\n ORDER BY route_code"
+        }
+      ]
+    },
+    {
+      "view": "transport_routes",
+      "area": "Transport",
+      "oneRowIs": "one bus route with its vehicle, crew and riders this month",
+      "rights": ["transport.route.view", "transport.fleet.view"],
+      "columns": {
+        "route_id": "id",
+        "route_code": "label",
+        "route_name": "label",
+        "status": "label",
+        "vehicle_id": "id",
+        "vehicle_reg_no": "label",
+        "vehicle_name": "label",
+        "vehicle_type": "label",
+        "capacity": "number",
+        "driver_name": "label",
+        "conductor_name": "label",
+        "has_stand_in_today": "flag",
+        "stand_in_reg_no": "label",
+        "stops": "count",
+        "morning_riders": "count",
+        "afternoon_riders": "count",
+        "riders": "count",
+        "morning_fill_percent": "percent",
+        "late_after": "text"
+      },
+      "examples": [
+        {
+          "question": "Which buses are more than 90% full in the morning?",
+          "sql": "SELECT route_code, route_name, vehicle_reg_no, capacity, morning_riders, morning_fill_percent\n  FROM nlq.transport_routes\n WHERE status = 'active' AND morning_fill_percent >= 90\n ORDER BY morning_fill_percent DESC"
+        },
+        {
+          "question": "List the routes with their bus, driver and conductor.",
+          "sql": "SELECT route_code, route_name, vehicle_reg_no, driver_name, conductor_name, stops, riders\n  FROM nlq.transport_routes\n WHERE status = 'active'\n ORDER BY route_code"
+        },
+        {
+          "question": "Which routes are running a stand-in bus today?",
+          "sql": "SELECT route_code, vehicle_reg_no, stand_in_reg_no\n  FROM nlq.transport_routes\n WHERE has_stand_in_today\n ORDER BY route_code"
+        },
+        {
+          "question": "How many seats are free on each route in the morning?",
+          "sql": "SELECT route_code, capacity, morning_riders, capacity - morning_riders AS seats_free_morning\n  FROM nlq.transport_routes\n WHERE status = 'active' AND capacity IS NOT NULL\n ORDER BY seats_free_morning DESC"
+        }
+      ]
+    },
+    {
+      "view": "visitors",
+      "area": "Engagement",
+      "oneRowIs": "one visit through the school gate (walk-in, self-registered or appointment)",
+      "rights": ["engagement.visitor.manage"],
+      "columns": {
+        "visit_id": "id",
+        "number": "label",
+        "visit_on": "date",
+        "month": "month",
+        "in_time": "label",
+        "in_hour": "number",
+        "out_time": "label",
+        "minutes_inside": "number",
+        "state": "label",
+        "inside_now": "flag",
+        "source": "label",
+        "by_appointment": "flag",
+        "purpose": "label",
+        "visitor_type": "label",
+        "people": "count",
+        "host": "label",
+        "host_kind": "label",
+        "host_employee_id": "id",
+        "host_employee_name": "label",
+        "gate": "label",
+        "exit_gate": "label",
+        "hostel_visit": "flag",
+        "hostel": "label",
+        "warden_decision": "label",
+        "student_id": "id",
+        "admission_no": "label",
+        "student_name": "label"
+      },
+      "examples": [
+        {
+          "question": "How many visitors came each day this week?",
+          "sql": "SELECT visit_on, count(*) AS visits, sum(people) AS people, count(*) FILTER (WHERE by_appointment) AS by_appointment FROM nlq.visitors WHERE visit_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 6 GROUP BY visit_on ORDER BY visit_on"
+        },
+        {
+          "question": "How many visitors are inside now, and whom are they meeting?",
+          "sql": "SELECT host, count(*) AS visits, sum(people) AS people FROM nlq.visitors WHERE inside_now GROUP BY host ORDER BY people DESC"
+        },
+        {
+          "question": "What did visitors come for this month, and how long did they stay?",
+          "sql": "SELECT purpose, count(*) AS visits, round(avg(minutes_inside)) AS avg_minutes_inside FROM nlq.visitors WHERE month = date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata')::date GROUP BY purpose ORDER BY visits DESC"
+        },
+        {
+          "question": "What are the busiest hours at the gate?",
+          "sql": "SELECT in_hour, count(*) AS visits FROM nlq.visitors WHERE visit_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 29 GROUP BY in_hour ORDER BY in_hour"
+        },
+        {
+          "question": "Which staff members had the most visitors this month?",
+          "sql": "SELECT s.employee_name, s.department, count(*) AS visits FROM nlq.visitors v JOIN nlq.staff s ON s.employee_id = v.host_employee_id WHERE v.month = date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata')::date GROUP BY s.employee_name, s.department ORDER BY visits DESC LIMIT 10"
+        }
+      ]
+    }
+  ]
+}

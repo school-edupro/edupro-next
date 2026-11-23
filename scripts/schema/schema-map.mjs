@@ -91,13 +91,13 @@ const tables = await q(`
   SELECT n.nspname AS schema, c.relname AS name, c.relkind AS kind, c.relforcerowsecurity AS force_rls,
          c.relrowsecurity AS rls, obj_description(c.oid, 'pg_class') AS comment
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-   WHERE n.nspname IN ('public', 'mart') AND c.relkind IN ('r', 'p', 'v') AND NOT c.relispartition
+   WHERE n.nspname IN ('public', 'mart', 'nlq') AND c.relkind IN ('r', 'p', 'v') AND NOT c.relispartition
    ORDER BY 1, 2`);
 const columns = await q(`
   SELECT n.nspname AS schema, c.relname AS table, a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type,
          a.attnotnull AS not_null, col_description(c.oid, a.attnum) AS comment
     FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace
-   WHERE n.nspname IN ('public', 'mart') AND c.relkind IN ('r', 'p', 'v') AND NOT c.relispartition
+   WHERE n.nspname IN ('public', 'mart', 'nlq') AND c.relkind IN ('r', 'p', 'v') AND NOT c.relispartition
      AND a.attnum > 0 AND NOT a.attisdropped
    ORDER BY 1, 2, a.attnum`);
 const keys = await q(`
@@ -119,7 +119,7 @@ const out = {};
 const missing = [];
 for (const t of tables) {
   const full = t.schema === 'public' ? t.name : `${t.schema}.${t.name}`;
-  const module = t.schema === 'mart' ? 'marts' : moduleOf(t.name);
+  const module = t.schema === 'mart' ? 'marts' : t.schema === 'nlq' ? 'nlq' : moduleOf(t.name);
   if (!module) missing.push(full);
   const mine = keys.filter((k) => t.schema === 'public' && k.table === t.name);
   out[full] = {
