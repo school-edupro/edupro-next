@@ -88,6 +88,39 @@ export * from './admission-engine';
 export * from './mark-register';
 export * from './grade-register';
 export * from './register-views';
+export * from './leave-views';
+// the Employee Leave / Attendance page's parts (docs/design/99), shared by the admin and the staff website
+export {
+  ListBar as LeaveListBar,
+  SizeLinks as LeaveSizeLinks,
+  Showing as LeaveShowing,
+  DownloadMenu as LeaveDownloadMenu,
+  Pages as LeavePages,
+} from './components/LeaveListBar';
+export { LeaveDialogButton } from './components/LeaveDialogButton';
+export {
+  DateChips as LeaveDateChips,
+  LeaveStatusCell,
+  halfWords as leaveHalfWords,
+  when as leaveWhen,
+} from './components/LeaveCells';
+export {
+  MyLeaveTab,
+  TeamLeaveTab,
+  TeamAttendanceTab,
+  TeamAttendanceGrid,
+  ADMIN_LEAVE_PATHS,
+  type LeavePaths,
+  type LeaveAct,
+  type LeaveFileLink,
+} from './components/LeaveTabs';
+export {
+  LeaveBalanceSection,
+  LeaveTabsNav,
+  MyAttendanceTab,
+  LEAVE_TABS,
+  type LeaveTab,
+} from './components/LeavePageParts';
 export { CountDrill } from './components/CountDrill';
 export { RegisterSheet } from './components/RegisterSheet';
 export { RegisterDownloads } from './components/RegisterDownloads';
