@@ -63,4 +63,13 @@ no-dues clearances).
   `approvals-inbox` (the record and its decision, not another's, a file not named, gone once decided; every record
   route exists), app 305 (Details with a file and the decision, a receipt's details, the menu pages, light / dark /
   Hindi, twice the text).
+- **B, C (23 Nov 2026).** Record routes for the purchase kinds — indents, orders, requisitions and comparative
+  statements (`/purchase/requisitions/:id`), receipts, issues, counts, condemnations, vendors (the vendor's record,
+  from its row: the item's id is `vendor-<approval>`) — and the office kinds: approval steps (the step's instance,
+  `/workflow/instances/:id`, from its row), withdrawals, school transfers, transport requests, file movement, exits.
+  `DetailConfig` gains `row` (the item's row where its id is not the row's: vendors, assets handed over) and `get`
+  takes the row. Kinds without a record route keep their list row: profile and staff profile changes, fee
+  adjustments and requests, rate corrections, vacancies, ACRs, no-dues, consents, hostel visits, assets handed to
+  you, attendance corrections. Checked on Alpha: an approval step (the request, its purpose, its steps) and a purchase
+  order (line items, GST summary, sourcing, revisions, payment terms, steps, history).
 

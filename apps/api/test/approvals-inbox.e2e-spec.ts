@@ -329,7 +329,7 @@ describe('approvals inbox (e2e)', () => {
         faults.push(`${src.kind}: list route missing`);
       if (l.statusCode === 400) faults.push(`${src.kind}: list ${l.body}`);
       // the record route the Details screen reads (docs/design/100)
-      const g = src.detail?.get?.('999999999');
+      const g = src.detail?.get?.('999999999', null);
       if (g) {
         const d = await inject({ method: g.method, url: g.url, headers: h });
         if (d.statusCode === 404 && /Cannot (GET|POST)/.test(d.body))

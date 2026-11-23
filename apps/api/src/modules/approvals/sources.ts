@@ -34,7 +34,16 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: ['workflow.inbox.act'],
     app: 'admin',
     list: { method: 'GET', url: '/workflow/inbox' },
-    detail: { hide: ['roleCodes', 'need', 'definitionCode', 'entityType', 'currentLevel'] },
+    detail: {
+      // the step's instance holds the request (its subject, who asked, the levels)
+      get: (_id, row) => {
+        const i = row?.instance as Record<string, unknown> | undefined;
+        return i?.id === undefined
+          ? null
+          : { method: 'GET', url: `/workflow/instances/${String(i.id)}` };
+      },
+      hide: ['roleCodes', 'need', 'definitionCode', 'entityType', 'currentLevel'],
+    },
     reasonOnReject: false,
     items: (a) =>
       rows(a)
@@ -124,6 +133,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/indents?view=waiting&status=submitted&size=100' },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/indents/${id}` }) },
     total: (a) => count(a, 'total'),
     items: (a) =>
       rows(a).map((x) =>
@@ -150,7 +160,10 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/orders?view=waiting&status=submitted&size=100' },
-    detail: { hide: ['label', 'revision'] },
+    detail: {
+      get: (id) => ({ method: 'GET', url: `/purchase/orders/${id}` }),
+      hide: ['label', 'revision'],
+    },
     total: (a) => count(a, 'waitingForMe'),
     items: (a) =>
       rows(a).map((x) =>
@@ -177,6 +190,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/receipts?mine=1' },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/receipts/${id}` }) },
     total: (a) => count(a, 'total'),
     // quantities line by line: on its own page
     items: (a) =>
@@ -199,6 +213,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/issues?mine=1' },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/issues/${id}` }) },
     total: (a) => count(a, 'toAcknowledge'),
     approveAs: 'acknowledge',
     rejectAs: null,
@@ -230,6 +245,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'admin',
     list: { method: 'GET', url: '/purchase/counts?mine=1' },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/counts/${id}` }) },
     total: (a) => count(a, 'waitingForMe'),
     rejectAs: 'send_back',
     items: (a) =>
@@ -284,6 +300,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'admin',
     list: { method: 'GET', url: '/purchase/condemnations?mine=1' },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/condemnations/${id}` }) },
     // a committee signs, then an approver decides: on its own page
     items: (a) =>
       rows(a, 'rows').map((x) =>
@@ -304,6 +321,13 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'admin',
     list: { method: 'GET', url: '/purchase/vendor-approvals?mine=1' },
+    detail: {
+      row: (a, id) => rows(a).find((x) => `${String(x.kind)}-${String(x.id)}` === id) ?? null,
+      get: (_id, row) =>
+        row?.vendorId === undefined
+          ? null
+          : { method: 'GET', url: `/purchase/vendors/${String(row.vendorId)}` },
+    },
     items: (a) =>
       (((a as Record<string, unknown> | null)?.canApprove ?? true) ? rows(a, 'rows') : []).map(
         (x) =>
@@ -335,6 +359,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/assets-mine' },
+    detail: { row: (a, id) => rows(a).find((x) => String(x.movementId) === id) ?? null },
     approveAs: 'acknowledge',
     rejectAs: null,
     reasonOnReject: false,
@@ -363,6 +388,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/requisitions?view=waiting&status=submitted&size=100' },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/requisitions/${id}` }) },
     total: (a) => count(a, 'waitingForMe'),
     items: (a) =>
       rows(a).map((x) =>
@@ -389,6 +415,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/purchase/requisitions?view=sign&size=100' },
+    detail: { get: (id) => ({ method: 'GET', url: `/purchase/requisitions/${id}` }) },
     total: (a) => count(a, 'total'),
     approveAs: 'sign',
     rejectAs: null,
@@ -477,6 +504,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     needsAll: ['people.withdrawal.view'],
     app: 'admin',
     list: { method: 'GET', url: '/people/withdrawals?mine=true&size=100' },
+    detail: { get: (id) => ({ method: 'GET', url: `/people/withdrawals/${id}` }) },
     total: (a) => count(a, 'page', 'total'),
     // a department's clearance with its dues: on its own page
     items: (a) =>
@@ -498,6 +526,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: ['people.transfer.manage'],
     app: 'admin',
     list: { method: 'GET', url: '/people/school-transfers?box=incoming' },
+    detail: { get: (id) => ({ method: 'GET', url: `/people/school-transfers/${id}` }) },
     // accepting places the student in a class: on its own page
     items: (a) =>
       rows(a)
@@ -601,6 +630,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'admin',
     list: { method: 'GET', url: '/transport/requests/inbox' },
+    detail: { get: (id) => ({ method: 'GET', url: `/transport/requests/${id}` }) },
     total: (a) => count(a, 'waiting'),
     items: (a) =>
       rows(a).map((x) =>
@@ -626,6 +656,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: ['files.movement.raise'],
     app: 'admin',
     list: { method: 'GET', url: '/file-movement?box=inbox' },
+    detail: { get: (id) => ({ method: 'GET', url: `/file-movement/${id}` }) },
     items: (a) =>
       rows(a).map((x) =>
         item({
@@ -816,6 +847,7 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     permissions: [],
     app: 'teacher',
     list: { method: 'GET', url: '/people/exits/to-approve' },
+    detail: { get: (id) => ({ method: 'GET', url: `/people/exits/${id}` }) },
     items: (a) =>
       rows(a).map((x) => {
         const e = (x.employee ?? {}) as Record<string, unknown>;

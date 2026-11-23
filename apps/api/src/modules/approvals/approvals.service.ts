@@ -171,8 +171,9 @@ export class ApprovalsService {
     const listed = source.items(list.body).find((i) => i.id === id);
     if (!listed)
       throw new DomainError('approvals.gone', 'This no longer waits for you.', { status: 404 });
-    let record: unknown = findRow(list.body, id);
-    const get = source.detail?.get?.(id);
+    const row = source.detail?.row ? source.detail.row(list.body, id) : findRow(list.body, id);
+    let record: unknown = row;
+    const get = source.detail?.get?.(id, row);
     if (get) {
       const r = await this.calls.call(req, get.method, get.url, get.body);
       if (r.status < 400) record = r.body;

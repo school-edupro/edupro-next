@@ -53,8 +53,10 @@ export interface ApprovalDetail {
 
 /** How a kind's record is read for the Details screen. */
 export interface DetailConfig {
-  /** the record's own route (called as the person); none: the item's row of the list */
-  get?: (id: string) => RouteCall;
+  /** the record's own route (called as the person), from the item's id and its list row; none: the row is shown */
+  get?: (id: string, row: Record<string, unknown> | null) => RouteCall | null;
+  /** the item's row in the list answer, where its id is not the row's own (`vendor-12`, a movement's id) */
+  row?: (answer: unknown, id: string) => Record<string, unknown> | null;
   /** fields left out (beyond ids, rights and empty ones) */
   hide?: string[];
   /** a field's words where its name does not say it */
