@@ -14,4 +14,6 @@ export const PLATFORM = {
   auditExport: 'platform.audit.export',
   jobsView: 'platform.jobs.view',
   jobsManage: 'platform.jobs.manage',
+  /** docs/design/101: the AI model (LLM) for all schools — in no role; only its holders pass it on */
+  aiModelManage: 'platform.ai_model.manage',
 } as const;

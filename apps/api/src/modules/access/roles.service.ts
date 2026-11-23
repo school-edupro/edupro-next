@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
+import { assertMayPassOn } from '../../common/access/holders-only';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { CreateRoleDto, UpdateRoleDto } from './access.dto';
 import { AccessService, EMPLOYEE_ONLY } from './access.service';
@@ -104,6 +105,8 @@ export class RolesService {
         permissions = [...new Set([...source.permissions, ...permissions])];
       }
       permissions = roleGrantable(permissions);
+      // a right only its holders pass on (docs/design/101)
+      assertMayPassOn(ctx, permissions);
       await this.assertPermissionsExist(c, permissions);
 
       const r = await c.query<{ id: string }>(
@@ -144,11 +147,19 @@ export class RolesService {
       if (dto.name !== undefined) set('name', dto.name);
       if (dto.description !== undefined) set('description', dto.description);
       if (dto.status !== undefined) set('status', dto.status);
+      // a role carrying a right only its holders pass on is switched on again only by them (docs/design/101)
+      if (dto.status !== undefined && dto.status !== before.status)
+        assertMayPassOn(ctx, before.permissions);
       params.push(id);
       // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters
       await c.query(`UPDATE roles SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
       if (dto.permissions !== undefined) {
         const permissions = roleGrantable(dto.permissions);
+        // given or taken away: a right only its holders pass on (docs/design/101)
+        assertMayPassOn(ctx, [
+          ...permissions.filter((p) => !before.permissions.includes(p)),
+          ...before.permissions.filter((p) => !permissions.includes(p)),
+        ]);
         await this.assertPermissionsExist(c, permissions);
         await this.replacePermissions(c, id, permissions);
       }

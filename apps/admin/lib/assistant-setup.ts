@@ -34,6 +34,8 @@ export interface AssistantSetupValues {
 
 /** Claude's state on this server (docs/design/93): Mobilise's key, the audiences it may help, the month. */
 export interface ClaudeInfo {
+  /** docs/design/101: which model helps — the AI model for all schools (llm) or Claude; null: none */
+  provider?: 'llm' | 'claude' | null;
   available: boolean;
   model: string | null;
   audiences: SetupAudience[];

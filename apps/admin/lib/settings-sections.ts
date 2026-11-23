@@ -664,6 +664,28 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     ],
   },
   {
+    // docs/design/101: the AI model (LLM) for all schools — its own page, /system/settings/ai-model
+    id: 'ai-model',
+    title: 'AI model (LLM)',
+    summary:
+      'The AI model set up for all schools, a test of it, and whether this school uses it for its AI reports',
+    fields: [
+      {
+        setting: 'ai.reports_model',
+        label: 'AI reports written by the AI model',
+        help: 'The weekly reports and the Monday brief are written by the AI model set up for all schools, when it is on; otherwise from the standard wording.',
+        control: { kind: 'switch' },
+      },
+    ],
+    related: [
+      {
+        href: '/insights/assistant/setup',
+        label: 'Assistant set-up',
+        help: 'Help from the AI model for the assistant: on or off for teachers and office staff.',
+      },
+    ],
+  },
+  {
     id: 'advanced',
     title: 'Advanced (support)',
     summary:

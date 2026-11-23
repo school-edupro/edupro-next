@@ -399,15 +399,29 @@ export function AssistantSetupEditor({
         data-testid="as-claude"
       >
         <h2 id="as-claude-h" className="ep-cdash__h3" style={{ marginTop: 0 }}>
-          Help from Claude
+          {setup.claudeInfo.provider === 'llm' ? 'Help from the AI model' : 'Help from Claude'}
         </h2>
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          The assistant answers with EduPro&apos;s own rules first. Switched on, a question it
-          cannot place goes to Claude (Anthropic): the question and the records of the approved
-          query it chooses, with phone numbers, e-mails, Aadhaar and addresses masked. Claude only
-          reads through the same approved queries and the person&apos;s own rights; its answers say
-          &ldquo;Answered with Claude&rdquo;.
-        </p>
+        {setup.claudeInfo.provider === 'llm' ? (
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            The assistant answers with EduPro&apos;s own rules first. Switched on, a question it
+            cannot place goes to the AI model set up for all schools (
+            <a href="/system/settings/ai-model" style={{ textDecoration: 'underline' }}>
+              School settings → AI model
+            </a>
+            ; Claude is not used while it is on): the question and the records of the approved query
+            it chooses, with phone numbers, e-mails, Aadhaar and addresses masked. It only reads
+            through the same approved queries and the person&apos;s own rights; its answers say
+            &ldquo;Answered with the AI model&rdquo;.
+          </p>
+        ) : (
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            The assistant answers with EduPro&apos;s own rules first. Switched on, a question it
+            cannot place goes to Claude (Anthropic): the question and the records of the approved
+            query it chooses, with phone numbers, e-mails, Aadhaar and addresses masked. Claude only
+            reads through the same approved queries and the person&apos;s own rights; its answers
+            say &ldquo;Answered with Claude&rdquo;.
+          </p>
+        )}
         {setup.claudeInfo.available ? null : (
           <div
             className="ep-alert ep-alert--info"
@@ -415,8 +429,9 @@ export function AssistantSetupEditor({
             data-testid="as-claude-off"
             style={{ marginBottom: 'var(--sp-3)' }}
           >
-            Claude is not connected on this server yet (Mobilise adds the key). Until then the
-            assistant answers with EduPro&apos;s own rules only; you may still choose who gets it.
+            No AI model or Claude is connected on this server yet (Mobilise sets them up). Until
+            then the assistant answers with EduPro&apos;s own rules only; you may still choose who
+            gets it.
           </div>
         )}
         <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
@@ -429,7 +444,7 @@ export function AssistantSetupEditor({
                 label={AUDIENCE_LABEL[a]}
                 help={
                   open
-                    ? 'Questions EduPro cannot place get Claude’s help.'
+                    ? `Questions EduPro cannot place get ${setup.claudeInfo.provider === 'llm' ? 'the AI model' : 'Claude'}’s help.`
                     : 'Not yet: after the AI assistant consent names Anthropic and families agree again.'
                 }
                 checked={open && values.claude[a]}
@@ -441,7 +456,8 @@ export function AssistantSetupEditor({
         </div>
         <p className="ep-field__help" data-testid="as-claude-month" style={{ marginBottom: 0 }}>
           This month: {String(setup.claudeInfo.usedThisMonth)} of{' '}
-          {String(setup.claudeInfo.monthlyLimit)} Claude answers (
+          {String(setup.claudeInfo.monthlyLimit)}{' '}
+          {setup.claudeInfo.provider === 'llm' ? 'AI model' : 'Claude'} answers (
           {setup.claudeInfo.limitBy === 'school'
             ? 'your school’s limit, set by Mobilise'
             : 'the standard limit, set by Mobilise'}

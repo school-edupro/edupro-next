@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
+import { assertMayGiveRole, assertMayPassOn } from '../../common/access/holders-only';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type {
   AssignmentPeopleQueryDto,
@@ -392,6 +393,8 @@ export class AssignmentsService {
       const role = await this.roles.get(tenant, dto.roleId, c);
       if (role.status !== 'active')
         throw new DomainError('role.inactive', 'The role is inactive', { status: 409 });
+      // a role carrying a right only its holders pass on (docs/design/101)
+      assertMayPassOn(ctx, role.permissions);
 
       if (dto.campusId) {
         const campus = await c.query(
@@ -446,6 +449,8 @@ export class AssignmentsService {
         throw new DomainError('assignment.revoked', 'A revoked assignment cannot be changed', {
           status: 409,
         });
+      // a longer validity gives the role again (docs/design/101)
+      if (dto.validTo !== undefined) await assertMayGiveRole(ctx, c, before.roleId);
       await c.query(
         `UPDATE user_roles SET valid_to = CASE WHEN $2::boolean THEN $3::date ELSE valid_to END,
                                campus_id = CASE WHEN $4::boolean THEN $5 ELSE campus_id END,

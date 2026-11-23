@@ -10,3 +10,4 @@ export * from './narrative';
 export * from './structured';
 export * from './matcher';
 export * from './tool-loop';
+export * from './http-llm.provider';

@@ -1,3 +1,4 @@
+import { MockProvider } from './mock.provider';
 import type { AiProvider } from './provider';
 import { estimateCostPaise } from './budget';
 
@@ -154,4 +155,26 @@ export async function writeNarrative(
     temperature: 0.2,
   });
   return finish(res.text, res.usage, res.model, res.provider);
+}
+
+/**
+ * The narrative by the school group's own model when it is on for the school (docs/design/101), else as before; when
+ * that model fails or cites facts that do not exist, the template (never another outside model). `fellBack` says why.
+ */
+export async function writeNarrativeWith(
+  model: AiProvider | null,
+  otherwise: AiProvider,
+  input: NarrativeInput,
+): Promise<NarrativeResult & { fellBack?: string }> {
+  if (!model) return writeNarrative(otherwise, input);
+  try {
+    const out = await writeNarrative(model, input);
+    if (!out.unknownCitations.length && out.narrative) return out;
+    return { ...(await writeNarrative(new MockProvider(), input)), fellBack: 'uncited facts' };
+  } catch (e) {
+    return {
+      ...(await writeNarrative(new MockProvider(), input)),
+      fellBack: e instanceof Error ? e.message : String(e),
+    };
+  }
 }

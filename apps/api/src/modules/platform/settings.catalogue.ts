@@ -253,6 +253,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Days of vehicle positions kept before the nightly purge (Sprint 17)',
     module: 'transport',
   },
+  'ai.reports_model': {
+    schema: z.boolean(),
+    default: false,
+    description:
+      'AI reports written by the AI model (LLM) set up for all schools, when it is on (docs/design/101); else the template',
+    module: 'insights',
+  },
   'insights.alert_roles': {
     schema: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/),
     default: 'school_admin',

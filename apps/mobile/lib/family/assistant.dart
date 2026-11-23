@@ -66,6 +66,7 @@ extension AssistantWords on S {
   String asstMore(int n) => _as('and $n more', 'और $n');
   String asstSource(String t) => _as('Source: $t', 'स्रोत: $t');
   String get asstByClaude => _as('Answered with Claude', 'Claude की सहायता से उत्तर');
+  String get asstByModel => _as('Answered with the AI model', 'AI मॉडल की सहायता से उत्तर');
   String get asstNeedQuestion =>
       _as('Write a question (at least 2 letters).', 'प्रश्न लिखें (कम से कम 2 अक्षर)।');
   String get asstThinking => _as('Finding the answer…', 'उत्तर खोजा जा रहा है…');
@@ -648,8 +649,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                   onPressed: open,
                 ),
               ),
-            // docs/design/93: a question EduPro's own rules could not place, answered with Claude's help
-            if (d['by'] == 'claude')
+            // docs/design/93: a question EduPro's own rules could not place, answered with Claude's help;
+            // docs/design/101: or with the AI model set up for all schools
+            if (d['by'] == 'claude' || d['by'] == 'llm')
               Padding(
                 key: Key('asstByClaude-$i'),
                 padding: const EdgeInsets.only(top: Tokens.sp1),
@@ -663,7 +665,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                     const SizedBox(width: Tokens.sp1),
                     Flexible(
                       child: Text(
-                        s.asstByClaude,
+                        d['by'] == 'llm' ? s.asstByModel : s.asstByClaude,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: Tokens.fwSemibold,

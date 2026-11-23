@@ -1,7 +1,8 @@
 import { Client } from 'pg';
-import { providerFromEnv, writeNarrative } from '@edupro/ai';
+import { HttpLlmProvider, providerFromEnv, writeNarrativeWith } from '@edupro/ai';
 import {
   collectReportFacts,
+  decryptField,
   nextCronRun,
   REPORT_DEPARTMENTS,
   type Db,
@@ -179,6 +180,29 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
         ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
         NODE_ENV: process.env.NODE_ENV,
       });
+      // docs/design/101: the AI model for all schools, when it is on, writes for the schools that chose it
+      const llm = await db
+        .withoutTenant(async (c) => {
+          const m = (
+            await c.query<{
+              url: string;
+              token: string;
+              reply_field: string | null;
+              timeout_seconds: number;
+              is_on: boolean;
+            }>('SELECT url, token, reply_field, timeout_seconds, is_on FROM app.ai_model_get()')
+          ).rows[0];
+          const token = m?.is_on ? decryptField(m.token) : null;
+          return m && token
+            ? new HttpLlmProvider({
+                url: m.url,
+                token,
+                replyField: m.reply_field,
+                timeoutMs: m.timeout_seconds * 1000,
+              })
+            : null;
+        })
+        .catch(() => null);
       const schools = { rows: await schoolsFor(db, job) };
       const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
       ist.setUTCDate(ist.getUTCDate() - ((ist.getUTCDay() + 7) % 7 || 7));
@@ -207,6 +231,16 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
               })),
             ];
             const summaries: string[] = [];
+            const chosen = llm
+              ? (
+                  await c.query<{ value: unknown }>(
+                    `SELECT value FROM school_settings WHERE key = $1
+                        AND valid_from <= CURRENT_DATE AND (valid_to IS NULL OR valid_to >= CURRENT_DATE)
+                      ORDER BY valid_from DESC, id DESC LIMIT 1`,
+                    ['ai.reports_model'],
+                  )
+                ).rows[0]?.value === true
+              : false;
             for (const sc of scopes) {
               const facts = await collectReportFacts(c, {
                 kind: sc.kind,
@@ -214,7 +248,7 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
                 from,
                 to,
               });
-              const out = await writeNarrative(provider, {
+              const out = await writeNarrativeWith(chosen ? llm : null, provider, {
                 title: sc.title,
                 period: `${from} to ${to}`,
                 school: school.rows[0]?.name ?? '',
@@ -222,6 +256,11 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
                 facts,
                 language: 'en',
               });
+              if (out.fellBack)
+                log.warn(
+                  { schoolId: id, kind: sc.kind, why: out.fellBack },
+                  'the AI model could not write the report; the template wrote it',
+                );
               if (out.unknownCitations.length) {
                 log.warn(
                   { schoolId: id, kind: sc.kind, unknown: out.unknownCitations },

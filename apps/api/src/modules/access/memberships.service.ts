@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { TenantContext } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
+import { assertMayGiveRole } from '../../common/access/holders-only';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { InviteDto, ListMembershipsQueryDto } from './access.dto';
 import { AccessService } from './access.service';
@@ -115,6 +116,8 @@ export class MembershipsService {
           [dto.roleId],
         );
         if ((role.rowCount ?? 0) === 0) throw new DomainError('not-found', 'Role not found');
+        // a role carrying a right only its holders pass on (docs/design/101)
+        await assertMayGiveRole(ctx, c, dto.roleId);
         await c.query(
           `INSERT INTO user_roles (school_id, user_id, role_id, granted_by, reason, created_by, updated_by)
            SELECT app.current_school_id(), $1, $2, app.current_user_id(), 'granted with invitation', app.current_user_id(), app.current_user_id()

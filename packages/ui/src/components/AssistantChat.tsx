@@ -43,7 +43,7 @@ export interface AssistantMessageView {
     didYouMean?: AssistantChipView[];
     suggestions?: AssistantChipView[];
     /** docs/design/93: Claude wrote it (a question EduPro's own rules could not place) */
-    by?: 'local' | 'claude';
+    by?: 'local' | 'claude' | 'llm';
   } | null;
 }
 export interface AssistantStartView {
@@ -120,6 +120,7 @@ const W = {
   sources: ['Sources', 'स्रोत'],
   records: ['The records', 'अभिलेख'],
   byClaude: ['Answered with Claude', 'Claude की सहायता से उत्तर'],
+  byModel: ['Answered with the AI model', 'AI मॉडल की सहायता से उत्तर'],
 } as const;
 
 const pick = (pair: readonly [string, string], lang: Lang) => (lang === 'hi' ? pair[1] : pair[0]);
@@ -465,10 +466,10 @@ export function AssistantChat({
                       </a>
                     </p>
                   ) : null}
-                  {m.role === 'assistant' && d?.by === 'claude' ? (
+                  {m.role === 'assistant' && (d?.by === 'claude' || d?.by === 'llm') ? (
                     <p style={{ margin: 'var(--sp-2) 0 0' }}>
-                      <Badge tone="info" data-by="claude">
-                        {pick(W.byClaude, lang)}
+                      <Badge tone="info" data-by={d.by}>
+                        {pick(d.by === 'llm' ? W.byModel : W.byClaude, lang)}
                       </Badge>
                     </p>
                   ) : null}

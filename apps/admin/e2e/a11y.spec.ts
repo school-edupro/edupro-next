@@ -487,6 +487,7 @@ const PAGES = [
   '/system/settings/attendance',
   '/system/settings/fees',
   '/system/settings/advanced',
+  '/system/settings/ai-model',
   '/system/settings/family-app-layout',
   '/system/settings/staff-app-layout',
   '/system/settings/family-app-layout?for=parent',

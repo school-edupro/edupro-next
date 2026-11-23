@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { providerFromEnv, writeNarrative, type AiProvider } from '@edupro/ai';
+import { providerFromEnv, writeNarrativeWith, type AiProvider } from '@edupro/ai';
 import {
   collectReportFacts,
   REPORT_DEPARTMENTS,
   type ReportDepartment,
   type ReportFact,
 } from '@edupro/db';
+import { AiModelService } from './ai-model.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -83,6 +84,7 @@ export class AiReportsService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly reports: ReportsService,
+    private readonly aiModel: AiModelService,
   ) {
     this.provider = providerFromEnv({
       AI_PROVIDER: env.AI_PROVIDER,
@@ -116,7 +118,15 @@ export class AiReportsService {
         to,
       });
       const title = reportTitle(input.kind, input.department, language);
-      const out = await writeNarrative(this.provider, {
+      // docs/design/101: the AI model for all schools writes it when it is on and the school chose it
+      const chosen = await c.query<{ value: unknown }>(
+        `SELECT value FROM school_settings WHERE key = $1
+            AND valid_from <= CURRENT_DATE AND (valid_to IS NULL OR valid_to >= CURRENT_DATE)
+          ORDER BY valid_from DESC, id DESC LIMIT 1`,
+        ['ai.reports_model'],
+      );
+      const llm = chosen.rows[0]?.value === true ? await this.aiModel.provider() : null;
+      const out = await writeNarrativeWith(llm, this.provider, {
         title,
         period: periodLabel(from, to),
         school: school.rows[0]?.name ?? '',

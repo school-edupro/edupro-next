@@ -153,6 +153,17 @@ class School {
         'by': 'claude',
       };
     }
+    if (w.contains('glimmer')) {
+      // answered with the AI model set up for all schools (docs/design/101)
+      return {
+        'card': null,
+        'link': null,
+        'followUps': [],
+        'didYouMean': [],
+        'suggestions': [],
+        'by': 'llm',
+      };
+    }
     if (w.contains('xyzzy')) {
       return {
         'card': null,
@@ -674,6 +685,28 @@ void main() {
       await tester.enterText(find.byKey(const Key('asstQuestion')), 'blorp');
       await tapIn(tester, find.byKey(const Key('asstAsk')));
       expect(find.text('Claude की सहायता से उत्तर'), findsOneWidget);
+    });
+
+    testWidgets('an answer written with the AI model says so (docs/design/101)', (tester) async {
+      await tall(tester);
+      await pump(
+        tester,
+        const AssistantScreen(profile: staff),
+        school: School(kind: 'staff'),
+      );
+      await tester.enterText(find.byKey(const Key('asstQuestion')), 'glimmer of the term');
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(find.text('Answered with the AI model'), findsOneWidget);
+      expect(find.text('Answered with Claude'), findsNothing);
+      await pump(
+        tester,
+        const AssistantScreen(profile: staff),
+        school: School(kind: 'staff'),
+        hindi: true,
+      );
+      await tester.enterText(find.byKey(const Key('asstQuestion')), 'glimmer');
+      await tapIn(tester, find.byKey(const Key('asstAsk')));
+      expect(find.text('AI मॉडल की सहायता से उत्तर'), findsOneWidget);
     });
 
     testWidgets('earlier conversations open from the header; the bin starts afresh', (
