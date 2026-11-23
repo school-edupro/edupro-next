@@ -21,7 +21,7 @@ The answer is read from the reply: the field named in **Reply field**, else the 
 
 The right **AI model for all schools** (`platform.ai_model.manage`) is in no role, and a school's own admin cannot give
 it (not to a role, not by giving a role that carries it). Mobilise gives it first, as the database owner, from the repo
-root with the `.env` loaded:
+root (`cd ~/Documents/edupro-next`) with the `.env` loaded (`set -a && source .env && set +a`):
 
     node scripts/ai/ai-model-admin.mjs <SCHOOL_CODE>                         who holds it there
     node scripts/ai/ai-model-admin.mjs <SCHOOL_CODE> <sub|e-mail|mobile>     give it
