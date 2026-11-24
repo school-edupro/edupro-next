@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { familyHiddenScreens, familyScreens, type Audience } from '@edupro/menus';
+import {
+  familyHiddenScreens,
+  familyScreens,
+  staffScreens,
+  type Audience,
+  type StaffWaiting,
+} from '@edupro/menus';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -8,15 +14,20 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { AccessService } from '../access/access.service';
 import { FamilyLayoutService } from '../platform/family-layout.service';
 import {
-  FAMILY_HELP_PAGES,
+  STAFF_STANDARD_HEADINGS,
+  STAFF_STANDARD_QUESTIONS,
   STANDARD_HEADINGS,
   STANDARD_QUESTIONS,
+  helpPageAllowed,
+  helpPages,
   type FamilyHelpHeadingDto,
   type FamilyHelpQuestionDto,
+  type HelpApp,
 } from './family-help.dto';
 
 export interface QuestionRow {
   id: string;
+  app: HelpApp;
   headingId: string | null;
   question: string;
   questionHi: string | null;
@@ -34,18 +45,45 @@ export interface QuestionRow {
 }
 export interface HeadingRow {
   id: string;
+  app: HelpApp;
   title: string;
   titleHi: string | null;
   position: number;
   standard: boolean;
 }
 
-const pageLabel = new Map(FAMILY_HELP_PAGES.map((p) => [p.href, p.label]));
+const pageLabels: Record<HelpApp, Map<string, string>> = {
+  family: new Map(helpPages('family').map((p) => [p.href, p.label])),
+  staff: new Map(helpPages('staff').map((p) => [p.href, p.label])),
+};
+const standardOf = (app: HelpApp) =>
+  app === 'staff'
+    ? { headings: STAFF_STANDARD_HEADINGS, questions: STAFF_STANDARD_QUESTIONS }
+    : { headings: STANDARD_HEADINGS, questions: STANDARD_QUESTIONS };
+/** For the staff's Help: a screen opened only when work waits counts as one the person can open. */
+const ANY_WAITING: StaffWaiting = {
+  approvals: 1,
+  profileChanges: 1,
+  exits: 1,
+  noDues: 1,
+  admissions: 1,
+  purchase: 1,
+  requisitions: 1,
+  orders: 1,
+  receipts: 1,
+  issues: 1,
+  assets: 1,
+  staffLeave: 1,
+  staffRegularisations: 1,
+  leaveReports: 1,
+  team: 1,
+};
 
 /**
- * The families' Help page kept by the school (0406): Helpdesk set-up edits the headings and questions (order, shown
- * or hidden, for parents / students / both, the screen each is about); a parent or student reads only what is for
- * them and the screens they can open, and says whether an answer helped.
+ * The Help pages kept by the school: the families' (0406) and the staff's (0422), each its own headings and
+ * questions in the same tables (`app`). Helpdesk set-up edits them (order, shown or hidden, for parents / students /
+ * both on the families' Help, the screen each is about); a reader sees only what is for them and the screens they can
+ * open, and says whether an answer helped.
  */
 @Injectable()
 export class FamilyHelpService {
@@ -58,20 +96,22 @@ export class FamilyHelpService {
 
   // ---------------------------------------------------------------------------------------- reading
 
-  /** The school's Help as the office edits it: every heading and question, with the Yes / No counts. */
-  async setup(ctx: RequestContext) {
+  /** A Help as the office edits it: every heading and question, with the Yes / No counts. */
+  async setup(ctx: RequestContext, app: HelpApp = 'family') {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await this.seeded(c);
-      const headings = await this.headings(c);
-      const questions = await this.questions(c);
+      await this.seeded(c, app);
+      const headings = await this.headings(c, app);
+      const questions = await this.questions(c, app);
+      const standard = standardOf(app);
       return {
+        app,
         headings,
         questions,
-        pages: FAMILY_HELP_PAGES,
+        pages: helpPages(app),
         // the standard headings and questions the school deleted (Restore puts them back)
         standardMissing:
-          Math.max(0, STANDARD_HEADINGS.length - headings.filter((h) => h.standard).length) +
-          Math.max(0, STANDARD_QUESTIONS.length - questions.filter((q) => q.standard).length),
+          Math.max(0, standard.headings.length - headings.filter((h) => h.standard).length) +
+          Math.max(0, standard.questions.length - questions.filter((q) => q.standard).length),
       };
     });
   }
@@ -84,7 +124,7 @@ export class FamilyHelpService {
     const tenant = requireTenant(ctx);
     const permissions = [...(await this.access.effectivePermissions(tenant))];
     return this.db.tenant(tenant, async (c) => {
-      await this.seeded(c);
+      await this.seeded(c, 'family');
       const audience = as ?? (await this.audienceOf(c));
       // the screens the person may open and the school does not hide (docs/design/90)
       const published = await this.layouts.published(ctx, audience);
@@ -94,39 +134,74 @@ export class FamilyHelpService {
           .flatMap((g) => g.items.map((i) => i.href))
           .filter((h) => !hidden.has(h)),
       );
-      const headings = await this.headings(c);
-      const questions = (await this.questions(c)).filter(
+      const questions = (await this.questions(c, 'family')).filter(
         (q) =>
           !q.hidden &&
           (q.audience === 'both' || q.audience === audience) &&
           (q.page === null || open.has(q.page)),
       );
-      const shape = (q: QuestionRow) => ({
-        id: q.id,
-        question: q.question,
-        questionHi: q.questionHi,
-        answer: q.answer,
-        answerHi: q.answerHi,
-        page: q.page,
-        pageLabel: q.page ? (pageLabel.get(q.page) ?? null) : null,
-        myVote: q.myVote,
-      });
-      const groups = [
-        ...headings.map((h) => ({
-          id: h.id as string | null,
-          title: h.title,
-          titleHi: h.titleHi,
-          questions: questions.filter((q) => q.headingId === h.id).map(shape),
-        })),
-        {
-          id: null,
-          title: 'Other questions',
-          titleHi: 'अन्य प्रश्न',
-          questions: questions.filter((q) => q.headingId === null).map(shape),
-        },
-      ].filter((g) => g.questions.length > 0);
-      return { audience, groups };
+      return { audience, groups: this.grouped(await this.headings(c, 'family'), questions) };
     });
+  }
+
+  /**
+   * The Help page of a staff member (0422): the shown staff questions, without those about a staff screen their
+   * rights do not open, under their headings in the school's order ("Other questions" last). Staff only.
+   */
+  async staff(ctx: RequestContext) {
+    const tenant = requireTenant(ctx);
+    const permissions = [...(await this.access.effectivePermissions(tenant))];
+    const open = new Set(
+      staffScreens(permissions, ANY_WAITING).flatMap((g) => g.items.map((i) => i.href)),
+    );
+    return this.db.tenant(tenant, async (c) => {
+      // the staff's Help is for the school's staff (a parent may raise queries too, but reads the families' Help)
+      const staff = await c.query<{ ok: boolean }>(
+        `SELECT EXISTS (SELECT 1 FROM user_school_memberships
+                         WHERE user_id = app.current_user_id() AND school_id = app.current_school_id()
+                           AND person_type::text = 'employee') AS ok`,
+      );
+      if (!staff.rows[0]?.ok)
+        throw new DomainError('forbidden', 'Help for staff is for the school’s staff', {
+          status: 403,
+        });
+      await this.seeded(c, 'staff');
+      const questions = (await this.questions(c, 'staff')).filter(
+        (q) => !q.hidden && (q.page === null || open.has(q.page)),
+      );
+      return {
+        audience: 'staff',
+        groups: this.grouped(await this.headings(c, 'staff'), questions),
+      };
+    });
+  }
+
+  /** The reader's groups: each heading with its questions, then "Other questions"; empty groups left out. */
+  private grouped(headings: HeadingRow[], questions: QuestionRow[]) {
+    const shape = (q: QuestionRow) => ({
+      id: q.id,
+      question: q.question,
+      questionHi: q.questionHi,
+      answer: q.answer,
+      answerHi: q.answerHi,
+      page: q.page,
+      pageLabel: q.page ? (pageLabels[q.app].get(q.page) ?? null) : null,
+      myVote: q.myVote,
+    });
+    return [
+      ...headings.map((h) => ({
+        id: h.id as string | null,
+        title: h.title,
+        titleHi: h.titleHi,
+        questions: questions.filter((q) => q.headingId === h.id).map(shape),
+      })),
+      {
+        id: null,
+        title: 'Other questions',
+        titleHi: 'अन्य प्रश्न',
+        questions: questions.filter((q) => q.headingId === null).map(shape),
+      },
+    ].filter((g) => g.questions.length > 0);
   }
 
   /** A parent or student says whether an answer helped (once per question; a second answer replaces the first). */
@@ -149,20 +224,20 @@ export class FamilyHelpService {
 
   // ---------------------------------------------------------------------------------------- the office
 
-  async addHeading(ctx: RequestContext, dto: FamilyHelpHeadingDto) {
+  async addHeading(ctx: RequestContext, dto: FamilyHelpHeadingDto, app: HelpApp = 'family') {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await this.seeded(c);
+      await this.seeded(c, app);
       const r = await c.query<{ id: string }>(
-        `INSERT INTO family_help_headings (school_id, title, title_hi, position, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2,
-                 (SELECT COALESCE(max(position), 0) + 1 FROM family_help_headings WHERE deleted_at IS NULL),
+        `INSERT INTO family_help_headings (school_id, app, title, title_hi, position, created_by, updated_by)
+         VALUES (app.current_school_id(), $3, $1, $2,
+                 (SELECT COALESCE(max(position), 0) + 1 FROM family_help_headings WHERE app = $3 AND deleted_at IS NULL),
                  app.current_user_id(), app.current_user_id())
          RETURNING id::text`,
-        [dto.title, dto.titleHi ?? null],
+        [dto.title, dto.titleHi ?? null, app],
       );
       const id = r.rows[0]!.id;
       await this.audit.stage(ctx, c, {
-        action: 'helpdesk.family_help.heading_added',
+        action: `helpdesk.${app}_help.heading_added`,
         entityType: 'family_help_headings',
         entityId: id,
         after: dto,
@@ -180,7 +255,7 @@ export class FamilyHelpService {
         [id, dto.title, dto.titleHi ?? null],
       );
       await this.audit.stage(ctx, c, {
-        action: 'helpdesk.family_help.heading_changed',
+        action: `helpdesk.${before.app}_help.heading_changed`,
         entityType: 'family_help_headings',
         entityId: id,
         before: { title: before.title, titleHi: before.titleHi },
@@ -196,17 +271,18 @@ export class FamilyHelpService {
       const before = await this.heading(c, id);
       const moved = await c.query(
         `UPDATE family_help_questions SET heading_id = NULL,
-                position = (SELECT COALESCE(max(position), 0) FROM family_help_questions WHERE heading_id IS NULL AND deleted_at IS NULL) + position,
+                position = (SELECT COALESCE(max(position), 0) FROM family_help_questions
+                             WHERE app = $2 AND heading_id IS NULL AND deleted_at IS NULL) + position,
                 updated_by = app.current_user_id(), updated_at = now()
           WHERE heading_id = $1 AND deleted_at IS NULL`,
-        [id],
+        [id, before.app],
       );
       await c.query(
         `UPDATE family_help_headings SET deleted_at = now(), updated_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
         [id],
       );
       await this.audit.stage(ctx, c, {
-        action: 'helpdesk.family_help.heading_deleted',
+        action: `helpdesk.${before.app}_help.heading_deleted`,
         entityType: 'family_help_headings',
         entityId: id,
         before: { title: before.title, questionsMoved: moved.rowCount ?? 0 },
@@ -217,24 +293,24 @@ export class FamilyHelpService {
 
   async moveHeading(ctx: RequestContext, id: string, direction: 'up' | 'down') {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await this.heading(c, id);
-      const order = (await this.headings(c)).map((h) => h.id);
+      const h = await this.heading(c, id);
+      const order = (await this.headings(c, h.app)).map((x) => x.id);
       await this.reorder(c, 'family_help_headings', order, id, direction);
       return { ok: true };
     });
   }
 
-  async addQuestion(ctx: RequestContext, dto: FamilyHelpQuestionDto) {
+  async addQuestion(ctx: RequestContext, dto: FamilyHelpQuestionDto, app: HelpApp = 'family') {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await this.seeded(c);
+      await this.seeded(c, app);
       const headingId = dto.headingId ?? null;
-      if (headingId) await this.heading(c, headingId);
+      await this.checkQuestion(c, app, headingId, dto.page ?? null);
       const r = await c.query<{ id: string }>(
-        `INSERT INTO family_help_questions (school_id, heading_id, question, question_hi, answer, answer_hi, audience,
-                page, hidden, position, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8,
+        `INSERT INTO family_help_questions (school_id, app, heading_id, question, question_hi, answer, answer_hi,
+                audience, page, hidden, position, created_by, updated_by)
+         VALUES (app.current_school_id(), $9, $1, $2, $3, $4, $5, $6, $7, $8,
                  (SELECT COALESCE(max(position), 0) + 1 FROM family_help_questions
-                   WHERE heading_id IS NOT DISTINCT FROM $1::bigint AND deleted_at IS NULL),
+                   WHERE app = $9 AND heading_id IS NOT DISTINCT FROM $1::bigint AND deleted_at IS NULL),
                  app.current_user_id(), app.current_user_id())
          RETURNING id::text`,
         [
@@ -243,14 +319,16 @@ export class FamilyHelpService {
           dto.questionHi ?? null,
           dto.answer,
           dto.answerHi ?? null,
-          dto.audience,
+          // a staff question is for every staff member
+          app === 'staff' ? 'both' : dto.audience,
           dto.page ?? null,
           dto.hidden,
+          app,
         ],
       );
       const id = r.rows[0]!.id;
       await this.audit.stage(ctx, c, {
-        action: 'helpdesk.family_help.question_added',
+        action: `helpdesk.${app}_help.question_added`,
         entityType: 'family_help_questions',
         entityId: id,
         after: dto,
@@ -264,7 +342,7 @@ export class FamilyHelpService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.question(c, id);
       const headingId = dto.headingId ?? null;
-      if (headingId) await this.heading(c, headingId);
+      await this.checkQuestion(c, before.app, headingId, dto.page ?? null);
       const answerChanged =
         before.answer !== dto.answer || (before.answerHi ?? null) !== (dto.answerHi ?? null);
       await c.query(
@@ -272,7 +350,7 @@ export class FamilyHelpService {
             SET question = $2, question_hi = $3, answer = $4, answer_hi = $5, audience = $6, page = $7, hidden = $8,
                 position = CASE WHEN heading_id IS NOT DISTINCT FROM $9::bigint THEN position ELSE
                   (SELECT COALESCE(max(position), 0) + 1 FROM family_help_questions
-                    WHERE heading_id IS NOT DISTINCT FROM $9::bigint AND deleted_at IS NULL) END,
+                    WHERE app = $11 AND heading_id IS NOT DISTINCT FROM $9::bigint AND deleted_at IS NULL) END,
                 heading_id = $9::bigint,
                 answer_changed_at = CASE WHEN $10::boolean THEN now() ELSE answer_changed_at END,
                 updated_by = app.current_user_id(), updated_at = now()
@@ -283,15 +361,16 @@ export class FamilyHelpService {
           dto.questionHi ?? null,
           dto.answer,
           dto.answerHi ?? null,
-          dto.audience,
+          before.app === 'staff' ? 'both' : dto.audience,
           dto.page ?? null,
           dto.hidden,
           headingId,
           answerChanged,
+          before.app,
         ],
       );
       await this.audit.stage(ctx, c, {
-        action: 'helpdesk.family_help.question_changed',
+        action: `helpdesk.${before.app}_help.question_changed`,
         entityType: 'family_help_questions',
         entityId: id,
         before: {
@@ -316,7 +395,7 @@ export class FamilyHelpService {
         [id],
       );
       await this.audit.stage(ctx, c, {
-        action: 'helpdesk.family_help.question_deleted',
+        action: `helpdesk.${before.app}_help.question_deleted`,
         entityType: 'family_help_questions',
         entityId: id,
         before: { question: before.question, answer: before.answer },
@@ -329,7 +408,7 @@ export class FamilyHelpService {
   async moveQuestion(ctx: RequestContext, id: string, direction: 'up' | 'down') {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const q = await this.question(c, id);
-      const order = (await this.questions(c))
+      const order = (await this.questions(c, q.app))
         .filter((x) => x.headingId === q.headingId)
         .map((x) => x.id);
       await this.reorder(c, 'family_help_questions', order, id, direction);
@@ -338,12 +417,12 @@ export class FamilyHelpService {
   }
 
   /** Puts back the standard headings and questions the school deleted (each last in its place). */
-  async restore(ctx: RequestContext) {
+  async restore(ctx: RequestContext, app: HelpApp = 'family') {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await this.seeded(c);
-      const added = await this.addStandard(c);
+      await this.seeded(c, app);
+      const added = await this.addStandard(c, app);
       await this.audit.stage(ctx, c, {
-        action: 'helpdesk.family_help.restored',
+        action: `helpdesk.${app}_help.restored`,
         entityType: 'family_help_questions',
         after: added,
       });
@@ -353,70 +432,75 @@ export class FamilyHelpService {
 
   // ---------------------------------------------------------------------------------------- helpers
 
-  /** The standard headings and questions on a school's first use of Help (once). */
-  private async seeded(c: PoolClient) {
+  /** The standard headings and questions on a school's first use of this Help (once). */
+  private async seeded(c: PoolClient, app: HelpApp) {
     const r = await c.query(
-      `INSERT INTO family_help_settings (school_id) VALUES (app.current_school_id())
-       ON CONFLICT (school_id) DO NOTHING RETURNING school_id`,
+      app === 'staff'
+        ? `INSERT INTO staff_help_settings (school_id) VALUES (app.current_school_id())
+           ON CONFLICT (school_id) DO NOTHING RETURNING school_id`
+        : `INSERT INTO family_help_settings (school_id) VALUES (app.current_school_id())
+           ON CONFLICT (school_id) DO NOTHING RETURNING school_id`,
     );
-    if (r.rowCount) await this.addStandard(c);
+    if (r.rowCount) await this.addStandard(c, app);
   }
 
   /** The standard headings and questions not there (or deleted), each added last in its place. */
-  private async addStandard(c: PoolClient) {
+  private async addStandard(c: PoolClient, app: HelpApp) {
     let headings = 0;
     let questions = 0;
     const headingIds = new Map<string, string>();
-    for (const h of STANDARD_HEADINGS) {
+    const standard = standardOf(app);
+    for (const h of standard.headings) {
       const found = await c.query<{ id: string }>(
-        `SELECT id::text FROM family_help_headings WHERE standard_key = $1 AND deleted_at IS NULL`,
-        [h.key],
+        `SELECT id::text FROM family_help_headings WHERE standard_key = $1 AND app = $2 AND deleted_at IS NULL`,
+        [h.key, app],
       );
       if (found.rows[0]) {
         headingIds.set(h.key, found.rows[0].id);
         continue;
       }
       const r = await c.query<{ id: string }>(
-        `INSERT INTO family_help_headings (school_id, title, title_hi, position, standard_key)
-         VALUES (app.current_school_id(), $1, $2,
-                 (SELECT COALESCE(max(position), 0) + 1 FROM family_help_headings WHERE deleted_at IS NULL), $3)
+        `INSERT INTO family_help_headings (school_id, app, title, title_hi, position, standard_key)
+         VALUES (app.current_school_id(), $4, $1, $2,
+                 (SELECT COALESCE(max(position), 0) + 1 FROM family_help_headings WHERE app = $4 AND deleted_at IS NULL), $3)
          RETURNING id::text`,
-        [h.title, h.titleHi, h.key],
+        [h.title, h.titleHi, h.key, app],
       );
       headingIds.set(h.key, r.rows[0]!.id);
       headings += 1;
     }
-    for (const q of STANDARD_QUESTIONS) {
+    for (const q of standard.questions) {
       const found = await c.query(
-        `SELECT 1 FROM family_help_questions WHERE standard_key = $1 AND deleted_at IS NULL`,
-        [q.key],
+        `SELECT 1 FROM family_help_questions WHERE standard_key = $1 AND app = $2 AND deleted_at IS NULL`,
+        [q.key, app],
       );
       if (found.rowCount) continue;
       const headingId = headingIds.get(q.heading) ?? null;
       await c.query(
-        `INSERT INTO family_help_questions (school_id, heading_id, question, question_hi, answer, answer_hi, audience,
-                page, position, standard_key)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7,
+        `INSERT INTO family_help_questions (school_id, app, heading_id, question, question_hi, answer, answer_hi,
+                audience, page, position, standard_key)
+         VALUES (app.current_school_id(), $9, $1, $2, $3, $4, $5, $6, $7,
                  (SELECT COALESCE(max(position), 0) + 1 FROM family_help_questions
-                   WHERE heading_id IS NOT DISTINCT FROM $1::bigint AND deleted_at IS NULL), $8)`,
-        [headingId, q.question, q.questionHi, q.answer, q.answerHi, q.audience, q.page, q.key],
+                   WHERE app = $9 AND heading_id IS NOT DISTINCT FROM $1::bigint AND deleted_at IS NULL), $8)`,
+        [headingId, q.question, q.questionHi, q.answer, q.answerHi, q.audience, q.page, q.key, app],
       );
       questions += 1;
     }
     return { headings, questions };
   }
 
-  private async headings(c: PoolClient): Promise<HeadingRow[]> {
+  private async headings(c: PoolClient, app: HelpApp): Promise<HeadingRow[]> {
     const r = await c.query<HeadingRow>(
-      `SELECT id::text, title, title_hi AS "titleHi", position, standard_key IS NOT NULL AS standard
-         FROM family_help_headings WHERE deleted_at IS NULL ORDER BY position, id`,
+      `SELECT id::text, app, title, title_hi AS "titleHi", position, standard_key IS NOT NULL AS standard
+         FROM family_help_headings WHERE app = $1 AND deleted_at IS NULL ORDER BY position, id`,
+      [app],
     );
     return r.rows;
   }
 
-  private async questions(c: PoolClient): Promise<QuestionRow[]> {
+  private async questions(c: PoolClient, app: HelpApp): Promise<QuestionRow[]> {
     const r = await c.query<QuestionRow>(
-      `SELECT q.id::text, q.heading_id::text AS "headingId", q.question, q.question_hi AS "questionHi", q.answer,
+      `SELECT q.id::text, q.app, q.heading_id::text AS "headingId", q.question, q.question_hi AS "questionHi", q.answer,
               q.answer_hi AS "answerHi", q.audience, q.page, q.hidden, q.position, q.standard_key IS NOT NULL AS standard,
               (SELECT count(*)::int FROM family_help_votes v WHERE v.question_id = q.id AND v.helpful AND v.voted_at >= q.answer_changed_at) AS yes,
               (SELECT count(*)::int FROM family_help_votes v WHERE v.question_id = q.id AND NOT v.helpful AND v.voted_at >= q.answer_changed_at) AS no,
@@ -424,15 +508,16 @@ export class FamilyHelpService {
               q.updated_at AS "updatedAt"
          FROM family_help_questions q
          LEFT JOIN family_help_headings h ON h.id = q.heading_id
-        WHERE q.deleted_at IS NULL
+        WHERE q.app = $1 AND q.deleted_at IS NULL
         ORDER BY h.position NULLS LAST, q.heading_id NULLS LAST, q.position, q.id`,
+      [app],
     );
     return r.rows;
   }
 
   private async heading(c: PoolClient, id: string): Promise<HeadingRow> {
     const r = await c.query<HeadingRow>(
-      `SELECT id::text, title, title_hi AS "titleHi", position, standard_key IS NOT NULL AS standard
+      `SELECT id::text, app, title, title_hi AS "titleHi", position, standard_key IS NOT NULL AS standard
          FROM family_help_headings WHERE id = $1 AND deleted_at IS NULL`,
       [id],
     );
@@ -444,15 +529,36 @@ export class FamilyHelpService {
     const r = await c.query<
       Pick<
         QuestionRow,
-        'headingId' | 'question' | 'answer' | 'answerHi' | 'audience' | 'page' | 'hidden'
+        'app' | 'headingId' | 'question' | 'answer' | 'answerHi' | 'audience' | 'page' | 'hidden'
       >
     >(
-      `SELECT heading_id::text AS "headingId", question, answer, answer_hi AS "answerHi", audience, page, hidden
+      `SELECT app, heading_id::text AS "headingId", question, answer, answer_hi AS "answerHi", audience, page, hidden
          FROM family_help_questions WHERE id = $1 AND deleted_at IS NULL`,
       [id],
     );
     if (!r.rows[0]) throw new DomainError('not-found', 'Question not found', { status: 404 });
     return r.rows[0];
+  }
+
+  /** A question's heading is one of the same Help, and its screen one of that Help's menu. */
+  private async checkQuestion(
+    c: PoolClient,
+    app: HelpApp,
+    headingId: string | null,
+    page: string | null,
+  ) {
+    if (headingId && (await this.heading(c, headingId)).app !== app)
+      throw new DomainError('validation-failed', 'That heading belongs to the other Help', {
+        status: 400,
+      });
+    if (page && !helpPageAllowed(app, page))
+      throw new DomainError(
+        'validation-failed',
+        app === 'staff'
+          ? 'Choose a screen of the staff menu'
+          : 'Choose a screen of the families’ menu',
+        { status: 400 },
+      );
   }
 
   /** Swaps a row with its neighbour in `order` and numbers the list 1, 2, 3 … again. */

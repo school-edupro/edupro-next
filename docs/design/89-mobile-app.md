@@ -881,6 +881,9 @@ Yes / No (`POST engagement/help/:id/vote`; the person's earlier vote shows, with
 searches questions and answers in both languages and opens every heading it finds something under. The list is
 kept on the phone for reading offline like the other screens. The fixed questions of the first Help screen are gone.
 
+Staff (24 Nov 2026): the staff menu's Help opens the same screen with **Help for staff** (`GET engagement/staff-help`,
+docs/design/24 "Help for staff"), its Open <screen> buttons opening the staff app's screens; no web page.
+
 ## As built — the school's layout (21 Nov 2026)
 
 The family tabs, Home's shortcuts and cards and the Academics tab follow the school's layout (docs/design/90):

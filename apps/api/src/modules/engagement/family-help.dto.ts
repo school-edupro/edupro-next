@@ -1,4 +1,4 @@
-import { FAMILY_MENU } from '@edupro/menus';
+import { FAMILY_MENU, STAFF_MENU } from '@edupro/menus';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { IdSchema } from '../academics/classes/classes.dto';
@@ -14,6 +14,27 @@ export const FAMILY_HELP_PAGES: ReadonlyArray<{ href: string; label: string }> =
     .filter((i) => i.href !== '/' && i.href !== '/help')
     .map((i) => ({ href: i.href, label: i.label }));
 const PAGES = new Set(FAMILY_HELP_PAGES.map((p) => p.href));
+
+/** Whose Help: the families' (parents and students) or the staff's (0422). */
+export type HelpApp = 'family' | 'staff';
+
+/**
+ * The staff screens a staff question may be about (and open): the staff menu, without Home and Help itself, and only
+ * plain paths (the column's check).
+ */
+export const STAFF_HELP_PAGES: ReadonlyArray<{ href: string; label: string }> = [
+  ...new Map(
+    STAFF_MENU.flatMap((g) => g.items)
+      .filter((i) => i.href !== '/' && i.href !== '/help' && /^\/[a-z][a-z-]{1,39}$/.test(i.href))
+      .map((i) => [i.href, { href: i.href, label: i.label }] as const),
+  ).values(),
+];
+const STAFF_PAGES = new Set(STAFF_HELP_PAGES.map((p) => p.href));
+
+/** The screens a question of this Help may be about. */
+export const helpPages = (app: HelpApp) => (app === 'staff' ? STAFF_HELP_PAGES : FAMILY_HELP_PAGES);
+export const helpPageAllowed = (app: HelpApp, page: string) =>
+  (app === 'staff' ? STAFF_PAGES : PAGES).has(page);
 
 export interface StandardHeading {
   key: string;
@@ -168,6 +189,126 @@ export const STANDARD_QUESTIONS: readonly StandardQuestion[] = [
   },
 ];
 
+/** The headings a school's Help for staff starts with, in order (0422). */
+export const STAFF_STANDARD_HEADINGS: readonly StandardHeading[] = [
+  { key: 'sh_classes', title: 'My classes and attendance', titleHi: 'मेरी कक्षाएँ और उपस्थिति' },
+  { key: 'sh_marks', title: 'Marks and exams', titleHi: 'अंक और परीक्षाएँ' },
+  { key: 'sh_family', title: 'Families and queries', titleHi: 'परिवार और प्रश्न' },
+  { key: 'sh_app', title: 'Using the app and the website', titleHi: 'ऐप और वेबसाइट का उपयोग' },
+];
+
+/**
+ * The questions a school's Help for staff starts with (the staff website's Help before 0422), under their headings;
+ * every staff member sees them (`audience` both).
+ */
+export const STAFF_STANDARD_QUESTIONS: readonly StandardQuestion[] = [
+  {
+    key: 's_section',
+    heading: 'sh_classes',
+    audience: 'both',
+    page: null,
+    question: 'I cannot see a section or subject.',
+    questionHi: 'मुझे अनुभाग या विषय नहीं दिखता।',
+    answer:
+      'You need a teacher assignment for that section and subject this year; ask the coordinator (Academics → Teacher assignments).',
+    answerHi:
+      'इस वर्ष उस अनुभाग और विषय के लिए शिक्षक आवंटन चाहिए; समन्वयक से कहें (Academics → Teacher assignments)।',
+  },
+  {
+    key: 's_tap',
+    heading: 'sh_classes',
+    audience: 'both',
+    page: '/attendance',
+    question: 'A pupil tapped at the gate but shows absent.',
+    questionHi: 'विद्यार्थी ने गेट पर टैप किया पर अनुपस्थित दिखता है।',
+    answer:
+      'The tap may be outside the session window or from another route’s reader; mark the pupil present and the office checks the device events.',
+    answerHi:
+      'टैप सत्र समय के बाहर या दूसरे रूट के रीडर से हो सकता है; विद्यार्थी को उपस्थित करें और कार्यालय उपकरण घटनाएँ जाँचेगा।',
+  },
+  {
+    key: 's_wrong',
+    heading: 'sh_classes',
+    audience: 'both',
+    page: '/attendance',
+    question: 'I marked the wrong pupil.',
+    questionHi: 'मैंने गलत विद्यार्थी को चिह्नित किया।',
+    answer:
+      'Fix it the same day before the session locks; afterwards ask the coordinator to unlock with a reason.',
+    answerHi: 'सत्र लॉक होने से पहले उसी दिन ठीक करें; बाद में समन्वयक से कारण सहित अनलॉक कराएँ।',
+  },
+  {
+    key: 's_hwork',
+    heading: 'sh_classes',
+    audience: 'both',
+    page: '/daily-work',
+    question: 'Homework posted by mistake.',
+    questionHi: 'गृहकार्य गलती से पोस्ट हुआ।',
+    answer: 'Delete it from Daily work the same day; families see the update at once.',
+    answerHi: 'उसी दिन दैनिक कार्य से हटाएँ; परिवार तुरंत अद्यतन देखते हैं।',
+  },
+  {
+    key: 's_marks',
+    heading: 'sh_marks',
+    audience: 'both',
+    page: '/marks',
+    question: 'Marks entry is locked.',
+    questionHi: 'अंक प्रविष्टि लॉक है।',
+    answer:
+      'The coordinator locked the subject after the entry; a reopen needs a reason and is audited.',
+    answerHi:
+      'समन्वयक ने प्रविष्टि के बाद विषय लॉक किया; पुनः खोलने के लिए कारण चाहिए और ऑडिट होता है।',
+  },
+  {
+    key: 's_query',
+    heading: 'sh_family',
+    audience: 'both',
+    page: '/queries',
+    question: 'How do I answer a family query?',
+    questionHi: 'परिवार के प्रश्न का उत्तर कैसे दूँ?',
+    answer:
+      'Queries lists the queries of your sections; reply, add an internal note, or close with a decision. Leave requests are approved the same way.',
+    answerHi:
+      'प्रश्न आपके अनुभागों के प्रश्न दिखाता है; उत्तर दें, आंतरिक टिप्पणी जोड़ें, या निर्णय के साथ बंद करें। अवकाश अनुरोध भी ऐसे ही स्वीकृत होते हैं।',
+  },
+  {
+    key: 's_meeting',
+    heading: 'sh_family',
+    audience: 'both',
+    page: '/appointments',
+    question: 'A family asks for an appointment.',
+    questionHi: 'परिवार भेंट माँगता है।',
+    answer:
+      'The family books a free slot in the parent app and the front desk confirms it. Appointments with me shows who is coming and when.',
+    answerHi:
+      'परिवार अभिभावक ऐप में खाली समय चुनता है और फ्रंट डेस्क पुष्टि करता है। “मुझसे भेंट” में दिखता है कि कौन कब आ रहा है।',
+  },
+  {
+    key: 's_broken',
+    heading: 'sh_app',
+    audience: 'both',
+    page: '/queries',
+    question: 'Something is broken or slow.',
+    questionHi: 'कुछ टूटा या धीमा है।',
+    answer:
+      'Raise a Ticket to ERP provider under Queries and helpdesk, with how urgent it is: the provider sees it at once and replies there.',
+    answerHi:
+      'प्रश्न और हेल्पडेस्क में ERP प्रदाता को टिकट भेजें, कितना ज़रूरी है सहित: प्रदाता इसे तुरंत देखता है और वहीं उत्तर देता है।',
+  },
+  {
+    key: 's_lang',
+    heading: 'sh_app',
+    audience: 'both',
+    page: null,
+    question: 'How do I change the language?',
+    questionHi: 'भाषा कैसे बदलूँ?',
+    answer:
+      'On the website, the हिन्दी / English link on the home page; in the app, Settings → Language. Every screen changes.',
+    answerHi:
+      'वेबसाइट पर होम पेज का हिन्दी / English लिंक; ऐप में सेटिंग्स → भाषा। हर स्क्रीन बदल जाती है।',
+  },
+];
+
 const Text = (min: number, max: number) => z.string().trim().min(min).max(max);
 /** An optional Hindi text: empty means none (the English shows). */
 const Hindi = (min: number, max: number) =>
@@ -199,7 +340,8 @@ export const FamilyHelpQuestionSchema = z.object({
     .string()
     .trim()
     .transform((v) => (v === '' ? null : v))
-    .refine((v) => v === null || PAGES.has(v), 'a family screen of the menu')
+    // a family screen for the families' Help, a staff screen for the staff's (the service checks which)
+    .refine((v) => v === null || PAGES.has(v) || STAFF_PAGES.has(v), 'a screen of the menu')
     .nullable()
     .optional(),
   hidden: z.boolean().default(false),

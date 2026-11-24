@@ -7,6 +7,9 @@ import 'package:edupro/family/attendance.dart' show AttendanceScreen;
 import 'package:edupro/family/results.dart' show ResultsScreen;
 import 'package:edupro/family/profile.dart' show ProfileScreen;
 import 'package:edupro/staff/leave_page.dart' show LeaveAttendanceScreen;
+import 'package:edupro/staff/queries.dart' show StaffQueriesScreen;
+import 'package:edupro/ui/home_shell.dart' show nativeScreen;
+import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -521,6 +524,31 @@ class School {
       final m = messages[conv.group(1)];
       if (m == null) throw const ApiException(404, 'not-found', 'Conversation not found');
       return {'id': conv.group(1), 'title': m.first['content'], 'messages': m};
+    }
+    // Help for staff (0422): its own headings and questions, the screens of the staff menu
+    if (key == 'GET /engagement/staff-help') {
+      return {
+        'audience': 'staff',
+        'groups': [
+          {
+            'id': '21',
+            'title': 'Families and queries',
+            'titleHi': 'परिवार और प्रश्न',
+            'questions': [
+              {
+                'id': '31',
+                'question': 'How do I answer a family query?',
+                'questionHi': 'परिवार के प्रश्न का उत्तर कैसे दूँ?',
+                'answer': 'Queries lists the queries of your sections; reply or close.',
+                'answerHi': 'प्रश्न आपके अनुभागों के प्रश्न दिखाता है; उत्तर दें या बंद करें।',
+                'page': '/queries',
+                'pageLabel': 'Queries',
+                'myVote': votes['31'],
+              },
+            ],
+          },
+        ],
+      };
     }
     if (key == 'GET /engagement/help') {
       final student = c.query?['for'] == 'student';
@@ -1080,6 +1108,28 @@ void main() {
       expect(find.byKey(const Key('helpSearch')), findsNothing);
     });
 
+    testWidgets('staff: the staff menu’s Help opens Help for staff in the app', (tester) async {
+      expect(nativeScreen(staff, '/help', S(false)), isA<HelpScreen>());
+      await tall(tester);
+      final t = await pump(
+        tester,
+        const HelpScreen(profile: staff),
+        school: School(kind: 'staff'),
+      );
+      expect(t.calls.where((c) => c.path == '/engagement/staff-help'), hasLength(1));
+      expect(t.calls.where((c) => c.path == '/engagement/help'), isEmpty);
+      expect(find.textContaining('raise a staff query under Queries'), findsOneWidget);
+      await tapIn(tester, find.text('Families and queries'));
+      await tapIn(tester, find.text('How do I answer a family query?'));
+      expect(find.text('Open Queries'), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('helpNo-31')));
+      expect(t.calls.lastWhere((c) => c.method == 'POST').path, '/engagement/help/31/vote');
+      expect(find.textContaining('raise a staff query for more help'), findsOneWidget);
+      // the screen the answer is about: the staff app's own
+      await tapIn(tester, find.byKey(const Key('helpOpen-31')));
+      expect(find.byType(StaffQueriesScreen), findsOneWidget);
+    });
+
     testWidgets('in Hindi, with the English where the school wrote no Hindi', (tester) async {
       await tall(tester);
       await pump(tester, const HelpScreen(profile: parent), hindi: true);
@@ -1103,10 +1153,24 @@ void main() {
     ) async {
       await tall(tester);
       final handle = tester.ensureSemantics();
-      for (final w in [const AssistantScreen(profile: parent), const HelpScreen(profile: parent)]) {
-        await pump(tester, w, hindi: hindi, dark: dark);
+      for (final w in [
+        const AssistantScreen(profile: parent),
+        const HelpScreen(profile: parent),
+        const HelpScreen(profile: staff),
+      ]) {
+        final forStaff = w is HelpScreen && w.profile.isStaff;
+        await pump(
+          tester,
+          w,
+          hindi: hindi,
+          dark: dark,
+          school: forStaff ? School(kind: 'staff') : null,
+        );
         if (w is AssistantScreen) {
           await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+        } else if (forStaff) {
+          await tapIn(tester, find.text(hindi ? 'परिवार और प्रश्न' : 'Families and queries'));
+          await tapIn(tester, find.byKey(const Key('help-31')));
         } else {
           await tapIn(tester, find.text(hindi ? 'उपस्थिति और अवकाश' : 'Attendance and leave'));
           await tapIn(tester, find.byKey(const Key('help-2')));
@@ -1155,6 +1219,15 @@ void main() {
     await tapIn(tester, find.byKey(const Key('help-2')));
     await tester.enterText(find.byKey(const Key('helpSearch')), 'leave');
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await pump(
+      tester,
+      const HelpScreen(profile: staff),
+      school: School(kind: 'staff'),
+      text: 2,
+    );
+    await tapIn(tester, find.text('Families and queries'));
+    await tapIn(tester, find.byKey(const Key('help-31')));
     expect(tester.takeException(), isNull);
   });
 }

@@ -30,6 +30,8 @@ export const MODULES = [
     'purchase_stores_assets',
     /^(purchase_|vendor|stock_|store|item_store|goods_receipt|asset|condemnation|disposals$)/,
   ],
+  // Help for staff (0422) sits with the families' Help
+  ['comms_engagement', /^staff_help_/],
   ['staff_leave_attendance', /^staff_/],
   [
     'hr_employees',

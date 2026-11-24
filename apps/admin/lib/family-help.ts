@@ -26,7 +26,34 @@ export interface FamilyHelpQuestion {
   updatedAt: string;
 }
 
+/** Whose Help: the families' (0406) or the staff's (0422); both kept on Helpdesk set-up. */
+export type HelpApp = 'family' | 'staff';
+
+/** Each Help's addresses and words on Helpdesk set-up. */
+export const HELP_APPS: Record<
+  HelpApp,
+  { api: string; page: string; title: string; description: string; readers: string }
+> = {
+  family: {
+    api: '/helpdesk/family-help',
+    page: '/engagement/helpdesk/setup/family-help',
+    title: 'Help for families',
+    description:
+      'The questions and answers parents and students see on Help, in the app and on the website. Each heading folds on their Help page; a question about a screen someone cannot open is left out for them.',
+    readers: 'families',
+  },
+  staff: {
+    api: '/helpdesk/staff-help',
+    page: '/engagement/helpdesk/setup/staff-help',
+    title: 'Help for staff',
+    description:
+      'The questions and answers staff see on Help, in the staff app and on the staff website. Each heading folds on their Help page; a question about a screen someone cannot open is left out for them.',
+    readers: 'staff',
+  },
+};
+
 export interface FamilyHelpSetup {
+  app?: HelpApp;
   headings: FamilyHelpHeading[];
   questions: FamilyHelpQuestion[];
   pages: Array<{ href: string; label: string }>;

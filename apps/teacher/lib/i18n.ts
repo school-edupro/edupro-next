@@ -962,6 +962,20 @@ const DICT: Record<string, string> = {
   'On the office website': 'कार्यालय वेबसाइट पर',
   'Could not be read just now:': 'अभी पढ़ा नहीं जा सका:',
   'Open the list': 'सूची खोलें',
+  'Answers to the common questions. For anything else, raise a staff query under Queries.':
+    'आम प्रश्नों के उत्तर। किसी और बात के लिए प्रश्न में स्टाफ़ प्रश्न भेजें।',
+  'Search the questions': 'प्रश्न खोजें',
+  Clear: 'हटाएँ',
+  'Was this helpful?': 'क्या यह मददगार था?',
+  Yes: 'हाँ',
+  No: 'नहीं',
+  'Thank you. You said this helped.': 'धन्यवाद। आपने बताया कि इससे मदद मिली।',
+  'Thank you. You said this did not help; raise a staff query for more help.':
+    'धन्यवाद। आपने बताया कि इससे मदद नहीं मिली; और मदद के लिए स्टाफ़ प्रश्न भेजें।',
+  'Nothing matches your search. Raise a staff query for anything else.':
+    'आपकी खोज से कुछ नहीं मिला। किसी और बात के लिए स्टाफ़ प्रश्न भेजें।',
+  'No questions yet. For anything else, raise a staff query under Queries.':
+    'अभी कोई प्रश्न नहीं। किसी और बात के लिए प्रश्न में स्टाफ़ प्रश्न भेजें।',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

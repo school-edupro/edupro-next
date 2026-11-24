@@ -159,6 +159,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/appointments' => StaffAppointmentsScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
       '/assistant' => AssistantScreen(profile: p),
+      // Help for staff kept on Helpdesk set-up, as on the staff website: headings, search, the screen, helpful?
+      '/help' => HelpScreen(profile: p),
       _ => null,
     };
   }

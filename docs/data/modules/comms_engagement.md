@@ -83,14 +83,15 @@ clock and escalation. The front office keeps **appointments**, the **visitor** r
 
 ### Feedback, Help page, birthday wishes
 
-| Table                   | One row is                                              | Key columns                                                                      | For reports |
-| ----------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------- |
-| `feedback_entries`      | one rating (1–5) a family or user gave in a category    | `user_id`, `student_id`, `category`, `rating`, `comment`, `created_at`           | main        |
-| `family_help_headings`  | one heading of the families' Help page                  | `title`, `position`, `standard_key`, `deleted_at`                                | master      |
-| `family_help_questions` | one question and answer on the Help page                | `heading_id`, `audience`, `page`, `hidden`, `answer_changed_at`, `deleted_at`    | master      |
-| `family_help_votes`     | one user's "Was this helpful?" vote on a question       | PK `question_id`+`user_id`, `helpful`, `voted_at`                                | detail      |
-| `family_help_settings`  | marks that the standard questions were put in (one row) | PK `school_id`, `seeded_at`                                                      | internal    |
-| `birthday_wishes`       | one wish sent to a pupil or employee on a date          | `person_kind`+`person_id`+`on_date` (unique per school), `wished_by`, `channels` | history     |
+| Table                   | One row is                                              | Key columns                                                                          | For reports |
+| ----------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------- |
+| `feedback_entries`      | one rating (1–5) a family or user gave in a category    | `user_id`, `student_id`, `category`, `rating`, `comment`, `created_at`               | main        |
+| `family_help_headings`  | one heading of the families' or the staff's Help page   | `app` (family / staff), `title`, `position`, `standard_key`, `deleted_at`            | master      |
+| `family_help_questions` | one question and answer on the Help page                | `app`, `heading_id`, `audience`, `page`, `hidden`, `answer_changed_at`, `deleted_at` | master      |
+| `family_help_votes`     | one user's "Was this helpful?" vote on a question       | PK `question_id`+`user_id`, `helpful`, `voted_at`                                    | detail      |
+| `staff_help_settings`   | a school's standard staff Help questions were put in    | PK `school_id`, `seeded_at`                                                          | setting     |
+| `family_help_settings`  | marks that the standard questions were put in (one row) | PK `school_id`, `seeded_at`                                                          | internal    |
+| `birthday_wishes`       | one wish sent to a pupil or employee on a date          | `person_kind`+`person_id`+`on_date` (unique per school), `wished_by`, `channels`     | history     |
 
 ### Appointments and visitors
 

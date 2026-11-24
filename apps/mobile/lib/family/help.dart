@@ -41,19 +41,41 @@ extension HelpWords on S {
     'Thank you. You said this did not help; the school office can help further.',
     'धन्यवाद। आपने बताया कि इससे मदद नहीं मिली; विद्यालय कार्यालय आगे मदद कर सकता है।',
   );
+
+  // staff: the next step is a staff query, not the school office
+  String get helpIntroStaff => _h(
+    'Answers to the common questions. For anything else, raise a staff query under Queries.',
+    'आम प्रश्नों के उत्तर। किसी और बात के लिए प्रश्न में स्टाफ़ प्रश्न भेजें।',
+  );
+  String get helpNothingStaff => _h(
+    'Nothing matches your search. Raise a staff query for anything else.',
+    'आपकी खोज से कुछ नहीं मिला। किसी और बात के लिए स्टाफ़ प्रश्न भेजें।',
+  );
+  String get helpNoneStaff => _h(
+    'No questions yet. For anything else, raise a staff query under Queries.',
+    'अभी कोई प्रश्न नहीं। किसी और बात के लिए प्रश्न में स्टाफ़ प्रश्न भेजें।',
+  );
+  String get helpThanksNoStaff => _h(
+    'Thank you. You said this did not help; raise a staff query for more help.',
+    'धन्यवाद। आपने बताया कि इससे मदद नहीं मिली; और मदद के लिए स्टाफ़ प्रश्न भेजें।',
+  );
 }
 
-/// The school's Help for this parent or student (kept on Helpdesk set-up): headings with their questions.
+/// The school's Help for this parent or student, or (a staff profile) for staff — each kept on Helpdesk set-up:
+/// headings with their questions.
 final familyHelpProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((ref, p) async {
+  final api = ref.read(apiProvider);
   final r = await cached(
     'help:${p.id}',
-    () => ref.read(apiProvider).familyHelpMine(for_: p.kind == 'student' ? 'student' : 'parent'),
+    () => p.isStaff
+        ? api.familyHelpStaff()
+        : api.familyHelpMine(for_: p.kind == 'student' ? 'student' : 'parent'),
   );
   return Loaded(asJson(r.data), r.at, stale: r.stale);
 });
 
 /// Help as the website shows it: the school's own questions under headings that fold, a search box, the screen an
-/// answer is about (opened in the app) and "Was this helpful?" — no web page.
+/// answer is about (opened in the app) and "Was this helpful?" — no web page. A staff profile reads Help for staff.
 class HelpScreen extends ConsumerStatefulWidget {
   const HelpScreen({super.key, required this.profile});
   final Profile profile;
@@ -109,6 +131,7 @@ class _HelpScreenState extends ConsumerState<HelpScreen> {
     final s = ref.watch(stringsProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
+    final staff = widget.profile.isStaff;
     String pick(Json x, String key) => s.hindi ? '${x['${key}Hi'] ?? x[key]}' : '${x[key]}';
     final words = _q.toLowerCase();
     bool matches(Json x) =>
@@ -130,13 +153,13 @@ class _HelpScreenState extends ConsumerState<HelpScreen> {
         final found = shown.fold<int>(0, (n, x) => n + x.$2.length);
         return [
           Text(
-            s.helpIntro,
+            staff ? s.helpIntroStaff : s.helpIntro,
             key: const Key('helpIntro'),
             style: TextStyle(color: muted, fontSize: 14),
           ),
           const SizedBox(height: Tokens.sp3),
           if (groups.isEmpty)
-            EmptyLine(s.helpNone)
+            EmptyLine(staff ? s.helpNoneStaff : s.helpNone)
           else ...[
             TextField(
               key: const Key('helpSearch'),
@@ -167,7 +190,7 @@ class _HelpScreenState extends ConsumerState<HelpScreen> {
               Semantics(
                 liveRegion: true,
                 child: Text(
-                  found > 0 ? s.helpFound(found, _q) : s.helpNothing,
+                  found > 0 ? s.helpFound(found, _q) : (staff ? s.helpNothingStaff : s.helpNothing),
                   key: const Key('helpFound'),
                   style: TextStyle(color: muted, fontSize: 13),
                 ),
@@ -259,7 +282,9 @@ class _HelpScreenState extends ConsumerState<HelpScreen> {
           Semantics(
             liveRegion: true,
             child: Text(
-              vote ? s.helpThanksYes : s.helpThanksNo,
+              vote
+                  ? s.helpThanksYes
+                  : (widget.profile.isStaff ? s.helpThanksNoStaff : s.helpThanksNo),
               key: Key('helpThanks-$id'),
               style: TextStyle(color: muted, fontSize: 13),
             ),

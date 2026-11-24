@@ -1088,6 +1088,10 @@ class EduProApi {
   Future<dynamic> familyHelpVote({required FamilyHelpVoteDto body, required String id}) =>
       _t.send('POST', '/engagement/help/${Uri.encodeComponent(id)}/vote', body: body.toJson());
 
+  /// GET /engagement/staff-help — The school's Help for staff: its questions under headings (those about a screen I cannot open left out)
+  Future<dynamic> familyHelpStaff() =>
+      _t.send('GET', '/engagement/staff-help');
+
   /// GET /me/app-layout — My family app layout: tabs, Home shortcuts (mine or the school’s), cards, Academics list
   Future<dynamic> familyLayoutMine({String? kind}) =>
       _t.send('GET', '/me/app-layout', query: {if (kind != null) 'kind': kind});

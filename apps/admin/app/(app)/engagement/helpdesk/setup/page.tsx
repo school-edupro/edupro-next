@@ -33,29 +33,47 @@ export default async function HelpdeskSetupPage({
       ) : (
         <Notice params={sp} />
       )}
-      <section
-        className="ep-card"
-        aria-labelledby="hd-family-help"
-        style={{ marginBottom: 'var(--sp-4)' }}
-      >
-        <h2 id="hd-family-help" className="ep-cdash__h3" style={{ marginTop: 0 }}>
-          Help for families
-        </h2>
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          The questions and answers parents and students see on Help, in the app and on the website.
-        </p>
-        <ul className="ep-setup-links">
-          <li>
-            <a href="/engagement/helpdesk/setup/family-help">
-              <strong>Help questions and answers</strong>
-            </a>
-            <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
-              Headings, questions in English and Hindi, who sees each, the screen it is about, and
-              how often families found an answer helpful
-            </span>
-          </li>
-        </ul>
-      </section>
+      <div className="ep-grid-2" style={{ marginBottom: 'var(--sp-4)' }}>
+        <section className="ep-card" aria-labelledby="hd-family-help">
+          <h2 id="hd-family-help" className="ep-cdash__h3" style={{ marginTop: 0 }}>
+            Help for families
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            The questions and answers parents and students see on Help, in the app and on the
+            website.
+          </p>
+          <ul className="ep-setup-links">
+            <li>
+              <a href="/engagement/helpdesk/setup/family-help">
+                <strong>Help questions and answers</strong>
+              </a>
+              <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                Headings, questions in English and Hindi, who sees each, the screen it is about, and
+                how often families found an answer helpful
+              </span>
+            </li>
+          </ul>
+        </section>
+        <section className="ep-card" aria-labelledby="hd-staff-help">
+          <h2 id="hd-staff-help" className="ep-cdash__h3" style={{ marginTop: 0 }}>
+            Help for staff
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            The questions and answers staff see on Help, in the staff app and on the staff website.
+          </p>
+          <ul className="ep-setup-links">
+            <li>
+              <a href="/engagement/helpdesk/setup/staff-help">
+                <strong>Help questions and answers for staff</strong>
+              </a>
+              <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                Headings, questions in English and Hindi, the staff screen each is about, and how
+                often staff found an answer helpful
+              </span>
+            </li>
+          </ul>
+        </section>
+      </div>
       <HelpdeskSetup initial={setup} />
       <MessageTemplates
         templates={setup.templates ?? []}
