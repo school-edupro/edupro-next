@@ -8,7 +8,9 @@ const Money = z
   .union([z.string(), z.number()])
   .transform((v) => String(v).replace(/,/g, '').trim())
   .pipe(z.string().regex(/^\d{1,11}(\.\d{1,2})?$/, 'an amount in rupees'))
-  .transform((v) => Number(v).toFixed(2));
+  .transform((v) => Number(v).toFixed(2))
+  // described as text (the staff app's client is made from the description; a number is taken too)
+  .meta({ type: 'string', description: 'an amount in rupees, e.g. 12500 or 12500.50' });
 const Pan = z
   .string()
   .trim()
@@ -92,6 +94,8 @@ export const RegimeSchema = z.object({
   reason: z.string().trim().min(3).max(200).optional(),
 });
 export class RegimeDto extends createZodDto(RegimeSchema) {}
+/** My own regime (a class of its own: the staff app's client takes one name per request). */
+export class MyRegimeDto extends createZodDto(RegimeSchema) {}
 
 export const PerqSchema = z.object({
   fy: Fy,

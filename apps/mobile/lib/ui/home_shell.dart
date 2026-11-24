@@ -37,6 +37,10 @@ import '../staff/queries.dart' show StaffQueriesScreen;
 import '../staff/student_leave.dart' show StudentLeaveScreen;
 import '../staff/gate_passes.dart' show StaffGatePassesScreen;
 import '../staff/purchase_indents.dart' show PurchaseHandOverScreen, PurchaseIndentsScreen;
+import '../staff/issues.dart' show StaffIssuesScreen;
+import '../staff/my_certificates.dart' show StaffCertificatesScreen;
+import '../staff/my_tax.dart' show MyTaxScreen;
+import '../staff/resignation.dart' show ResignationScreen;
 import '../staff/approvals.dart';
 import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
@@ -170,6 +174,14 @@ Widget? nativeScreen(Profile p, String href, S s) {
       // each in full (approve, send back, reject, send, withdraw), hand over my approvals (docs/design/83, part 2)
       '/purchase' => PurchaseIndentsScreen(profile: p),
       '/purchase/hand-over' => PurchaseHandOverScreen(profile: p),
+      // what the store issued to me or my department: acknowledge, the slips (docs/design/84, part 8)
+      '/purchase/issues' => StaffIssuesScreen(profile: p),
+      // my resignation as on the staff website: ask, follow, send again, withdraw, the papers (docs/design/38)
+      '/resignation' => ResignationScreen(profile: p),
+      // my certificates as on the staff website: ask, follow, withdraw, the issued ones as PDF (docs/design/87)
+      '/my-certificates' => StaffCertificatesScreen(profile: p),
+      // my tax as on the staff website: the year's tax, declarations with proofs, earlier employer, regime, Form 16
+      '/my-tax' => MyTaxScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
       '/assistant' => AssistantScreen(profile: p),
       // Help for staff kept on Helpdesk set-up, as on the staff website: headings, search, the screen, helpful?

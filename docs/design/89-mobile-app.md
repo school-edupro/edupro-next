@@ -890,3 +890,41 @@ The family tabs, Home's shortcuts and cards and the Academics tab follow the sch
 `familyTabs` replaces the fixed parent / student tabs, Home's shortcut grid ends with **All** (the More list) and has
 **Edit** (the person's own shortcuts), and the cards come in the school's order (new: Coming up, Fees due, Library
 books). Until the school publishes, everything is as before.
+
+## As built — staff office screens as on the website (24 Nov 2026)
+
+Asked by the user ("staff mobile app Purchase indents, Issued to my department, My resignation, My certificates, my
+tax, My payslips open web page — do not open web page"). Purchase indents became native the same day (docs/design/83,
+"As built — Purchase Indents on the staff website and the staff app"); the :3010 preview had been built before it.
+
+- **Issued to my department** (`lib/staff/issues.dart`, menu `/purchase/issues`): what waits for my acknowledgement
+  (`GET purchase/issues?mine=1`) — number, department, store, day, indent, taken by, lines, the slip (View / Download),
+  **Open and acknowledge** — then **Received earlier** (`received=1&status=acknowledged`); one issue in full
+  (`IssueDetailScreen`): status (who acknowledged, when, the note), the indent and purpose, the slip, a note and
+  **Acknowledge: received** while it waits, and what came (item, batch, brought back, quantity).
+- **My resignation** (`lib/staff/resignation.dart`, `/resignation`): my notice period; the open request (asked on, last
+  day accepted / proposed, notice served / short / waived, waiting at, reason, my letter); accepted: the acceptance
+  letter and the full and final statement (View / Download) and the no-dues by department; sent back: the note,
+  change the day / reason / letter and **Send again**; **Withdraw** (asked first) until accepted; otherwise **Ask for
+  resignation** (type, proposed last day from the notice period with the shortfall rule, reason, letter); the
+  earlier ones. Not linked to an employee: says so.
+- **My certificates** (`lib/staff/my_certificates.dart`, `/my-certificates`): the school's staff certificates, the
+  form opening under the one tapped (purpose from its list or in words, copies, a note); my requests with where each
+  is and **Withdraw** while waiting or being prepared; the certificates issued to me as PDF (made through the export,
+  `certificatePdf` — it waits for the workers like the website's).
+- **My tax** (`lib/staff/my_tax.dart`, `/my-tax`): the year (chips when there are several), the declaration window;
+  the year's tax (four figures, the school's final figure, a missing PAN, warnings, the working line by line — only
+  lines with an amount —, HRA and NPS in words, deductions claimed and counted, month by month); my declarations
+  (declared / verified, status, the reason, **Withdraw** while the window is open), my declaration form (PDF),
+  **Declare** (section; the amount, or for HRA the rent of each month, city, landlord, relation, PAN; up to 5 proofs);
+  the earlier employer (**Enter** / **Change**: employer, TAN, gross, exempt, PF, PT, tax, a proof); my regime
+  (**Change my regime** until the cut-off month); my Form 16 / 130 once released (opens with the payslip password).
+- **My payslips** (`lib/staff/classes.dart`, `/my-payslips`) now as the website's: the password rule, the year,
+  four figures (payslips, gross, income tax, net so far), each month with net, gross and deductions (Bonus /
+  Supplementary and Payment held marked) to view (with the password hint) or download, and **Letters and
+  certificate** (the salary certificate of the year, increment and pay revision letters).
+- API: request classes of their own for the app's client — `IssueAcknowledgeDto`, `MyRegimeDto`; the tax money
+  fields are described as text in the API description (`.meta`), so the app's client takes `12500` or `"12500.50"`.
+- Tests: `apps/mobile/test/staff_office_test.dart` (each screen and its sends, a11y light / dark / Hindi, 2× text);
+  `staff_test` — the "tab with only a web page" test now uses Assets in my care (My tax is native), the payslip
+  opens from its View icon.

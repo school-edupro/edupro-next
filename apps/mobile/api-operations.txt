@@ -393,3 +393,34 @@ PurchaseController_readIndentSheet
 PurchaseController_delegations
 PurchaseController_delegate
 PurchaseController_revokeDelegation
+
+# Issued to my department as on the staff website (docs/design/84, part 8): what waits for my acknowledgement and
+# what came earlier, one issue in full, acknowledge it (the slip: PurchaseStockController_issuePdf above)
+PurchaseStockController_listIssues
+PurchaseStockController_getIssue
+PurchaseStockController_acknowledge
+
+# My resignation as on the staff website (docs/design/38, part 5): ask, follow, send again, withdraw; my letter and
+# papers (acceptance letter, full and final statement)
+ExitsController_mine
+ExitsController_applyMine
+ExitsController_withdraw
+ExitsController_resubmit
+ExitsController_letter !file
+ExitsController_fnfFile !file
+ExitsController_letterFile !file
+
+# My payslips as on the staff website (docs/design/86): the salary certificate and my increment / revision letters
+PayrollPeopleDocsController_myLetters
+PayrollPeopleDocsController_myLetter !file
+PayrollPeopleDocsController_myCertificate !file
+
+# My tax as on the staff website (docs/design/86, phase D): the year's tax, my declarations with proofs (withdraw),
+# an earlier employer, my regime, my declaration form and my tax certificate
+PayrollTaxController_mine
+PayrollTaxController_declareMine
+PayrollTaxController_withdraw
+PayrollTaxController_prevMine
+PayrollTaxController_regimeMine
+PayrollTaxDocsController_myForm !file
+PayrollTaxDocsController_mine !file

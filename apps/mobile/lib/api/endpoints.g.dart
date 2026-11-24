@@ -1287,6 +1287,86 @@ class EduProApi {
   /// DELETE /purchase/delegations/{id}
   Future<dynamic> purchaseRevokeDelegation({required String id}) =>
       _t.send('DELETE', '/purchase/delegations/${Uri.encodeComponent(id)}');
+
+  /// GET /purchase/issues — Issues (the stores see all; a department sees what it was issued)
+  Future<dynamic> purchaseStockListIssues({String? status, String? kind, String? storeId, String? mine, String? received, String? q, String? from, String? to, String? departmentId, String? itemId, int? page}) =>
+      _t.send('GET', '/purchase/issues', query: {if (status != null) 'status': status, if (kind != null) 'kind': kind, if (storeId != null) 'storeId': storeId, if (mine != null) 'mine': mine, if (received != null) 'received': received, if (q != null) 'q': q, if (from != null) 'from': from, if (to != null) 'to': to, if (departmentId != null) 'departmentId': departmentId, if (itemId != null) 'itemId': itemId, if (page != null) 'page': page});
+
+  /// GET /purchase/issues/{id}
+  Future<dynamic> purchaseStockGetIssue({required String id}) =>
+      _t.send('GET', '/purchase/issues/${Uri.encodeComponent(id)}');
+
+  /// POST /purchase/issues/{id}/acknowledge — The department acknowledges what it received (or the store a signed slip)
+  Future<dynamic> purchaseStockAcknowledge({required IssueAcknowledgeDto body, required String id}) =>
+      _t.send('POST', '/purchase/issues/${Uri.encodeComponent(id)}/acknowledge', body: body.toJson());
+
+  /// GET /me/exits — My resignation (and earlier exits), the types I may ask for, my notice
+  Future<dynamic> exitsMine() =>
+      _t.send('GET', '/me/exits');
+
+  /// POST /me/exits — Ask for my resignation; it goes for approval
+  Future<dynamic> exitsApplyMine({required MyExitDto body}) =>
+      _t.send('POST', '/me/exits', body: body.toJson());
+
+  /// POST /people/exits/{id}/withdraw — Withdraw a request not yet accepted (the employee or the office)
+  Future<dynamic> exitsWithdraw({required ExitWithdrawDto body, required String id}) =>
+      _t.send('POST', '/people/exits/${Uri.encodeComponent(id)}/withdraw', body: body.toJson());
+
+  /// POST /people/exits/{id}/resubmit — Change a request sent back and send it again
+  Future<dynamic> exitsResubmit({required ExitEditDto body, required String id}) =>
+      _t.send('POST', '/people/exits/${Uri.encodeComponent(id)}/resubmit', body: body.toJson());
+
+  /// GET /people/exits/{id}/letter — A signed link to the exit’s letter
+  Future<ApiFile> exitsLetter({required String id}) =>
+      _t.file('GET', '/people/exits/${Uri.encodeComponent(id)}/letter');
+
+  /// GET /people/exits/{id}/fnf.pdf
+  Future<ApiFile> exitsFnfFile({required String id}) =>
+      _t.file('GET', '/people/exits/${Uri.encodeComponent(id)}/fnf.pdf');
+
+  /// GET /people/exits/{id}/letters/{kind}.pdf — Acceptance of resignation, relieving letter or experience certificate
+  Future<ApiFile> exitsLetterFile({required String id, required String kind}) =>
+      _t.file('GET', '/people/exits/${Uri.encodeComponent(id)}/letters/${Uri.encodeComponent(kind)}.pdf');
+
+  /// GET /payroll/me/letters — My increment letters
+  Future<dynamic> payrollPeopleDocsMyLetters() =>
+      _t.send('GET', '/payroll/me/letters');
+
+  /// GET /payroll/me/letters/{id}/pdf — One of my increment letters as a PDF
+  Future<ApiFile> payrollPeopleDocsMyLetter({required String id}) =>
+      _t.file('GET', '/payroll/me/letters/${Uri.encodeComponent(id)}/pdf');
+
+  /// GET /payroll/me/salary-certificate — My salary certificate of a year
+  Future<ApiFile> payrollPeopleDocsMyCertificate({String? fy}) =>
+      _t.file('GET', '/payroll/me/salary-certificate', query: {if (fy != null) 'fy': fy});
+
+  /// GET /payroll/me/tax — My tax: the year worked out, my declarations, earlier employer, regime
+  Future<dynamic> payrollTaxMine({String? fy}) =>
+      _t.send('GET', '/payroll/me/tax', query: {if (fy != null) 'fy': fy});
+
+  /// POST /payroll/me/tax/declarations — Declare a section (in the year’s window), with proofs
+  Future<dynamic> payrollTaxDeclareMine({required DeclareDto body}) =>
+      _t.send('POST', '/payroll/me/tax/declarations', body: body.toJson());
+
+  /// DELETE /payroll/me/tax/declarations/{id} — Withdraw my declaration (not once verified)
+  Future<dynamic> payrollTaxWithdraw({required String id}) =>
+      _t.send('DELETE', '/payroll/me/tax/declarations/${Uri.encodeComponent(id)}');
+
+  /// POST /payroll/me/tax/prev — My earlier employer this year (Form 122 / 12B)
+  Future<dynamic> payrollTaxPrevMine({required PrevDto body}) =>
+      _t.send('POST', '/payroll/me/tax/prev', body: body.toJson());
+
+  /// POST /payroll/me/tax/regime — Choose my regime (until the cut-off month)
+  Future<dynamic> payrollTaxRegimeMine({required MyRegimeDto body}) =>
+      _t.send('POST', '/payroll/me/tax/regime', body: body.toJson());
+
+  /// GET /payroll/me/tax/declaration-form — My declaration (Form 124 / 12BB) as a PDF
+  Future<ApiFile> payrollTaxDocsMyForm({required String fy}) =>
+      _t.file('GET', '/payroll/me/tax/declaration-form', query: {'fy': fy});
+
+  /// GET /payroll/me/tax/certificate — My certificate, once released
+  Future<ApiFile> payrollTaxDocsMine({required String fy}) =>
+      _t.file('GET', '/payroll/me/tax/certificate', query: {'fy': fy});
 }
 
 /** The OtpStartDto the API takes. */
@@ -2931,5 +3011,166 @@ class PurchaseDelegationDto {
         'startsOn': startsOn,
         'endsOn': endsOn,
         'reason': reason,
+      };
+}
+
+/** The IssueAcknowledgeDto the API takes. */
+class IssueAcknowledgeDto {
+  const IssueAcknowledgeDto({this.note, this.onPaper});
+  final String? note;
+  final bool? onPaper;
+  Map<String, Object?> toJson() => {
+        if (note != null) 'note': note,
+        if (onPaper != null) 'onPaper': onPaper,
+      };
+}
+
+/** The MyExitDto the API takes. */
+class MyExitDto {
+  const MyExitDto({required this.exitType, required this.reason, this.letterFileId, this.requestedOn, this.proposedLastDay});
+  final String exitType;
+  final String reason;
+  final String? letterFileId;
+  final String? requestedOn;
+  final String? proposedLastDay;
+  Map<String, Object?> toJson() => {
+        'exitType': exitType,
+        'reason': reason,
+        if (letterFileId != null) 'letterFileId': letterFileId,
+        if (requestedOn != null) 'requestedOn': requestedOn,
+        if (proposedLastDay != null) 'proposedLastDay': proposedLastDay,
+      };
+}
+
+/** The ExitWithdrawDto the API takes. */
+class ExitWithdrawDto {
+  const ExitWithdrawDto({this.reason});
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        if (reason != null) 'reason': reason,
+      };
+}
+
+/** The ExitEditDto the API takes. */
+class ExitEditDto {
+  const ExitEditDto({this.reason, this.letterFileId, this.proposedLastDay});
+  final String? reason;
+  final String? letterFileId;
+  final String? proposedLastDay;
+  Map<String, Object?> toJson() => {
+        if (reason != null) 'reason': reason,
+        if (letterFileId != null) 'letterFileId': letterFileId,
+        if (proposedLastDay != null) 'proposedLastDay': proposedLastDay,
+      };
+}
+
+/** The DeclareDto the API takes. */
+class DeclareDto {
+  const DeclareDto({required this.fy, this.employeeId, required this.lineCode, this.amount, this.hra, this.proofFileIds});
+  final String fy;
+  final String? employeeId;
+  final String lineCode;
+  /// an amount in rupees, e.g. 12500 or 12500.50
+  final Object? amount;
+  final DeclareDtoHra? hra;
+  final List<String>? proofFileIds;
+  Map<String, Object?> toJson() => {
+        'fy': fy,
+        if (employeeId != null) 'employeeId': employeeId,
+        'lineCode': lineCode,
+        if (amount != null) 'amount': amount,
+        if (hra != null) 'hra': hra?.toJson(),
+        if (proofFileIds != null) 'proofFileIds': proofFileIds,
+      };
+}
+
+/** The DeclareDtoHra the API takes. */
+class DeclareDtoHra {
+  const DeclareDtoHra({required this.months, required this.city, required this.landlord});
+  final List<DeclareDtoHraMonthsItem> months;
+  final String city;
+  final DeclareDtoHraLandlord landlord;
+  Map<String, Object?> toJson() => {
+        'months': months.map((x) => x.toJson()).toList(),
+        'city': city,
+        'landlord': landlord.toJson(),
+      };
+}
+
+/** The DeclareDtoHraMonthsItem the API takes. */
+class DeclareDtoHraMonthsItem {
+  const DeclareDtoHraMonthsItem({required this.month, required this.rent});
+  final String month;
+  /// an amount in rupees, e.g. 12500 or 12500.50
+  final String rent;
+  Map<String, Object?> toJson() => {
+        'month': month,
+        'rent': rent,
+      };
+}
+
+/** The DeclareDtoHraLandlord the API takes. */
+class DeclareDtoHraLandlord {
+  const DeclareDtoHraLandlord({required this.name, this.pan, required this.address, required this.relation});
+  final String name;
+  final String? pan;
+  final String address;
+  final String relation;
+  Map<String, Object?> toJson() => {
+        'name': name,
+        if (pan != null) 'pan': pan,
+        'address': address,
+        'relation': relation,
+      };
+}
+
+/** The PrevDto the API takes. */
+class PrevDto {
+  const PrevDto({required this.fy, this.employeeId, required this.employerName, this.employerTan, this.periodFrom, this.periodTo, required this.gross, this.exempt, this.pf, this.pt, this.tds, this.proofFileIds});
+  final String fy;
+  final String? employeeId;
+  final String employerName;
+  final String? employerTan;
+  final String? periodFrom;
+  final String? periodTo;
+  /// an amount in rupees, e.g. 12500 or 12500.50
+  final Object? gross;
+  /// an amount in rupees, e.g. 12500 or 12500.50
+  final Object? exempt;
+  /// an amount in rupees, e.g. 12500 or 12500.50
+  final Object? pf;
+  /// an amount in rupees, e.g. 12500 or 12500.50
+  final Object? pt;
+  /// an amount in rupees, e.g. 12500 or 12500.50
+  final Object? tds;
+  final List<String>? proofFileIds;
+  Map<String, Object?> toJson() => {
+        'fy': fy,
+        if (employeeId != null) 'employeeId': employeeId,
+        'employerName': employerName,
+        if (employerTan != null) 'employerTan': employerTan,
+        if (periodFrom != null) 'periodFrom': periodFrom,
+        if (periodTo != null) 'periodTo': periodTo,
+        'gross': gross,
+        if (exempt != null) 'exempt': exempt,
+        if (pf != null) 'pf': pf,
+        if (pt != null) 'pt': pt,
+        if (tds != null) 'tds': tds,
+        if (proofFileIds != null) 'proofFileIds': proofFileIds,
+      };
+}
+
+/** The MyRegimeDto the API takes. */
+class MyRegimeDto {
+  const MyRegimeDto({required this.fy, required this.regime, this.employeeId, this.reason});
+  final String fy;
+  final String regime;
+  final String? employeeId;
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        'fy': fy,
+        'regime': regime,
+        if (employeeId != null) 'employeeId': employeeId,
+        if (reason != null) 'reason': reason,
       };
 }

@@ -15,6 +15,7 @@ import {
   PerqDto,
   PrevDto,
   ReasonDto,
+  MyRegimeDto,
   RegimeDto,
   TaxYearDto,
 } from './payroll-tax.dto';
@@ -78,7 +79,7 @@ export class PayrollTaxController {
   @Post('me/tax/regime')
   @ApiOperation({ summary: 'Choose my regime (until the cut-off month)' })
   @RequirePermission(OWN)
-  regimeMine(@ReqCtx() ctx: RequestContext, @Body() dto: RegimeDto) {
+  regimeMine(@ReqCtx() ctx: RequestContext, @Body() dto: MyRegimeDto) {
     return this.tax.regime(ctx, { ...dto, employeeId: undefined, reason: undefined });
   }
 

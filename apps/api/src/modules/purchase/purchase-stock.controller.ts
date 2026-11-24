@@ -9,7 +9,7 @@ import { PurchaseIssuesService } from './purchase-issues.service';
 import { PurchaseReturnsService } from './purchase-returns.service';
 import { PurchaseTransfersService } from './purchase-transfers.service';
 import {
-  AcknowledgeDto,
+  IssueAcknowledgeDto,
   CountDecisionDto,
   CountDto,
   CountImportDto,
@@ -111,7 +111,7 @@ export class PurchaseStockController {
   acknowledge(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
-    @Body() body: AcknowledgeDto,
+    @Body() body: IssueAcknowledgeDto,
   ) {
     return this.issues.acknowledge(ctx, id, body);
   }

@@ -314,7 +314,7 @@ class School {
       entry('/leave-approvals', 'Leave to approve', 'check'),
       entry('/office-orders', 'Office orders', 'file'),
       // still a web page in the app (the fallback the tab test checks)
-      entry('/my-tax', 'My tax', 'file'),
+      entry('/purchase/my-assets', 'Assets in my care', 'file'),
       entry('/messages', 'Messages', 'message'),
       entry('/help', 'Help', 'search'),
     ];
@@ -366,7 +366,7 @@ class School {
     return {
       'tabs': [
         entry('/', 'Home', 'home'),
-        if (webTab) by('/my-tax') else tabOf(attendance),
+        if (webTab) by('/purchase/my-assets') else tabOf(attendance),
         if (lists) tabOf(office),
         tabOf(classes),
         if (!lists) by('/messages'),
@@ -4564,7 +4564,7 @@ void main() {
       await tester.tap(find.text('My payslips'));
       await tester.pumpAndSettle();
       expect(find.textContaining('₹45,210'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('payslip-r1')));
+      await tester.tap(find.byKey(const Key('view-payslip-r1')));
       await tester.pumpAndSettle();
       expect(t.calls.any((c) => c.path == '/payroll/me/payslips/r1'), isTrue);
       await tester.tap(find.byType(BackButton));
@@ -4654,10 +4654,10 @@ void main() {
   testWidgets('a tab the school chose with only a web page opens it from the tab', (tester) async {
     await pumpStaff(tester, with_: School(webTab: true));
     await tester.tap(
-      find.descendant(of: find.byType(NavigationBar), matching: find.text('My tax')),
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('Assets in my care')),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('openWeb-myTax')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-purchasemyAssets')), findsOneWidget);
   });
 
   testWidgets('More follows the school’s staff menu: its order and its names', (tester) async {

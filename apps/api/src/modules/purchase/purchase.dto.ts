@@ -1017,6 +1017,8 @@ export const AcknowledgeSchema = z.object({
   onPaper: z.boolean().default(false),
 });
 export class AcknowledgeDto extends createZodDto(AcknowledgeSchema) {}
+/** An issue acknowledged (a class of its own: the staff app's client takes one name per request). */
+export class IssueAcknowledgeDto extends createZodDto(AcknowledgeSchema) {}
 
 export const ReturnToStoreSchema = z.object({
   returnedOn: Day.optional(),
