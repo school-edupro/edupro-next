@@ -964,6 +964,22 @@ class EduProApi {
   Future<dynamic> gatePassDecide({required PassDecideDto body, required String id}) =>
       _t.send('POST', '/gate-passes/${Uri.encodeComponent(id)}/decide', body: body.toJson());
 
+  /// GET /gate-passes/{id}
+  Future<dynamic> gatePassGet({required String id}) =>
+      _t.send('GET', '/gate-passes/${Uri.encodeComponent(id)}');
+
+  /// GET /gate-passes/{id}/card.pdf
+  Future<ApiFile> gatePassCard({required String id}) =>
+      _t.file('GET', '/gate-passes/${Uri.encodeComponent(id)}/card.pdf');
+
+  /// GET /gate-passes/{id}/photo/collector
+  Future<ApiFile> gatePassCollector({required String id}) =>
+      _t.file('GET', '/gate-passes/${Uri.encodeComponent(id)}/photo/collector');
+
+  /// GET /gate-passes/{id}/photo/{party} — A photo on the pupil’s record (student, father, mother, guardian)
+  Future<ApiFile> gatePassRecordPhoto({required String id, required String party}) =>
+      _t.file('GET', '/gate-passes/${Uri.encodeComponent(id)}/photo/${Uri.encodeComponent(party)}');
+
   /// GET /engagement/mine/queries
   Future<dynamic> engagementMine({String? status, String? kind, String? categoryCode, String? studentId, String? q, String? order, int? page, int? size}) =>
       _t.send('GET', '/engagement/mine/queries', query: {if (status != null) 'status': status, if (kind != null) 'kind': kind, if (categoryCode != null) 'categoryCode': categoryCode, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (order != null) 'order': order, if (page != null) 'page': page, if (size != null) 'size': size});

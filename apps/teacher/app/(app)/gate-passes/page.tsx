@@ -172,6 +172,15 @@ export default async function GatePassesPage({
               .filter(Boolean)
               .join(' · ')}
           </p>
+          <p style={{ margin: '0 0 var(--sp-2)' }}>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/gate-passes/${p.id}`}
+              aria-label={`${t(lang, 'Details')}: ${p.number}`}
+            >
+              {t(lang, 'Details')}
+            </a>
+          </p>
           <form action={decideGatePass} style={{ display: 'grid', gap: 'var(--sp-2)' }}>
             <input type="hidden" name="id" value={p.id} />
             <label className="ep-field" htmlFor={`n-${p.id}`}>
@@ -220,6 +229,13 @@ export default async function GatePassesPage({
               .join(' · ')}
           </p>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/gate-passes/${p.id}`}
+              aria-label={`${t(lang, 'Details')}: ${p.number}`}
+            >
+              {t(lang, 'Details')}
+            </a>
             {p.passNo ? (
               <a
                 className="ep-btn ep-btn--secondary ep-btn--sm"

@@ -113,6 +113,137 @@ class School {
             },
           ],
         };
+      // one pass in full, as the admin's page
+      case 'GET /gate-passes/11':
+        return {
+          'id': '11',
+          'number': 'GP-11',
+          'audience': 'student',
+          'kind': 'early_leave',
+          'kindLabel': 'Early leave',
+          'state': 'pending',
+          'stage': 'Waiting for the class teacher',
+          'onDate': day,
+          'atTime': '12:30',
+          'returnBy': null,
+          'reason': 'Doctor visit',
+          'destination': null,
+          'student': 'Kid Sample',
+          'who': 'Kid Sample (VI-A) · A1234',
+          'section': 'VI-A',
+          'admissionNo': 'A1234',
+          'escortKind': 'guardian',
+          'escortName': 'Mina Sample',
+          'escortRelation': 'mother',
+          'escortMobile': '98xxxxxx01',
+          'source': 'portal',
+          'requestedBy': 'Mina Sample',
+          'createdAt': _iso(today.add(const Duration(hours: 9))),
+          'otpVerified': false,
+          'otpNeeded': true,
+          'passNo': null,
+          'canDecide': true,
+          'approvalMode': 'sequence',
+          'approvalNeed': 1,
+          'approvals': [
+            {
+              'seq': 1,
+              'label': 'Class teacher',
+              'status': 'pending',
+              'approvers': 'Asha Teacher',
+              'actedBy': null,
+              'actedAt': null,
+              'note': null,
+              'mine': true,
+              'mandatory': false,
+            },
+            {
+              'seq': 2,
+              'label': 'Principal',
+              'status': 'waiting',
+              'approvers': 'Ravi Head',
+              'actedBy': null,
+              'actedAt': null,
+              'note': null,
+              'mine': false,
+              'mandatory': true,
+            },
+          ],
+          'itemList': <Object>[],
+          'photos': {
+            'student': true,
+            'father': false,
+            'mother': false,
+            'guardian': false,
+            'collector': false,
+          },
+          'guardians': [
+            {'name': 'Mina Sample', 'relation': 'mother', 'mobileEnd': '01'},
+          ],
+        };
+      case 'GET /gate-passes/11/photo/student':
+        return {'base64': 'iVBORw0KGgo=', 'contentType': 'image/png', 'filename': 'p.png'};
+      case 'GET /gate-passes/21':
+        return {
+          'id': '21',
+          'number': 'GP-21',
+          'audience': 'staff',
+          'kind': 'rgp',
+          'kindLabel': 'RGP (returnable)',
+          'state': 'returned',
+          'stage': 'Back in',
+          'onDate': day,
+          'atTime': '10:00',
+          'returnBy': _iso(today.add(const Duration(hours: 12))),
+          'reason': 'Bank work',
+          'destination': 'Town bank',
+          'employee': 'Asha Teacher',
+          'who': 'Asha Teacher · E01',
+          'designation': 'TGT',
+          'source': 'employee',
+          'requestedBy': 'Asha Teacher',
+          'createdAt': _iso(today.add(const Duration(hours: 8))),
+          'outAt': _iso(today.add(const Duration(hours: 10))),
+          'outGate': 'Main gate',
+          'inAt': _iso(today.add(const Duration(hours: 13))),
+          'otpVerified': false,
+          'passNo': 'P-21',
+          'canDecide': false,
+          'approvalMode': 'any',
+          'approvalNeed': 1,
+          'approvals': [
+            {
+              'seq': 1,
+              'label': 'Principal',
+              'status': 'approved',
+              'approvers': 'Ravi Head',
+              'actedBy': 'Ravi Head',
+              'actedAt': _iso(today.add(const Duration(hours: 9))),
+              'note': 'Fine',
+              'mine': false,
+              'mandatory': false,
+            },
+          ],
+          'itemList': [
+            {
+              'id': '5',
+              'name': 'Laptop',
+              'qty': 1,
+              'serialNo': 'LT-9',
+              'returnable': true,
+              'returnedQty': 1,
+              'returnedAt': _iso(today.add(const Duration(hours: 13))),
+            },
+          ],
+          'photos': {
+            'student': false,
+            'father': false,
+            'mother': false,
+            'guardian': false,
+            'collector': false,
+          },
+          'guardians': <Object>[],
+        };
       case 'POST /gate-passes/11/decide':
         decided.add(c.body!);
         return {'ok': true};
@@ -317,6 +448,58 @@ void main() {
     },
   );
 
+  testWidgets('a pass in full as the admin page: details, photos, levels; approve there', (
+    tester,
+  ) async {
+    final (_, school) = await pump(tester, const StaffGatePassesScreen(profile: staff));
+    await tapIn(tester, find.byKey(const Key('sgOpen-11')));
+    expect(find.byKey(const Key('sgDetail')), findsOneWidget);
+    expect(find.text('Gate pass GP-11'), findsOneWidget);
+    expect(find.text('Waiting for the class teacher'), findsOneWidget);
+    // the facts, as the admin's Details
+    expect(find.text('Early leave · GP-11'), findsOneWidget);
+    expect(find.text('Kid Sample (VI-A) · A1234'), findsOneWidget);
+    expect(find.text('Mina Sample (mother)'), findsOneWidget);
+    expect(find.text('The parent portal'), findsOneWidget);
+    // the photos to compare and the parents on record
+    expect(find.byKey(const Key('sgPhoto-student')), findsOneWidget);
+    expect(
+      find.textContaining('On record: Mina Sample (mother, mobile ending 01)'),
+      findsOneWidget,
+    );
+    // the levels, in order, the second one a must
+    expect(find.text(s.sgInOrder), findsOneWidget);
+    expect(find.text('1. Class teacher'), findsOneWidget);
+    expect(find.text(s.sgLevelStatus('pending')), findsOneWidget);
+    expect(find.text(s.sgMustApprove), findsOneWidget);
+    // my approval: a reject needs a note
+    await tapIn(tester, find.byKey(const Key('sgDetailReject')));
+    expect(find.text(s.sgNeedNote), findsOneWidget);
+    await tapIn(tester, find.byKey(const Key('sgDetailApprove')));
+    expect(school.decided.single, {'outcome': 'approved'});
+    expect(find.byKey(const Key('sgDetail')), findsNothing);
+  });
+
+  testWidgets(
+    'my own pass in full: the gate times, time outside, the items and how many came back',
+    (tester) async {
+      await pump(tester, const StaffGatePassesScreen(profile: staff));
+      await tapIn(tester, find.text(s.sgMineTab));
+      await tapIn(tester, find.byKey(const Key('sgOpen-21')));
+      expect(find.text('RGP (returnable) · GP-21'), findsOneWidget);
+      expect(find.text('The employee'), findsOneWidget);
+      expect(find.text('TGT'), findsOneWidget);
+      // back at 13:00 against 12:00 allowed: the time outside says it was late
+      expect(find.text('${s.sgFOutsideFor(180)} · ${s.sgFLateBack}'), findsOneWidget);
+      expect(find.text('Laptop · LT-9'), findsOneWidget);
+      expect(find.textContaining('${s.sgCameBack}: ${s.sgOf(1, 1)}'), findsOneWidget);
+      expect(find.textContaining('“Fine”'), findsOneWidget);
+      expect(find.byKey(const Key('view-sgDetailCard')), findsOneWidget);
+      expect(find.byKey(const Key('sgDetailDecide')), findsNothing);
+      expect(find.byKey(const Key('sgDetailPhotos')), findsNothing);
+    },
+  );
+
   testWidgets('appointments with me: still to come, today, past, and the week calendar', (
     tester,
   ) async {
@@ -372,6 +555,21 @@ void main() {
       // with an item row, as the websites' form
       await tapIn(tester, find.byKey(const Key('sgAddItem')));
       await check();
+      // a pass in full
+      await pump(
+        tester,
+        const StaffGatePassDetail(profile: staff, id: '11'),
+        hindi: hindi,
+        dark: dark,
+      );
+      await check();
+      await pump(
+        tester,
+        const StaffGatePassDetail(profile: staff, id: '21'),
+        hindi: hindi,
+        dark: dark,
+      );
+      await check();
       await pump(
         tester,
         const StaffAppointmentsScreen(profile: staff),
@@ -395,6 +593,15 @@ void main() {
     await tapIn(tester, find.byKey(const Key('sgApply')));
     await tapIn(tester, find.byKey(const Key('sgAddItem')));
     expect(tester.takeException(), isNull);
+    for (final id in ['11', '21']) {
+      await pump(
+        tester,
+        StaffGatePassDetail(profile: staff, id: id),
+        text: 2,
+        size: const Size(360, 4000),
+      );
+      expect(tester.takeException(), isNull);
+    }
     await pump(
       tester,
       const StaffAppointmentsScreen(profile: staff),

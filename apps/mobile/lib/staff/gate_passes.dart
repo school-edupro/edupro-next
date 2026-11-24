@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../api/api_transport.dart' show ApiFile;
 
 import '../api/endpoints.g.dart';
 import '../app_services.dart';
@@ -76,6 +80,83 @@ extension StaffGateWords on S {
     'हर सामान का नाम लिखें, या खाली पंक्ति हटाएँ।',
   );
   String get sgChoose => _sg('Choose', 'चुनें');
+
+  // one pass in full, as the admin's gate pass page
+  String get sgDetails => _sg('Details', 'विवरण');
+  String get sgYourApproval => _sg('Your approval', 'आपकी स्वीकृति');
+  String get sgPhotos => _sg('Photos to compare', 'मिलान हेतु फ़ोटो');
+  String sgParty(String k) => switch (k) {
+    'student' => _sg('Student', 'विद्यार्थी'),
+    'father' => _sg('Father', 'पिता'),
+    'mother' => _sg('Mother', 'माता'),
+    'guardian' => _sg('Guardian', 'अभिभावक'),
+    _ => _sg('Collecting (taken at the front desk)', 'लेने आए व्यक्ति (फ्रंट डेस्क पर ली गई)'),
+  };
+  String get sgNoPhotos => _sg(
+    'No photo is on the school’s record for this pupil or the parents.',
+    'इस विद्यार्थी या माता-पिता की कोई फ़ोटो विद्यालय के रिकॉर्ड में नहीं है।',
+  );
+  String sgOnRecord(String who) => _sg('On record: $who', 'रिकॉर्ड में: $who');
+  String sgMobileEnding(String end) => _sg('mobile ending $end', 'मोबाइल अंत $end');
+  String sgHandoverInfo(bool hostel, bool otp) => _sg(
+    'Approved. The ${hostel ? 'hostel warden' : 'front desk'} hands the child over (photo${otp ? ' and the parent’s code' : ''}); the gate can let the child out only after that.',
+    'स्वीकृत। ${hostel ? 'छात्रावास वार्डन' : 'फ्रंट डेस्क'} बच्चे को सौंपते हैं (फ़ोटो${otp ? ' और अभिभावक का कोड' : ''}); उसके बाद ही गेट बच्चे को बाहर जाने देता है।',
+  );
+  String get sgFPass => _sg('Pass', 'पास');
+  String get sgFStudent => _sg('Student', 'विद्यार्थी');
+  String get sgFEmployee => _sg('Employee', 'कर्मचारी');
+  String get sgFDesignation => _sg('Designation', 'पदनाम');
+  String get sgFDateTime => _sg('Date and time', 'तिथि और समय');
+  String get sgFNotReturning => _sg('Not returning today', 'आज नहीं लौट रहे');
+  String get sgFCollectedBy => _sg('Collected by', 'लेने वाले');
+  String get sgFCollectorMobile => _sg('Collector’s mobile', 'लेने वाले का मोबाइल');
+  String get sgFGoingTo => _sg('Going to', 'कहाँ जा रहे हैं');
+  String get sgFReason => _sg('Reason', 'कारण');
+  String get sgFAskedBy => _sg('Asked by', 'किसने माँगा');
+  String sgFOn(String who, String when) => _sg('$who on $when', '$who, $when');
+  String get sgFMadeAt => _sg('Made at', 'कहाँ बना');
+  String sgFSource(String source, bool student) => source == 'front_desk'
+      ? _sg('The front desk', 'फ्रंट डेस्क')
+      : student
+      ? _sg('The parent portal', 'अभिभावक पोर्टल')
+      : _sg('The employee', 'कर्मचारी स्वयं');
+  String get sgFHandedOver => _sg('Handed over', 'सौंपा गया');
+  String sgFBy(String when, String who) => _sg('$when by $who', '$when, $who द्वारा');
+  String get sgFRemark => _sg('Front desk remark', 'फ्रंट डेस्क टिप्पणी');
+  String get sgFParentCode => _sg('Parent’s code', 'अभिभावक का कोड');
+  String get sgFConfirmed => _sg('Confirmed', 'पुष्टि हुई');
+  String get sgFGateOut => _sg('Gate out', 'गेट से बाहर');
+  String get sgFGateIn => _sg('Gate in', 'गेट से अंदर');
+  String get sgFOutside => _sg('Time outside', 'बाहर रहने का समय');
+  String sgFOutsideFor(int min) => min >= 60
+      ? _sg('${min ~/ 60} h ${min % 60} min', '${min ~/ 60} घं ${min % 60} मि')
+      : _sg('$min min', '$min मि');
+  String get sgFLateBack => _sg('back after the allowed time', 'अनुमत समय के बाद लौटे');
+  String get sgFGateNote => _sg('Gate note', 'गेट टिप्पणी');
+  String get sgFNote => _sg('Note', 'टिप्पणी');
+  String get sgItemsOut => _sg('Items carried out', 'बाहर ले जाया गया सामान');
+  String get sgToComeBack => _sg('To come back', 'वापस आना है');
+  String get sgCameBack => _sg('Came back', 'वापस आया');
+  String sgOf(int n, int of) => _sg('$n of $of', '$of में से $n');
+  String get sgYes => _sg('Yes', 'हाँ');
+  String get sgNo => _sg('No', 'नहीं');
+  String get sgApprovalTitle => _sg('Approval', 'स्वीकृति');
+  String sgAnyOf(int n, bool mandatory) => _sg(
+    'Any $n of these approve${mandatory ? ', and every level marked “must approve”' : ''}.',
+    'इनमें से कोई $n स्वीकृत करें${mandatory ? ', और “अवश्य स्वीकृत करें” वाला हर स्तर' : ''}।',
+  );
+  String get sgInOrder => _sg('One after another, in this order.', 'एक के बाद एक, इसी क्रम में।');
+  String get sgMustApprove => _sg('Must approve', 'अवश्य स्वीकृत करें');
+  String sgLevelStatus(String st) => switch (st) {
+    'waiting' => _sg('Waits its turn', 'अपनी बारी की प्रतीक्षा'),
+    'pending' => _sg('To decide now', 'अभी निर्णय'),
+    'approved' => _sg('Approved', 'स्वीकृत'),
+    'rejected' => _sg('Rejected', 'अस्वीकृत'),
+    _ => _sg('Skipped', 'छोड़ा गया'),
+  };
+  String sgWho(String who) => _sg('Who: $who', 'कौन: $who');
+  String sgDecidedBy(String who) => _sg('Decided by $who', '$who द्वारा निर्णय');
+  String get sgPassCard => _sg('Pass card', 'पास कार्ड');
   String sgItem(int n) => _sg('Item $n', 'वस्तु $n');
   String get sgQty => _sg('Quantity', 'मात्रा');
   String get sgSerial => _sg('Serial / asset no.', 'क्रमांक / संपत्ति संख्या');
@@ -325,7 +406,15 @@ class _InboxCardState extends ConsumerState<_InboxCard> {
                 padding: const EdgeInsets.only(top: Tokens.sp1),
                 child: Text(extra.join(' · '), style: TextStyle(color: muted, fontSize: 13)),
               ),
-            const SizedBox(height: Tokens.sp2),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                key: Key('sgOpen-$id'),
+                icon: const Icon(Icons.article_outlined),
+                label: Text(s.sgDetails),
+                onPressed: () => openStaffGatePass(context, widget.profile, id),
+              ),
+            ),
             TextField(
               key: Key('sgNote-$id'),
               controller: _note,
@@ -464,34 +553,467 @@ class _MineCard extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: Tokens.sp1),
                 child: Text(extra.join(' · '), style: TextStyle(color: muted, fontSize: 13)),
               ),
-            if (p['passNo'] != null || state == 'pending' || state == 'approved')
-              Padding(
-                padding: const EdgeInsets.only(top: Tokens.sp2),
-                child: Wrap(
-                  spacing: Tokens.sp2,
-                  runSpacing: Tokens.sp2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (p['passNo'] != null)
-                      FileIcons(
-                        name: 'sgCard-$id',
-                        label: s.sgCard,
-                        load: () => ref.read(apiProvider).gatePassStaffCardJson(id: id),
-                      ),
-                    if (state == 'pending' || state == 'approved')
-                      OutlinedButton(
-                        key: Key('sgCancel-$id'),
-                        onPressed: () => _cancel(context, ref),
-                        child: Text(s.cancel),
-                      ),
-                  ],
-                ),
+            Padding(
+              padding: const EdgeInsets.only(top: Tokens.sp2),
+              child: Wrap(
+                spacing: Tokens.sp2,
+                runSpacing: Tokens.sp2,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    key: Key('sgOpen-$id'),
+                    icon: const Icon(Icons.article_outlined),
+                    label: Text(s.sgDetails),
+                    onPressed: () => openStaffGatePass(context, profile, id),
+                  ),
+                  if (p['passNo'] != null)
+                    FileIcons(
+                      name: 'sgCard-$id',
+                      label: s.sgCard,
+                      load: () => ref.read(apiProvider).gatePassStaffCardJson(id: id),
+                    ),
+                  if (state == 'pending' || state == 'approved')
+                    OutlinedButton(
+                      key: Key('sgCancel-$id'),
+                      onPressed: () => _cancel(context, ref),
+                      child: Text(s.cancel),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+/// One pass in full (as the admin's gate pass page).
+final staffGatePassProvider = FutureProvider.autoDispose.family<Json, String>(
+  (ref, id) async => asJson(await ref.read(apiProvider).gatePassGet(id: id)),
+);
+
+/// Opens one pass in full.
+void openStaffGatePass(BuildContext context, Profile profile, String id) => pushPage(
+  context,
+  ProviderScope.containerOf(context, listen: false).read(stringsProvider).sgDetails,
+  StaffGatePassDetail(profile: profile, id: id),
+);
+
+/// One gate pass with everything on it, as the admin's page: who and why, its stage and the pass card; my approval
+/// when it waits on me; the photos to compare (a pupil's pass); the details; the items carried and how many came
+/// back; the approval levels. The front desk and the gate hand over and let out on their own screens.
+class StaffGatePassDetail extends ConsumerStatefulWidget {
+  const StaffGatePassDetail({super.key, required this.profile, required this.id});
+  final Profile profile;
+  final String id;
+
+  @override
+  ConsumerState<StaffGatePassDetail> createState() => _StaffGatePassDetailState();
+}
+
+class _StaffGatePassDetailState extends ConsumerState<StaffGatePassDetail> {
+  final _note = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _decide(String outcome) async {
+    final s = ref.read(stringsProvider);
+    final note = _note.text.trim();
+    if (outcome == 'rejected' && note.isEmpty) return setState(() => _error = s.sgNeedNote);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(apiProvider)
+          .gatePassDecide(
+            id: widget.id,
+            body: PassDecideDto(outcome: outcome, note: note.isEmpty ? null : note),
+          );
+      ref.invalidate(staffGateInboxProvider(widget.profile));
+      ref.invalidate(staffGatePassProvider(widget.id));
+      // the header's Approvals count reads again
+      ref.invalidate(approvalsProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(outcome == 'approved' ? s.sgApproved : s.sgRejected)));
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) setState(() => _error = errorText(s, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _at(S s, Object? v) {
+    final d = DateTime.tryParse('$v');
+    return d == null ? '' : s.dateTime(d);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ref.watch(stringsProvider);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
+    final api = ref.read(apiProvider);
+    return AsyncBody<Json>(
+      value: ref.watch(staffGatePassProvider(widget.id)),
+      retry: () => ref.invalidate(staffGatePassProvider(widget.id)),
+      data: (p) {
+        final student = p['audience'] == 'student';
+        final state = '${p['state']}';
+        final kind = '${p['kind']}';
+        final escort = p['escortName'] != null
+            ? '${p['escortName']}${p['escortRelation'] != null ? ' (${p['escortRelation']})' : ''}'
+            : null;
+        final out = DateTime.tryParse('${p['outAt']}');
+        final back = DateTime.tryParse('${p['inAt']}');
+        final minutes = out != null && back != null
+            ? back.difference(out).inMinutes.clamp(0, 100000)
+            : null;
+        final returnBy = DateTime.tryParse('${p['returnBy']}');
+        final late =
+            kind == 'rgp' &&
+            returnBy != null &&
+            out != null &&
+            (back ?? DateTime.now()).isAfter(returnBy);
+        final facts = <(String, String?)>[
+          (s.sgFPass, '${p['kindLabel'] ?? s.sgKind(kind)} · ${p['number']}'),
+          (student ? s.sgFStudent : s.sgFEmployee, p['who'] as String?),
+          (s.sgFDesignation, student ? null : p['designation'] as String?),
+          (
+            s.sgFDateTime,
+            '${s.date(p['onDate'] ?? '')}${p['atTime'] != null ? ', ${s.time('${p['atTime']}')}' : ''}',
+          ),
+          (
+            s.sgBackAt,
+            returnBy != null ? _at(s, p['returnBy']) : (kind == 'nrgp' ? s.sgFNotReturning : null),
+          ),
+          (s.sgFCollectedBy, escort),
+          (s.sgFCollectorMobile, p['escortMobile'] as String?),
+          (s.sgFGoingTo, p['destination'] as String?),
+          (s.sgFReason, p['reason'] as String?),
+          (
+            s.sgFAskedBy,
+            p['requestedBy'] != null
+                ? s.sgFOn('${p['requestedBy']}', _at(s, p['createdAt']))
+                : _at(s, p['createdAt']),
+          ),
+          (s.sgFMadeAt, s.sgFSource('${p['source']}', student)),
+          (
+            s.sgFHandedOver,
+            p['handoverAt'] != null
+                ? (p['handoverBy'] != null
+                      ? s.sgFBy(_at(s, p['handoverAt']), '${p['handoverBy']}')
+                      : _at(s, p['handoverAt']))
+                : null,
+          ),
+          (s.sgFRemark, p['handoverRemark'] as String?),
+          (s.sgFParentCode, p['otpVerified'] == true ? s.sgFConfirmed : null),
+          (
+            s.sgFGateOut,
+            p['outAt'] != null
+                ? '${_at(s, p['outAt'])}${p['outGate'] != null ? ' · ${p['outGate']}' : ''}'
+                : null,
+          ),
+          (s.sgFGateIn, p['inAt'] != null ? _at(s, p['inAt']) : null),
+          (
+            s.sgFOutside,
+            minutes != null
+                ? '${s.sgFOutsideFor(minutes)}${late ? ' · ${s.sgFLateBack}' : ''}'
+                : null,
+          ),
+          (s.sgFGateNote, p['gateNote'] as String?),
+          (s.sgFNote, (p['decisionNote'] ?? p['cancelReason']) as String?),
+        ].where((f) => f.$2 != null && f.$2!.isNotEmpty).toList();
+        final photos = asJson(p['photos']);
+        final parties = [
+          for (final k in const ['student', 'father', 'mother', 'guardian', 'collector'])
+            if (photos[k] == true) k,
+        ];
+        final items = asList(p['itemList']);
+        final approvals = asList(p['approvals']);
+        final tint = switch (state) {
+          'pending' => Tokens.mobAmber50,
+          'approved' => Tokens.mobGreen50,
+          'rejected' => Tokens.mobRed50,
+          _ => Tokens.mobCyan100,
+        };
+        Widget card(String title, List<Widget> children, {Key? key}) => Card(
+          key: key,
+          margin: const EdgeInsets.only(top: Tokens.sp3),
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.sp4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: Tokens.fwBold),
+                  ),
+                ),
+                const SizedBox(height: Tokens.sp2),
+                ...children,
+              ],
+            ),
+          ),
+        );
+        return ListView(
+          key: const Key('sgDetail'),
+          padding: const EdgeInsets.all(Tokens.sp4),
+          children: [
+            Text(
+              s.hindi ? 'गेट पास ${p['number']}' : 'Gate pass ${p['number']}',
+              style: TextStyle(color: muted, fontSize: 14),
+            ),
+            Text(
+              '${p['student'] ?? p['employee'] ?? ''}',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: Tokens.fwBold),
+            ),
+            Text('${p['kindLabel'] ?? s.sgKind(kind)}', style: TextStyle(color: muted)),
+            const SizedBox(height: Tokens.sp2),
+            Wrap(
+              spacing: Tokens.sp2,
+              runSpacing: Tokens.sp2,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Tag('${p['stage'] ?? state}', color: tint),
+                if (p['passNo'] != null)
+                  FileIcons(
+                    name: 'sgDetailCard',
+                    label: s.sgPassCard,
+                    load: () => api.gatePassCard(id: widget.id),
+                  ),
+              ],
+            ),
+            if (p['canDecide'] == true)
+              card(s.sgYourApproval, key: const Key('sgDetailDecide'), [
+                TextField(
+                  key: const Key('sgDetailNote'),
+                  controller: _note,
+                  maxLength: 300,
+                  decoration: InputDecoration(
+                    labelText: s.sgNote,
+                    border: const OutlineInputBorder(),
+                    counterText: '',
+                  ),
+                ),
+                if (_error != null) ErrorText(_error!),
+                const SizedBox(height: Tokens.sp2),
+                Wrap(
+                  spacing: Tokens.sp2,
+                  runSpacing: Tokens.sp2,
+                  children: [
+                    FilledButton(
+                      key: const Key('sgDetailApprove'),
+                      onPressed: _busy ? null : () => _decide('approved'),
+                      child: Text(s.sgApprove),
+                    ),
+                    OutlinedButton(
+                      key: const Key('sgDetailReject'),
+                      onPressed: _busy ? null : () => _decide('rejected'),
+                      child: Text(s.sgReject),
+                    ),
+                  ],
+                ),
+              ]),
+            if (student)
+              card(s.sgPhotos, key: const Key('sgDetailPhotos'), [
+                if (parties.isEmpty)
+                  Text(s.sgNoPhotos, style: TextStyle(color: muted))
+                else
+                  Wrap(
+                    spacing: Tokens.sp3,
+                    runSpacing: Tokens.sp3,
+                    children: [
+                      for (final k in parties)
+                        _PassPhoto(
+                          key: Key('sgPhoto-$k'),
+                          label: s.sgParty(k),
+                          load: () => k == 'collector'
+                              ? api.gatePassCollector(id: widget.id)
+                              : api.gatePassRecordPhoto(id: widget.id, party: k),
+                        ),
+                    ],
+                  ),
+                if (asList(p['guardians']).isNotEmpty) ...[
+                  const SizedBox(height: Tokens.sp2),
+                  Text(
+                    s.sgOnRecord(
+                      asList(p['guardians'])
+                          .map(
+                            (g) =>
+                                '${g['name']} (${g['relation']}${g['mobileEnd'] != null ? ', ${s.sgMobileEnding('${g['mobileEnd']}')}' : ''})',
+                          )
+                          .join(' · '),
+                    ),
+                    style: TextStyle(color: muted, fontSize: 13),
+                  ),
+                ],
+              ]),
+            if (state == 'approved' && student && (kind == 'early_leave' || kind == 'hostel_home'))
+              Padding(
+                padding: const EdgeInsets.only(top: Tokens.sp3),
+                child: Notice(
+                  key: const Key('sgDetailHandover'),
+                  text: s.sgHandoverInfo(kind == 'hostel_home', p['otpNeeded'] == true),
+                ),
+              ),
+            card(s.sgDetails, key: const Key('sgDetailFacts'), [
+              for (final (k, v) in facts)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Tokens.sp2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(k, style: TextStyle(color: muted, fontSize: 13)),
+                      SelectionArea(child: Text(v!)),
+                    ],
+                  ),
+                ),
+            ]),
+            if (items.isNotEmpty)
+              card(s.sgItemsOut, key: const Key('sgDetailItems'), [
+                for (final i in items)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Tokens.sp2),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${i['name']}${i['serialNo'] != null ? ' · ${i['serialNo']}' : ''}',
+                          style: const TextStyle(fontWeight: Tokens.fwSemibold),
+                        ),
+                        Text(
+                          [
+                            '${s.sgQty}: ${i['qty']}',
+                            '${s.sgToComeBack}: ${i['returnable'] == true ? s.sgYes : s.sgNo}',
+                            if (i['returnable'] == true)
+                              '${s.sgCameBack}: ${s.sgOf((i['returnedQty'] as num? ?? 0).toInt(), (i['qty'] as num? ?? 0).toInt())}${i['returnedAt'] != null ? ' · ${_at(s, i['returnedAt'])}' : ''}',
+                          ].join(' · '),
+                          style: TextStyle(color: muted, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+              ]),
+            card(s.sgApprovalTitle, key: const Key('sgDetailApprovals'), [
+              Text(
+                p['approvalMode'] == 'any'
+                    ? s.sgAnyOf(
+                        (p['approvalNeed'] as num? ?? 1).toInt(),
+                        approvals.any((a) => a['mandatory'] == true),
+                      )
+                    : s.sgInOrder,
+                style: TextStyle(color: muted, fontSize: 13),
+              ),
+              const SizedBox(height: Tokens.sp2),
+              for (final a in approvals)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Tokens.sp3),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: Tokens.sp2,
+                        runSpacing: Tokens.sp1,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            '${a['seq']}. ${a['label']}',
+                            style: const TextStyle(fontWeight: Tokens.fwSemibold),
+                          ),
+                          Tag(
+                            s.sgLevelStatus('${a['status']}'),
+                            color: switch ('${a['status']}') {
+                              'approved' => Tokens.mobGreen50,
+                              'rejected' => Tokens.mobRed50,
+                              'pending' => Tokens.mobAmber50,
+                              _ => Tokens.mobGray100,
+                            },
+                          ),
+                          if (a['mandatory'] == true)
+                            Tag(s.sgMustApprove, color: Tokens.mobCyan100),
+                        ],
+                      ),
+                      Text(
+                        [
+                          s.sgWho('${a['approvers'] ?? '—'}'),
+                          if (a['actedBy'] != null)
+                            '${s.sgDecidedBy('${a['actedBy']}')}${a['actedAt'] != null ? ', ${_at(s, a['actedAt'])}' : ''}',
+                          if (a['note'] != null) '“${a['note']}”',
+                        ].join(' · '),
+                        style: TextStyle(color: muted, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+            ]),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// One photo to compare (the pupil's record or the person collecting), with its label; nothing while it loads or
+/// when it cannot be read.
+class _PassPhoto extends StatefulWidget {
+  const _PassPhoto({super.key, required this.label, required this.load});
+  final String label;
+  final Future<ApiFile> Function() load;
+
+  @override
+  State<_PassPhoto> createState() => _PassPhotoState();
+}
+
+class _PassPhotoState extends State<_PassPhoto> {
+  late final Future<ApiFile> _file = widget.load();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 120,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(Tokens.radiusSm),
+          child: SizedBox(
+            width: 120,
+            height: 140,
+            child: FutureBuilder<ApiFile>(
+              future: _file,
+              builder: (context, snap) => snap.data == null
+                  ? const ColoredBox(
+                      color: Tokens.mobGray100,
+                      child: Center(child: Icon(Icons.person_outline)),
+                    )
+                  : Image.memory(
+                      Uint8List.fromList(snap.data!.bytes),
+                      fit: BoxFit.cover,
+                      semanticLabel: widget.label,
+                      errorBuilder: (_, _, _) => const Icon(Icons.person_outline),
+                    ),
+            ),
+          ),
+        ),
+        const SizedBox(height: Tokens.sp1),
+        Text(widget.label, style: const TextStyle(fontSize: 13)),
+      ],
+    ),
+  );
 }
 
 /// One item carried out: what, how many, its number, whether it comes back.

@@ -40,6 +40,8 @@ const PAGES = [
   '/gate-passes',
   '/approvals',
   '/gate-passes/new',
+  // a pass in full, as the admin's page (dev-teacher's own RGP in the sample data)
+  '/gate-passes/61',
   '/library',
   '/library?view=history',
   '/library?view=find&q=a',

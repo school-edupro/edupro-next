@@ -285,6 +285,12 @@ GatePassController_staffCancel
 GatePassController_staffCardJson !file
 GatePassController_inbox
 GatePassController_decide
+# one pass in full, as the admin's gate pass page (approvers and the employee may open it): the pass, its card,
+# the photos to compare (the pupil's record and the person collecting)
+GatePassController_get
+GatePassController_card !file
+GatePassController_collector !file
+GatePassController_recordPhoto !file
 EngagementController_mine
 EngagementController_create
 EngagementController_getMine
