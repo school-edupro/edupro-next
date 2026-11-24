@@ -14,6 +14,9 @@ export async function currentLang(): Promise<Lang> {
 
 const DICT: Record<string, string> = {
   // purchase indents (docs/design/83)
+  'Not open to you': 'आपके लिए खुला नहीं',
+  'The school put these in this tab; your role does not give you the right to open them. Ask the office if you need one.':
+    'विद्यालय ने इन्हें इस टैब में रखा है; आपकी भूमिका इन्हें खोलने का अधिकार नहीं देती। ज़रूरत हो तो कार्यालय से पूछें।',
   Purchase: 'क्रय',
   'Ask for what your department needs. The department’s approvers decide in turn — nobody approves their own — and an approved indent goes to the purchase office’s requisition, or straight to the order when a rule allows it.':
     'अपने विभाग की ज़रूरत की वस्तुएँ माँगें। विभाग के अनुमोदक बारी-बारी से निर्णय लेते हैं — कोई अपना इंडेंट स्वयं स्वीकृत नहीं करता — और स्वीकृत इंडेंट क्रय कार्यालय की माँग (PR) में, या नियम होने पर सीधे आदेश (PO) में जाता है।',

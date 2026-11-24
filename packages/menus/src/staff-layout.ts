@@ -293,6 +293,11 @@ export interface StaffEntry {
   icon: string;
   /** A list tab's Hindi name the school gave (null or absent: through the dictionary). */
   labelHi?: string | null;
+  /**
+   * In a list tab of a published layout: a screen the school put there that the person has no right to open — shown
+   * (as the set-up page has it), not opened (docs/design/94, "the school's tabs stay").
+   */
+  locked?: boolean;
 }
 export interface MyStaffLayout {
   /** Home, the three, More — each with its name and icon. */
@@ -368,7 +373,13 @@ export function myStaffLayout(
       label: x.label,
       labelHi: x.labelHi,
       icon,
-      items: pick(x.items),
+      // published: every screen the school put in the list, those the person cannot open marked locked
+      items: keepTabs
+        ? x.items
+            .filter((h) => !hidden.has(h))
+            .map((h) => byHref.get(h) ?? (every.has(h) ? { ...every.get(h)!, locked: true } : null))
+            .filter((e): e is StaffEntry => !!e)
+        : pick(x.items),
     });
     return { href: x.key, label: x.label, labelHi: x.labelHi, icon };
   };

@@ -8,7 +8,7 @@ import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/staff/classes.dart';
 import 'package:edupro/staff/data.dart' show PickedFile;
-import 'package:edupro/family/layout.dart' show LayoutList;
+import 'package:edupro/family/layout.dart' show FamilyEntry, LayoutList;
 import 'package:edupro/staff/issues.dart';
 import 'package:edupro/staff/layout.dart' show StaffListTab;
 import 'package:edupro/staff/my_certificates.dart';
@@ -580,6 +580,35 @@ void main() {
     expect(find.text('Nothing here is open to you.'), findsOneWidget);
     await expectLater(tester, meetsGuideline(textContrastGuideline));
   });
+
+  testWidgets(
+    'a school tab shows every screen it has; one not open to the person is locked, explained',
+    (tester) async {
+      await pump(
+        tester,
+        const StaffListTab(
+          profile: staff,
+          list: LayoutList('list-1', 'Daily Task', null, 'book', [
+            FamilyEntry('/my-leave', 'My leave', 'calendar'),
+            FamilyEntry('/daily-work', 'Daily work', 'book', null, true),
+          ]),
+        ),
+      );
+      expect(find.byKey(const Key('list-list-1-myLeave')), findsOneWidget);
+      expect(find.byKey(const Key('locked-list-1-dailyWork')), findsOneWidget);
+      expect(find.text('Not open to you'), findsOneWidget);
+      expect(find.byKey(const Key('listEmpty-list-1')), findsNothing);
+      await tapIn(tester, find.byKey(const Key('locked-list-1-dailyWork')));
+      expect(find.textContaining('your role does not give you the right'), findsOneWidget);
+      for (final g in [
+        textContrastGuideline,
+        androidTapTargetGuideline,
+        labeledTapTargetGuideline,
+      ]) {
+        await expectLater(tester, meetsGuideline(g));
+      }
+    },
+  );
 
   for (final (name, hindi, dark) in [
     ('light', false, false),

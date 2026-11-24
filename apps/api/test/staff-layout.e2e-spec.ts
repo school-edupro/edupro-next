@@ -409,12 +409,30 @@ describe('the staff app layout (e2e, docs/design/94 phase B)', () => {
     ]);
 
     // the clerk cannot mark a class or post daily work: the school's tabs stay all the same (decided with the user
-    // 24 Nov 2026), each listing only what the clerk can open — Classes nothing (the app and website say so)
+    // 24 Nov 2026), each with every screen the school put in it as on the set-up page — those the clerk has no
+    // right to open marked locked (shown, not opened)
     const c = await mine(clerk);
     expect(hrefs(c.tabs)).toEqual(['/', 'attendance', 'list-office', 'classes', 'more']);
-    expect(hrefs(c.lists.find((x) => x.key === 'classes')!.items)).toEqual([]);
-    expect(hrefs(c.lists.find((x) => x.key === 'attendance')!.items)).not.toContain('/attendance');
-    for (const x of c.lists) for (const i of x.items) expect(hrefs(c.screens)).toContain(i.href);
+    const classes = c.lists.find((x) => x.key === 'classes')!.items as Array<{
+      href: string;
+      locked?: boolean;
+    }>;
+    expect(classes.map((i) => [i.href, i.locked === true])).toEqual([
+      ['/daily-work', true],
+      ['/marks', true],
+    ]);
+    const att = c.lists.find((x) => x.key === 'attendance')!.items as Array<{
+      href: string;
+      locked?: boolean;
+    }>;
+    expect(hrefs(att)).toEqual(['/attendance', '/my-attendance', '/my-leave', '/leave-approvals']);
+    expect(att.find((i) => i.href === '/attendance')!.locked).toBe(true);
+    expect(att.find((i) => i.href === '/my-leave')!.locked).toBeUndefined();
+    for (const x of c.lists)
+      for (const i of x.items as Array<{ href: string; locked?: boolean }>)
+        expect(hrefs(c.screens).includes(i.href)).toBe(!i.locked);
+    // the hidden help desk stays out of the list for the clerk too
+    expect(hrefs(c.lists.find((x) => x.key === 'list-office')!.items)).not.toContain('/help');
 
     // a layout kept before the lists: its /attendance tab is the Attendance list
     expect(

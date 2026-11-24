@@ -176,20 +176,41 @@ class StaffListTab extends ConsumerWidget {
             ),
           ),
         for (final e in list.items)
-          ListTile(
-            key: Key('list-${list.key}-${screenKey(e.href)}'),
-            leading: Icon(screenIcon(e.href, e.icon)),
-            title: Text(staffListLabel(s, e)),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              final screen = nativeScreen(profile, e.href, s);
-              if (screen != null) {
-                pushPage(context, staffListLabel(s, e), screen);
-              } else {
-                openStaffScreen(context, s, profile, e);
-              }
-            },
-          ),
+          if (e.locked)
+            // the school put it in this tab; the person has no right to open it: named, explained, not opened
+            ListTile(
+              key: Key('locked-${list.key}-${screenKey(e.href)}'),
+              leading: Icon(screenIcon(e.href, e.icon)),
+              title: Text(staffListLabel(s, e)),
+              subtitle: Text(s.hindi ? 'आपके लिए खुला नहीं' : 'Not open to you'),
+              trailing: const Icon(Icons.lock_outline),
+              onTap: () => ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      s.hindi
+                          ? 'विद्यालय ने इसे यहाँ रखा है; आपकी भूमिका इसे खोलने का अधिकार नहीं देती। ज़रूरत हो तो कार्यालय से पूछें।'
+                          : 'The school put this here; your role does not give you the right to open it. Ask the office if you need it.',
+                    ),
+                  ),
+                ),
+            )
+          else
+            ListTile(
+              key: Key('list-${list.key}-${screenKey(e.href)}'),
+              leading: Icon(screenIcon(e.href, e.icon)),
+              title: Text(staffListLabel(s, e)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                final screen = nativeScreen(profile, e.href, s);
+                if (screen != null) {
+                  pushPage(context, staffListLabel(s, e), screen);
+                } else {
+                  openStaffScreen(context, s, profile, e);
+                }
+              },
+            ),
       ],
     );
   }

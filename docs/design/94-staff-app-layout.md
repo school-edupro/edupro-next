@@ -203,3 +203,13 @@ lists only the screens the person can open — none at all says "Nothing here is
 The layout as built (never published) is unchanged: there a tab the person cannot open still gives its place to
 their first shortcuts, so Classes stays for those with classes. Tests: `staff-layout.e2e-spec.ts` (published: the
 clerk gets the school's tabs, an empty Classes list), `staff_office_test.dart` (the empty list's note).
+
+Later the same day (a staff member without a role saw "Nothing here is open to you." on Daily Task; the user: "in
+bottom menu according to the staff app layout set-up"): a published layout's list tabs show **every screen the school
+put in them**, in its order, as the set-up page has them. A screen the person has no right to open comes with
+`locked: true`: the app shows it with a lock and "Not open to you" and, tapped, explains (the school put it here; the
+role does not give the right; ask the office) instead of opening a page that would refuse; the staff website's
+`/tabs/<key>` lists such screens under **Not open to you** without links. "Nothing here is open to you." shows only
+for a list with no screens at all. Tests: `staff-layout.e2e-spec.ts` (the clerk's lists: every screen, the closed ones
+locked and not among the person's screens), `staff_office_test.dart` (a locked screen in a list tab).
+

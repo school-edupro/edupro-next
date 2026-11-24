@@ -53,12 +53,13 @@ extension LayoutWords on S {
 
 /// A screen of the layout: its path, name (English, put in Hindi by `s.menu`) and the web apps' icon name.
 class FamilyEntry {
-  const FamilyEntry(this.href, this.label, this.icon, [this.labelHi]);
+  const FamilyEntry(this.href, this.label, this.icon, [this.labelHi, this.locked = false]);
   factory FamilyEntry.fromJson(Json j) => FamilyEntry(
     '${j['href']}',
     '${j['label']}',
     '${j['icon'] ?? ''}',
     j['labelHi'] is String ? j['labelHi'] as String : null,
+    j['locked'] == true,
   );
   final String href;
   final String label;
@@ -66,6 +67,9 @@ class FamilyEntry {
 
   /// A tab's Hindi name the school gave (a list tab, the Academics tab); null: the app's word.
   final String? labelHi;
+
+  /// In a staff list tab: a screen the school put there that the person has no right to open (shown, not opened).
+  final bool locked;
 }
 
 /// A list tab the school keeps (docs/design/94, part 3): its name, its icon and the screens the person can open.

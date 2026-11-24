@@ -13,12 +13,16 @@ export default async function ListTabPage({ params }: { params: Promise<{ key: s
   const lang = await currentLang();
   const list = (await myStaffLayout())?.lists.find((x) => x.key === key) ?? null;
   const name = list ? (lang === 'hi' && list.labelHi ? list.labelHi : t(lang, list.label)) : null;
-  const tiles: QuickTile[] = (list?.items ?? []).map((i) => ({
-    href: i.href,
-    label: t(lang, i.label),
-    section: name ?? '',
-    icon: screenIcon(i.href, i.icon),
-  }));
+  const tiles: QuickTile[] = (list?.items ?? [])
+    .filter((i) => !i.locked)
+    .map((i) => ({
+      href: i.href,
+      label: t(lang, i.label),
+      section: name ?? '',
+      icon: screenIcon(i.href, i.icon),
+    }));
+  // the screens the school put in this tab that the person has no right to open: named, not linked
+  const locked = (list?.items ?? []).filter((i) => i.locked);
   return (
     <main>
       <PageHeader
@@ -40,6 +44,28 @@ export default async function ListTabPage({ params }: { params: Promise<{ key: s
           noMatch: t(lang, 'No page matches'),
         }}
       />
+      {locked.length ? (
+        <section
+          className="ep-card"
+          aria-labelledby="tab-locked"
+          style={{ marginTop: 'var(--sp-4)' }}
+        >
+          <h2 id="tab-locked" className="ep-card__title">
+            {t(lang, 'Not open to you')}
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {t(
+              lang,
+              'The school put these in this tab; your role does not give you the right to open them. Ask the office if you need one.',
+            )}
+          </p>
+          <ul className="ep-list" data-testid="tab-locked">
+            {locked.map((i) => (
+              <li key={i.href}>{t(lang, i.label)}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </main>
   );
 }

@@ -15,6 +15,8 @@ export interface StaffEntry {
   icon: string;
   /** A list tab's Hindi name the school gave. */
   labelHi?: string | null;
+  /** In a list tab: a screen the school put there that the person has no right to open (shown, not opened). */
+  locked?: boolean;
 }
 
 /** A list tab the person got (docs/design/94, part 3): its name and the screens they can open, in the school's order. */
