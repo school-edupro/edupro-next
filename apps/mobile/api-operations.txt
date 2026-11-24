@@ -362,3 +362,13 @@ HelpdeskController_reopen
 HelpdeskController_rate
 HelpdeskController_heads
 HelpdeskController_assignees
+
+# My profile as on the staff website (docs/design/33): my record by section, changes (saved at once or for
+# approval) with proofs, rows of the lists, my photo, my requests and withdrawing one, my PDF
+EmployeeSelfController_mine
+EmployeeSelfController_submit
+EmployeeSelfController_cancel
+EmployeeSelfController_myPhoto !file
+EmployeeSelfController_myFile !file
+EmployeeSelfController_print
+EmployeeSelfController_myExport

@@ -313,6 +313,8 @@ class School {
       entry('/my-attendance', 'My attendance', 'clock'),
       entry('/leave-approvals', 'Leave to approve', 'check'),
       entry('/office-orders', 'Office orders', 'file'),
+      // still a web page in the app (the fallback the tab test checks)
+      entry('/my-tax', 'My tax', 'file'),
       entry('/messages', 'Messages', 'message'),
       entry('/help', 'Help', 'search'),
     ];
@@ -364,7 +366,7 @@ class School {
     return {
       'tabs': [
         entry('/', 'Home', 'home'),
-        if (webTab) by('/office-orders') else tabOf(attendance),
+        if (webTab) by('/my-tax') else tabOf(attendance),
         if (lists) tabOf(office),
         tabOf(classes),
         if (!lists) by('/messages'),
@@ -4652,10 +4654,10 @@ void main() {
   testWidgets('a tab the school chose with only a web page opens it from the tab', (tester) async {
     await pumpStaff(tester, with_: School(webTab: true));
     await tester.tap(
-      find.descendant(of: find.byType(NavigationBar), matching: find.text('Office orders')),
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('My tax')),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('openWeb-officeOrders')), findsOneWidget);
+    expect(find.byKey(const Key('openWeb-myTax')), findsOneWidget);
   });
 
   testWidgets('More follows the school’s staff menu: its order and its names', (tester) async {

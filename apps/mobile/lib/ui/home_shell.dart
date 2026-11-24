@@ -31,6 +31,8 @@ import '../family/today.dart';
 import '../staff/appointments.dart' show StaffAppointmentsScreen;
 import '../staff/bus_attendance.dart' show BusAttendanceScreen;
 import '../staff/activity_log.dart' show ActivityLogScreen;
+import '../staff/my_profile.dart' show StaffProfileScreen;
+import '../staff/office_orders.dart' show OfficeOrdersScreen;
 import '../staff/queries.dart' show StaffQueriesScreen;
 import '../staff/student_leave.dart' show StudentLeaveScreen;
 import '../staff/gate_passes.dart' show StaffGatePassesScreen;
@@ -155,6 +157,10 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/queries' => StaffQueriesScreen(profile: p, initialTab: href.contains('tab=mine') ? 1 : 0),
       // appointments with me as on the staff website: today, still to come, past, and the week calendar
       '/appointments' => StaffAppointmentsScreen(profile: p),
+      // office orders (and every notice for staff) as on the staff website: the text, attachments, acknowledge
+      '/office-orders' => OfficeOrdersScreen(profile: p),
+      // my profile as on the staff website: photo, sections to update, lists, my requests, the PDF
+      '/profile' => StaffProfileScreen(profile: p),
       // my library books as on the staff website: books now, read before, find a book, reservations, digital
       '/library' => LibraryScreen(profile: p),
       // My day (the daily activity log) as on the staff website: the day's slots, leave, draft or submit, my log

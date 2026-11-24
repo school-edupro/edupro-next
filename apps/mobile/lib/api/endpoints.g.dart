@@ -1191,6 +1191,34 @@ class EduProApi {
   /// GET /helpdesk/assignees
   Future<dynamic> helpdeskAssignees() =>
       _t.send('GET', '/helpdesk/assignees');
+
+  /// GET /me/employee-profile — My employee profile, what I may change, and my requests
+  Future<dynamic> employeeSelfMine() =>
+      _t.send('GET', '/me/employee-profile');
+
+  /// POST /me/employee-profile/changes — Ask for changes (some apply at once, others go for approval)
+  Future<dynamic> employeeSelfSubmit({required EmployeeChangesDto body}) =>
+      _t.send('POST', '/me/employee-profile/changes', body: body.toJson());
+
+  /// POST /me/employee-change-requests/{id}/cancel — Withdraw a request still waiting
+  Future<dynamic> employeeSelfCancel({required String id}) =>
+      _t.send('POST', '/me/employee-change-requests/${Uri.encodeComponent(id)}/cancel');
+
+  /// GET /me/employee-profile/photo — My photo (on file, or one I uploaded for a change): a signed address
+  Future<ApiFile> employeeSelfMyPhoto({required String file}) =>
+      _t.file('GET', '/me/employee-profile/photo', query: {'file': file});
+
+  /// GET /me/employee-profile/files/{fileId} — One of my own files (photo, a document on my record, my upload): a signed address
+  Future<ApiFile> employeeSelfMyFile({required String fileId}) =>
+      _t.file('GET', '/me/employee-profile/files/${Uri.encodeComponent(fileId)}');
+
+  /// POST /me/employee-profile/print — My profile as PDF (my ID numbers in full)
+  Future<dynamic> employeeSelfPrint() =>
+      _t.send('POST', '/me/employee-profile/print');
+
+  /// GET /me/exports/{id} — One of my own exports (the profile PDF)
+  Future<dynamic> employeeSelfMyExport({required String id}) =>
+      _t.send('GET', '/me/exports/${Uri.encodeComponent(id)}');
 }
 
 /** The OtpStartDto the API takes. */
@@ -2704,5 +2732,48 @@ class RateTicketDto {
   Map<String, Object?> toJson() => {
         'rating': rating,
         if (comment != null) 'comment': comment,
+      };
+}
+
+/** The EmployeeChangesDto the API takes. */
+class EmployeeChangesDto {
+  const EmployeeChangesDto({this.changes, this.rows, this.photo, this.reason, this.proofs});
+  final Object? changes;
+  final List<EmployeeChangesDtoRowsItem>? rows;
+  final String? photo;
+  final String? reason;
+  final List<EmployeeChangesDtoProofsItem>? proofs;
+  Map<String, Object?> toJson() => {
+        if (changes != null) 'changes': changes,
+        if (rows != null) 'rows': rows?.map((x) => x.toJson()).toList(),
+        if (photo != null) 'photo': photo,
+        if (reason != null) 'reason': reason,
+        if (proofs != null) 'proofs': proofs?.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The EmployeeChangesDtoRowsItem the API takes. */
+class EmployeeChangesDtoRowsItem {
+  const EmployeeChangesDtoRowsItem({required this.kind, required this.op, this.rowId, this.data});
+  final String kind;
+  final String op;
+  final String? rowId;
+  final Object? data;
+  Map<String, Object?> toJson() => {
+        'kind': kind,
+        'op': op,
+        if (rowId != null) 'rowId': rowId,
+        if (data != null) 'data': data,
+      };
+}
+
+/** The EmployeeChangesDtoProofsItem the API takes. */
+class EmployeeChangesDtoProofsItem {
+  const EmployeeChangesDtoProofsItem({required this.typeId, required this.fileId});
+  final String typeId;
+  final String fileId;
+  Map<String, Object?> toJson() => {
+        'typeId': typeId,
+        'fileId': fileId,
       };
 }
