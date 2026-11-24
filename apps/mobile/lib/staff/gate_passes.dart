@@ -139,6 +139,8 @@ class StaffGatePassesScreen extends ConsumerWidget {
             color: Theme.of(context).colorScheme.surface,
             child: TabBar(
               key: const Key('sgTabs'),
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               tabs: [
                 Tab(text: s.sgInboxTab(waiting)),
                 Tab(text: s.sgMineTab),
@@ -272,7 +274,7 @@ class _InboxCardState extends ConsumerState<_InboxCard> {
                   child: Text(_who(s, p), style: const TextStyle(fontWeight: Tokens.fwSemibold)),
                 ),
                 const SizedBox(width: Tokens.sp2),
-                Tag(s.sgKind('${p['kind']}'), color: Tokens.mobAmber50),
+                Flexible(child: Tag(s.sgKind('${p['kind']}'), color: Tokens.mobAmber50)),
               ],
             ),
             const SizedBox(height: Tokens.sp1),
@@ -419,7 +421,7 @@ class _MineCard extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: Tokens.sp2),
-                Tag('${p['stage'] ?? state}', color: tint),
+                Flexible(child: Tag('${p['stage'] ?? state}', color: tint)),
               ],
             ),
             const SizedBox(height: Tokens.sp1),

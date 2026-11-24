@@ -6,6 +6,7 @@ import 'package:edupro/app_services.dart';
 import 'package:edupro/auth/session_store.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/family/attendance.dart' show leaveFilePickerProvider;
+import 'package:edupro/staff/student_leave.dart' show StudentLeaveScreen;
 import 'package:edupro/staff/approvals.dart';
 import 'package:edupro/ui/home_shell.dart' show nativeScreen;
 import 'package:edupro/profiles/profiles.dart';
@@ -2515,10 +2516,9 @@ void main() {
     await pumpStaff(tester);
     final s = S(false);
     final p = Profile.fromJson(staffProfile);
-    for (final (href, shows, hides) in [
-      ('/leaves', 'Kid Sample · VI-A', 'GRN-4 · Sample Traders'),
-      ('/leave-approvals', null, 'Kid Sample · VI-A'),
-    ]) {
+    // Student leave has its own screen, as on the staff website (its leave still shows in the header's Approvals)
+    expect(nativeScreen(p, '/leaves', s), isA<StudentLeaveScreen>());
+    for (final (href, shows, hides) in [('/leave-approvals', null, 'Kid Sample · VI-A')]) {
       final screen = nativeScreen(p, href, s);
       expect(screen, isA<ApprovalsScreen>(), reason: href);
       await tester.pumpWidget(

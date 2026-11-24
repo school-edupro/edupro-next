@@ -20,6 +20,7 @@ export function StaffShell({
   currentPath,
   children,
   unread = 0,
+  approvals = 0,
   waiting,
   layout = null,
 }: {
@@ -29,6 +30,8 @@ export function StaffShell({
   children: ReactNode;
   /** messages from the school not opened yet (header badge) */
   unread?: number;
+  /** everything waiting for my decision, every kind (header badge; the approvals inbox) */
+  approvals?: number;
   waiting?: StaffWaiting;
   /** The school's published staff layout for this person; null: the menu and the phone bar as built. */
   layout?: StaffLayoutView | null;
@@ -165,6 +168,24 @@ export function StaffShell({
             lang={lang === 'hi' ? 'en' : 'hi'}
           >
             {lang === 'hi' ? 'English' : 'हिन्दी'}
+          </a>
+          <a
+            className="ep-header__icon-btn fp-msgbtn"
+            href="/approvals"
+            aria-label={
+              approvals
+                ? `${t(lang, 'Approvals')}: ${String(approvals)} ${t(lang, 'waiting')}`
+                : t(lang, 'Approvals')
+            }
+            title={t(lang, 'Approvals')}
+            aria-current={currentPath === '/approvals' ? 'page' : undefined}
+          >
+            <Icon name="check" size={22} />
+            {approvals ? (
+              <span className="fp-msgbtn__badge" aria-hidden="true">
+                {approvals > 99 ? '99+' : approvals}
+              </span>
+            ) : null}
           </a>
           <a
             className="ep-header__icon-btn fp-msgbtn"

@@ -38,6 +38,12 @@ export default async function StaffLayout({ children }: { children: ReactNode })
   const mine = await myStaffLayout();
   const unread = mine?.unread ?? 0;
   const waiting: StaffWaiting = mine?.waiting ?? { approvals: 0 };
+  // everything waiting for this person's decision, every kind (the server's approvals inbox, as the admin's header and
+  // the app): student leave, staff leave, gate passes, profile changes … best effort, never blocks the page
+  const approvals = await bff.api
+    .fetch<{ total: number }>('/approvals/inbox?view=counts')
+    .then((r) => r.total)
+    .catch(() => 0);
   return (
     <>
       <StaffShell
@@ -45,6 +51,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         lang={lang}
         currentPath={currentPath}
         unread={unread}
+        approvals={approvals}
         waiting={waiting}
         layout={mine?.published ? mine : null}
       >

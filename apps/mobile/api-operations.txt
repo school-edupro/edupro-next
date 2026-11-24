@@ -30,8 +30,17 @@ LeaveController_mine
 LeaveController_apply
 LeaveController_cancel
 LeaveController_myFile !file
+LeaveController_list
+LeaveController_get
+LeaveController_decide
+LeaveController_file !file
 AttendanceDeskController_familyYear
 BusRollController_mine
+BusRollController_routes
+BusRollController_get
+BusRollController_mark
+BusRollController_register
+BusRollController_registerJson !file
 AcademicSettingsController_myTeachers
 AcademicSettingsController_teacherPhoto !file
 DailyWorkController_viewerInfo

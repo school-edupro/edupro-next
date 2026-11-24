@@ -39,6 +39,7 @@ const PAGES = [
   '/bus-attendance/register',
   '/leaves',
   '/gate-passes',
+  '/approvals',
   '/gate-passes/new',
   '/library',
   '/library?view=history',

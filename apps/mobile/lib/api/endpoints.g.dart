@@ -92,6 +92,22 @@ class EduProApi {
   Future<ApiFile> leaveMyFile({required String id, required String fileId}) =>
       _t.file('GET', '/attendance/leaves/mine/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
 
+  /// GET /attendance/leaves — Student leave that came to me (or all of it, for the coordinator’s office)
+  Future<dynamic> leaveList({String? tab, String? q}) =>
+      _t.send('GET', '/attendance/leaves', query: {if (tab != null) 'tab': tab, if (q != null) 'q': q});
+
+  /// GET /attendance/leaves/{id}
+  Future<dynamic> leaveGet({required String id}) =>
+      _t.send('GET', '/attendance/leaves/${Uri.encodeComponent(id)}');
+
+  /// POST /attendance/leaves/{id}/decide — Approve or reject a leave at my level
+  Future<dynamic> leaveDecide({required LeaveDecideDto body, required String id}) =>
+      _t.send('POST', '/attendance/leaves/${Uri.encodeComponent(id)}/decide', body: body.toJson());
+
+  /// GET /attendance/leaves/{id}/files/{fileId}
+  Future<ApiFile> leaveFile({required String id, required String fileId}) =>
+      _t.file('GET', '/attendance/leaves/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
   /// GET /attendance/desk/mine/year — A family’s children month by month over the session
   Future<dynamic> attendanceDeskFamilyYear() =>
       _t.send('GET', '/attendance/desk/mine/year');
@@ -99,6 +115,26 @@ class EduProApi {
   /// GET /attendance/bus-roll/mine — My children’s bus attendance of a month
   Future<dynamic> busRollMine({String? month}) =>
       _t.send('GET', '/attendance/bus-roll/mine', query: {if (month != null) 'month': month});
+
+  /// GET /attendance/bus-roll/routes — The routes and trips I mark
+  Future<dynamic> busRollRoutes() =>
+      _t.send('GET', '/attendance/bus-roll/routes');
+
+  /// GET /attendance/bus-roll — The roll of a route and trip for a date, with leave and gate pass hints
+  Future<dynamic> busRollGet({required String routeId, required String date, required String trip}) =>
+      _t.send('GET', '/attendance/bus-roll', query: {'routeId': routeId, 'date': date, 'trip': trip});
+
+  /// POST /attendance/bus-roll
+  Future<dynamic> busRollMark({required BusRollMarkDto body}) =>
+      _t.send('POST', '/attendance/bus-roll', body: body.toJson());
+
+  /// GET /attendance/bus-roll/register
+  Future<dynamic> busRollRegister({required String routeId, String? trip, required String month}) =>
+      _t.send('GET', '/attendance/bus-roll/register', query: {'routeId': routeId, if (trip != null) 'trip': trip, 'month': month});
+
+  /// GET /attendance/bus-roll/register/file
+  Future<ApiFile> busRollRegisterJson({required String routeId, String? trip, required String month, String? format}) =>
+      _t.file('GET', '/attendance/bus-roll/register/file', query: {'routeId': routeId, if (trip != null) 'trip': trip, 'month': month, if (format != null) 'format': format});
 
   /// GET /academics/my-teachers — The class teacher and subject teachers of the family's children
   Future<dynamic> academicSettingsMyTeachers() =>
@@ -1220,6 +1256,47 @@ class LeaveApplyDto {
         'toDate': toDate,
         'reason': reason,
         if (fileIds != null) 'fileIds': fileIds,
+      };
+}
+
+/** The LeaveDecideDto the API takes. */
+class LeaveDecideDto {
+  const LeaveDecideDto({required this.outcome, this.note});
+  final String outcome;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'outcome': outcome,
+        if (note != null) 'note': note,
+      };
+}
+
+/** The BusRollMarkDto the API takes. */
+class BusRollMarkDto {
+  const BusRollMarkDto({required this.routeId, required this.date, required this.trip, required this.marks, this.notes});
+  final String routeId;
+  final String date;
+  final String trip;
+  final List<BusRollMarkDtoMarksItem> marks;
+  final String? notes;
+  Map<String, Object?> toJson() => {
+        'routeId': routeId,
+        'date': date,
+        'trip': trip,
+        'marks': marks.map((x) => x.toJson()).toList(),
+        if (notes != null) 'notes': notes,
+      };
+}
+
+/** The BusRollMarkDtoMarksItem the API takes. */
+class BusRollMarkDtoMarksItem {
+  const BusRollMarkDtoMarksItem({required this.studentId, required this.code, this.remarks});
+  final String studentId;
+  final String code;
+  final String? remarks;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'code': code,
+        if (remarks != null) 'remarks': remarks,
       };
 }
 

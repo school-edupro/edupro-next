@@ -379,7 +379,7 @@ class _VisitRow extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: Tokens.sp2),
-              Tag(s.saState(state), color: tint),
+              Flexible(child: Tag(s.saState(state), color: tint)),
             ],
           ),
           if ('${v['purpose'] ?? ''}'.isNotEmpty) Text('${v['purpose']}'),

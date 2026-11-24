@@ -29,6 +29,8 @@ import '../family/common.dart';
 import '../family/data.dart' show unreadProvider;
 import '../family/today.dart';
 import '../staff/appointments.dart' show StaffAppointmentsScreen;
+import '../staff/bus_attendance.dart' show BusAttendanceScreen;
+import '../staff/student_leave.dart' show StudentLeaveScreen;
 import '../staff/gate_passes.dart' show StaffGatePassesScreen;
 import '../staff/approvals.dart';
 import '../staff/class_attendance.dart';
@@ -97,7 +99,6 @@ Widget? nativeScreen(Profile p, String href, S s) {
     const approvalPages = {
       '/leave-approvals': ['staff_leave', 'staff_leave_cancel'],
       '/attendance-corrections': ['staff_regularisation'],
-      '/leaves': ['leave'],
       '/consent-approvals': ['consent'],
       '/profile/approvals': ['staff_profile'],
       '/admission-approvals': ['admission'],
@@ -141,6 +142,10 @@ Widget? nativeScreen(Profile p, String href, S s) {
       // my classes and subjects with their coverage; a subject's topics to mark (docs/design/96 part 9)
       '/syllabus' => MySyllabusScreen(profile: p),
       '/messages' => MessagesScreen(profile: p),
+      // student leave as on the staff website: waiting for me and all that came to me, details, approve
+      '/leaves' => StudentLeaveScreen(profile: p),
+      // bus attendance as on the staff website: the route and trip, mark P / A / LV / GP / OT, the register
+      '/bus-attendance' => BusAttendanceScreen(profile: p),
       // gate passes as on the staff website: those waiting on me to approve, my own RGP / NRGP, apply, the card
       '/gate-passes' => StaffGatePassesScreen(profile: p),
       // appointments with me as on the staff website: today, still to come, past, and the week calendar

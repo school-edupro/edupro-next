@@ -954,6 +954,14 @@ const DICT: Record<string, string> = {
     'काम पूरा हो गया? यह बाकी परीक्षा के साथ फिर बंद हो जाएगा; इसे केवल कार्यालय फिर खोल सकता है। जो आपने सहेजा है वह रहेगा।',
   'Entry closed: it is locked again with the rest of the exam; what you saved stays.':
     'प्रविष्टि बंद: यह बाकी परीक्षा के साथ फिर बंद है; जो आपने सहेजा है वह रहेगा।',
+  // the header's approvals and My approvals for staff
+  'Approvals waiting for me': 'मेरी प्रतीक्षा में स्वीकृतियाँ',
+  'Everything waiting for your decision, every kind, newest first in each.':
+    'आपके निर्णय की प्रतीक्षा में सब कुछ, हर प्रकार का, हर एक में नया पहले।',
+  'Nothing waits for your decision.': 'आपके निर्णय की प्रतीक्षा में कुछ नहीं।',
+  'On the office website': 'कार्यालय वेबसाइट पर',
+  'Could not be read just now:': 'अभी पढ़ा नहीं जा सका:',
+  'Open the list': 'सूची खोलें',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */
