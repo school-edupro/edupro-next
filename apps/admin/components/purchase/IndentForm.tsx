@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { FormActions, FormRow, FormSection } from '@edupro/ui';
+import { Icon } from '@/components/nav-icons';
 import { readIndentSheet, saveIndent, uploadIndentFile } from '@/lib/purchase-actions';
 import { inr, RATE_SOURCE, type IndentDetail, type IndentFormLists } from '@/lib/purchase';
 
@@ -352,37 +353,52 @@ export function IndentForm({
             : 'Pick from the item list; what the stores hold free shows under it. Not in the list? Pick “Not in the list” and describe it: the purchase office matches it on the PR and prices the indent.'
         }
       >
-        <div
-          style={{
-            display: 'flex',
-            gap: 'var(--sp-3)',
-            flexWrap: 'wrap',
-            alignItems: 'flex-end',
-            marginBottom: 'var(--sp-3)',
-          }}
-        >
-          <a className="ep-btn ep-btn--secondary ep-btn--sm" href={SHEET} download>
-            Download item sheet
-          </a>
-          <label className="ep-field" htmlFor="if-sheet">
-            <span className="ep-field__label">Upload the filled sheet (Excel)</span>
-            <input
-              id="if-sheet"
-              type="file"
-              className="ep-input"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              disabled={sheet.busy}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) readSheet(f);
-                e.target.value = '';
-              }}
-            />
-            <span className="ep-field__help">
-              Its rows are added to the lines below, to check before saving.
+        {/* the item sheet by Excel: folded until asked for (most indents are a few lines typed here) */}
+        <details className="ep-card ep-fold" style={{ marginBottom: 'var(--sp-3)' }}>
+          <summary className="ep-fold__summary">
+            <span className="ep-fold__head">
+              <span className="ep-fold__title">Add items from an Excel sheet</span>
+              <span className="ep-fold__hint">
+                Download the item sheet, fill it, upload it: its rows are added to the lines below.
+              </span>
             </span>
-          </label>
-        </div>
+            <span className="ep-fold__chevron" aria-hidden="true">
+              <Icon name="chevron" size={20} />
+            </span>
+          </summary>
+          <div className="ep-fold__body">
+            <div
+              style={{
+                display: 'flex',
+                gap: 'var(--sp-3)',
+                flexWrap: 'wrap',
+                alignItems: 'flex-end',
+              }}
+            >
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href={SHEET} download>
+                Download item sheet
+              </a>
+              <label className="ep-field" htmlFor="if-sheet">
+                <span className="ep-field__label">Upload the filled sheet (Excel)</span>
+                <input
+                  id="if-sheet"
+                  type="file"
+                  className="ep-input"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  disabled={sheet.busy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) readSheet(f);
+                    e.target.value = '';
+                  }}
+                />
+                <span className="ep-field__help">
+                  Its rows are added to the lines below, to check before saving.
+                </span>
+              </label>
+            </div>
+          </div>
+        </details>
         {sheet.busy ? (
           <p className="ep-field__help" role="status">
             Reading the sheet…

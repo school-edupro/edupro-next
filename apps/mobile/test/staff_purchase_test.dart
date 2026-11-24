@@ -536,6 +536,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('piWhy-1')), findsOneWidget);
     // the filled item sheet: its lines added, the rows it could not read
+    // folded until asked for
+    expect(find.byKey(const Key('piSheetPut')), findsNothing);
+    await tapIn(tester, find.byKey(const Key('piSheet')));
     await tapIn(tester, find.byKey(const Key('piSheetPut')));
     expect(find.text(s.piSheetAdded(2)), findsOneWidget);
     expect(find.text('${s.piRow(5)}: Unknown item code'), findsOneWidget);

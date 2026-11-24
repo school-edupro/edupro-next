@@ -228,6 +228,7 @@ extension PurchaseIndentWords on S {
           'Pick from the item list; what the stores hold free shows under it. Not in the list? Pick “Not in the list” and describe it: the purchase office matches it on the PR and prices the indent.',
           'वस्तु सूची से चुनें; भंडार में उपलब्ध मात्रा नीचे दिखती है। सूची में नहीं? “सूची में नहीं” चुनकर लिखें: क्रय कार्यालय PR पर मिलान करके मूल्य लगाता है।',
         );
+  String get piSheetFold => _pi('Add items from an Excel sheet', 'Excel शीट से वस्तुएँ जोड़ें');
   String get piDownloadSheet => _pi('Download item sheet', 'वस्तु शीट डाउनलोड करें');
   String get piSheetTitle => _pi('Indent item sheet', 'इंडेंट वस्तु शीट');
   String get piUploadSheet =>
@@ -2039,33 +2040,49 @@ class _IndentFormScreenState extends ConsumerState<IndentFormScreen> {
             _card(context, s.piItems, [
               Text(s.piItemsHelp(showRates), style: small),
               const SizedBox(height: Tokens.sp3),
-              Wrap(
-                spacing: Tokens.sp2,
-                runSpacing: Tokens.sp2,
-                children: [
-                  OutlinedButton.icon(
-                    key: const Key('piSheetGet'),
-                    icon: const Icon(Icons.download_outlined),
-                    label: Text(s.piDownloadSheet),
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => FileScreen(
-                          title: s.piSheetTitle,
-                          load: () => ref.read(apiProvider).purchaseIndentSheet(),
+              // the item sheet by Excel: folded until asked for (most indents are a few lines typed here)
+              Card(
+                margin: EdgeInsets.zero,
+                clipBehavior: Clip.antiAlias,
+                child: ExpansionTile(
+                  key: const Key('piSheet'),
+                  leading: const Icon(Icons.table_view_outlined),
+                  title: Text(s.piSheetFold),
+                  shape: const Border(),
+                  collapsedShape: const Border(),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                  childrenPadding: const EdgeInsets.fromLTRB(Tokens.sp3, 0, Tokens.sp3, Tokens.sp3),
+                  children: [
+                    Wrap(
+                      spacing: Tokens.sp2,
+                      runSpacing: Tokens.sp2,
+                      children: [
+                        OutlinedButton.icon(
+                          key: const Key('piSheetGet'),
+                          icon: const Icon(Icons.download_outlined),
+                          label: Text(s.piDownloadSheet),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => FileScreen(
+                                title: s.piSheetTitle,
+                                load: () => ref.read(apiProvider).purchaseIndentSheet(),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        OutlinedButton.icon(
+                          key: const Key('piSheetPut'),
+                          icon: const Icon(Icons.upload_file),
+                          label: Text(s.piUploadSheet),
+                          onPressed: _sheetBusy ? null : () => _readSheet(items),
+                        ),
+                      ],
                     ),
-                  ),
-                  OutlinedButton.icon(
-                    key: const Key('piSheetPut'),
-                    icon: const Icon(Icons.upload_file),
-                    label: Text(s.piUploadSheet),
-                    onPressed: _sheetBusy ? null : () => _readSheet(items),
-                  ),
-                ],
+                    const SizedBox(height: Tokens.sp1),
+                    Text(_sheetBusy ? s.piReadingSheet : s.piUploadSheetHelp, style: small),
+                  ],
+                ),
               ),
-              const SizedBox(height: Tokens.sp1),
-              Text(_sheetBusy ? s.piReadingSheet : s.piUploadSheetHelp, style: small),
               if (_sheetSaid != null) Text(_sheetSaid!, key: const Key('piSheetSaid')),
               if (_sheetErrors.isNotEmpty)
                 Container(
