@@ -189,7 +189,7 @@ export default async function GatePassesPage({
           </form>
         </Card>
       ))}
-      <h2 className="ep-cdash__h3" style={{ marginTop: 'var(--sp-4)' }}>
+      <h2 id="mine" className="ep-cdash__h3" style={{ marginTop: 'var(--sp-4)' }}>
         {t(lang, 'My gate passes')}
       </h2>
       {mine.length === 0 ? <Card>{t(lang, 'You have not asked for a gate pass yet.')}</Card> : null}

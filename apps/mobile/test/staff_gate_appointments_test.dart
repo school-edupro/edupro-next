@@ -237,40 +237,55 @@ void main() {
     expect(school.cancelled, ['21']);
   });
 
-  testWidgets('gate passes: apply — the time out, back by for RGP, the purpose, an item', (
-    tester,
-  ) async {
-    final (_, school) = await pump(tester, const StaffGatePassesScreen(profile: staff));
-    await tapIn(tester, find.text(s.sgMineTab));
-    await tapIn(tester, find.byKey(const Key('sgApply')));
-    expect(find.byKey(const Key('sgForm')), findsOneWidget);
-    await tapIn(tester, find.byKey(const Key('sgSend')));
-    expect(find.text(s.sgNeedOut), findsOneWidget);
-    await tapIn(tester, find.byKey(const Key('sgOut')));
-    await tapIn(tester, find.text('OK'));
-    await tapIn(tester, find.byKey(const Key('sgSend')));
-    expect(find.text(s.sgNeedBack), findsOneWidget);
-    await tapIn(tester, find.byKey(const Key('sgBack')));
-    await tapIn(tester, find.text('OK'));
-    await tester.enterText(find.byKey(const Key('sgPurpose')), 'Lab equipment repair');
-    await tester.enterText(find.byKey(const Key('sgItemName-0')), 'Microscope');
-    await tester.enterText(find.byKey(const Key('sgItemSerial-0')), 'LAB-7');
-    await tapIn(tester, find.byKey(const Key('sgSend')));
-    expect(school.applied.single, {
-      'category': 'rgp',
-      'onDate': isA<String>(),
-      'atTime': '11:00',
-      'returnTime': '13:00',
-      'reason': 'Lab equipment repair',
-      'items': [
-        {'name': 'Microscope', 'qty': 1, 'serialNo': 'LAB-7', 'returnable': true},
-      ],
-    });
-    // NRGP: no return time asked
-    await tapIn(tester, find.byKey(const Key('sgApply')));
-    await tapIn(tester, find.byKey(const Key('sgNrgp')));
-    expect(find.byKey(const Key('sgBack')), findsNothing);
-  });
+  testWidgets(
+    'gate passes: apply as the websites — tiles, time out, back by for RGP, the purpose, items added',
+    (tester) async {
+      final (_, school) = await pump(tester, const StaffGatePassesScreen(profile: staff));
+      await tapIn(tester, find.text(s.sgMineTab));
+      await tapIn(tester, find.byKey(const Key('sgApply')));
+      expect(find.byKey(const Key('sgForm')), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('sgSend')));
+      expect(find.text(s.sgNeedOut), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('sgOut')));
+      await tapIn(tester, find.text('OK'));
+      await tapIn(tester, find.byKey(const Key('sgSend')));
+      expect(find.text(s.sgNeedBack), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('sgBack')));
+      await tapIn(tester, find.text('OK'));
+      await tester.enterText(find.byKey(const Key('sgPurpose')), 'Lab equipment repair');
+      // nothing carried out to start with; a row per item, each removable; an empty row must be named or removed
+      expect(find.byKey(const Key('sgNoItems')), findsOneWidget);
+      expect(find.byKey(const Key('sgItemName-0')), findsNothing);
+      await tapIn(tester, find.byKey(const Key('sgAddItem')));
+      await tapIn(tester, find.byKey(const Key('sgAddItem')));
+      expect(find.byKey(const Key('sgItemName-1')), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('sgItemName-0')), 'Microscope');
+      await tester.enterText(find.byKey(const Key('sgItemSerial-0')), 'LAB-7');
+      await tapIn(tester, find.byKey(const Key('sgSend')));
+      expect(find.text(s.sgNeedName), findsOneWidget);
+      expect(school.applied, isEmpty);
+      await tapIn(tester, find.byKey(const Key('sgItemRemove-1')));
+      expect(find.byKey(const Key('sgItemName-1')), findsNothing);
+      await tapIn(tester, find.byKey(const Key('sgSend')));
+      expect(school.applied.single, {
+        'category': 'rgp',
+        'onDate': isA<String>(),
+        'atTime': '11:00',
+        'returnTime': '13:00',
+        'reason': 'Lab equipment repair',
+        'items': [
+          {'name': 'Microscope', 'qty': 1, 'serialNo': 'LAB-7', 'returnable': true},
+        ],
+      });
+      // NRGP: no return time asked; the chosen tile is marked selected
+      await tapIn(tester, find.byKey(const Key('sgApply')));
+      expect(find.byKey(const Key('sgBack')), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('sgNrgp')));
+      expect(find.byKey(const Key('sgBack')), findsNothing);
+      expect(tester.widget(find.byKey(const Key('sgNrgp'))), isA<FilledButton>());
+      expect(tester.widget(find.byKey(const Key('sgRgp'))), isA<OutlinedButton>());
+    },
+  );
 
   testWidgets('appointments with me: still to come, today, past, and the week calendar', (
     tester,
@@ -324,6 +339,9 @@ void main() {
       await check();
       await tapIn(tester, find.byKey(const Key('sgApply')));
       await check();
+      // with an item row, as the websites' form
+      await tapIn(tester, find.byKey(const Key('sgAddItem')));
+      await check();
       await pump(
         tester,
         const StaffAppointmentsScreen(profile: staff),
@@ -345,6 +363,7 @@ void main() {
     );
     await tapIn(tester, find.text(s.sgMineTab));
     await tapIn(tester, find.byKey(const Key('sgApply')));
+    await tapIn(tester, find.byKey(const Key('sgAddItem')));
     expect(tester.takeException(), isNull);
     await pump(
       tester,

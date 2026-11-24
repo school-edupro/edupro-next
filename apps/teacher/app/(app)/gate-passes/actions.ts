@@ -1,6 +1,7 @@
 'use server';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import type { StaffPassInput, StaffPassResult } from '@/components/StaffPassForm';
 import { bff } from '@/lib/bff';
 
 const str = (fd: FormData, key: string): string => String(fd.get(key) ?? '').trim();
@@ -37,34 +38,40 @@ export async function decideGatePass(fd: FormData) {
   redirect(`/gate-passes?ok=${outcome}`);
 }
 
-/** I ask for my own pass (RGP / NRGP) with up to five items carried out. */
-export async function applyGatePass(fd: FormData) {
-  const category = str(fd, 'category') === 'nrgp' ? 'nrgp' : 'rgp';
-  const items = [1, 2, 3, 4, 5]
-    .map((n) => ({
-      name: str(fd, `item${String(n)}`),
-      qty: Number(str(fd, `qty${String(n)}`) || 1),
-      serialNo: str(fd, `serial${String(n)}`) || undefined,
-      returnable: fd.get(`back${String(n)}`) !== null,
-    }))
-    .filter((i) => i.name.length >= 2);
+/**
+ * I ask for my own pass (RGP / NRGP) with the items I carry out (as the admin website's form): the answer comes back
+ * to the form, which then opens My gate passes.
+ */
+export async function applyStaffPass(input: StaffPassInput): Promise<StaffPassResult> {
   try {
-    await bff.api.fetch('/gate-passes/staff', {
+    const r = await bff.api.fetch<{ id: string }>('/gate-passes/staff', {
       method: 'POST',
       body: JSON.stringify({
-        category,
-        onDate: str(fd, 'onDate') || undefined,
-        atTime: str(fd, 'atTime'),
-        returnTime: category === 'rgp' ? str(fd, 'returnTime') || undefined : undefined,
-        reason: str(fd, 'reason'),
-        destination: str(fd, 'destination') || undefined,
-        items,
+        category: input.category === 'nrgp' ? 'nrgp' : 'rgp',
+        onDate: input.onDate || undefined,
+        atTime: input.atTime,
+        returnTime: input.category === 'rgp' ? input.returnTime || undefined : undefined,
+        reason: input.reason,
+        destination: input.destination || undefined,
+        items: input.items.slice(0, 30),
       }),
     });
+    return { ok: true, id: String(r.id) };
   } catch (error) {
-    fail('/gate-passes/new', error);
+    if (error instanceof ApiError) {
+      const errs = error.problem.errors as Array<{ message?: string }> | undefined;
+      const detail = Array.isArray(errs)
+        ? errs
+            .map((e) => e.message)
+            .filter(Boolean)
+            .join('; ')
+        : typeof error.problem.detail === 'string'
+          ? error.problem.detail
+          : '';
+      return { ok: false, error: detail || error.problem.type };
+    }
+    throw error;
   }
-  redirect('/gate-passes?ok=requested');
 }
 
 export async function cancelGatePass(fd: FormData) {

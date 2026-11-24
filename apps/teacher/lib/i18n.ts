@@ -242,16 +242,24 @@ const DICT: Record<string, string> = {
   'Late arrival': 'देर से आगमन',
   'Type of pass': 'पास का प्रकार',
   'Going out at': 'बाहर जाने का समय',
-  'Back by (for RGP)': 'वापसी का समय (RGP हेतु)',
   Purpose: 'उद्देश्य',
   'Going to (optional)': 'कहाँ जाना है (वैकल्पिक)',
-  'Equipment or material taken out (leave blank if none)':
-    'बाहर ले जाया जा रहा सामान (न हो तो खाली छोड़ें)',
   Item: 'वस्तु',
   Quantity: 'मात्रा',
   'Serial / asset no.': 'क्रमांक / एसेट नं.',
   'To be brought back': 'वापस लाना है',
   'Send for approval': 'स्वीकृति हेतु भेजें',
+  'RGP: you go out on work and come back the same day. NRGP: you do not come back today. List anything you carry out of the school.':
+    'RGP: आप काम से बाहर जाकर उसी दिन लौटते हैं। NRGP: आप आज नहीं लौटते। विद्यालय से बाहर ले जाया जा रहा हर सामान लिखें।',
+  'RGP · I come back today': 'RGP · मैं आज लौटूँगा/लौटूँगी',
+  'NRGP · I do not come back today': 'NRGP · मैं आज नहीं लौटूँगा/लौटूँगी',
+  'Back by': 'वापसी का समय',
+  'Equipment or material taken out of the school': 'विद्यालय से बाहर ले जाया जा रहा सामान',
+  'Nothing carried out. Add a row for each item (laptop, projector, files…).':
+    'कुछ बाहर नहीं ले जा रहे। हर सामान के लिए एक पंक्ति जोड़ें (लैपटॉप, प्रोजेक्टर, फ़ाइलें…)।',
+  'Add an item': 'सामान जोड़ें',
+  'Say by when you will be back.': 'बताएँ कि आप कब तक लौटेंगे।',
+  'Give each item a name, or remove the empty row.': 'हर सामान का नाम लिखें, या खाली पंक्ति हटाएँ।',
   'Approved at your level.': 'आपके स्तर पर स्वीकृत।',
   'Gate pass requested. It has gone for approval.':
     'गेट पास का अनुरोध भेजा गया। यह स्वीकृति हेतु गया है।',

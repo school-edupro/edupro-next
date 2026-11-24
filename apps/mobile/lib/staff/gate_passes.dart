@@ -18,8 +18,8 @@ extension StaffGateWords on S {
   String get sgMineTab => _sg('My gate passes', 'मेरे गेट पास');
   String get sgApply => _sg('Apply for a gate pass', 'गेट पास के लिए आवेदन');
   String get sgApplyHelp => _sg(
-    'RGP: you go out on work and come back today. NRGP: you do not come back today.',
-    'RGP: आप काम से बाहर जाकर आज लौटेंगे। NRGP: आप आज नहीं लौटेंगे।',
+    'RGP: you go out on work and come back the same day. NRGP: you do not come back today. List anything you carry out of the school.',
+    'RGP: आप काम से बाहर जाकर उसी दिन लौटते हैं। NRGP: आप आज नहीं लौटते। विद्यालय से बाहर ले जाया जा रहा हर सामान लिखें।',
   );
   String get sgNothingWaits => _sg('Nothing waits for you.', 'आपकी प्रतीक्षा में कुछ नहीं।');
   String get sgNoneMine =>
@@ -63,10 +63,19 @@ extension StaffGateWords on S {
   String get sgBackAt => _sg('Back by', 'वापसी तक');
   String get sgPurpose => _sg('Purpose', 'उद्देश्य');
   String get sgGoingTo => _sg('Going to (optional)', 'कहाँ जा रहे हैं (वैकल्पिक)');
-  String get sgItemsTitle => _sg(
-    'Equipment or material taken out (leave blank if none)',
-    'बाहर ले जाया गया उपकरण या सामान (न हो तो खाली छोड़ें)',
+  String get sgItemsTitle =>
+      _sg('Equipment or material taken out of the school', 'विद्यालय से बाहर ले जाया जा रहा सामान');
+  String get sgNoItems => _sg(
+    'Nothing carried out. Add a row for each item (laptop, projector, files…).',
+    'कुछ बाहर नहीं ले जा रहे। हर सामान के लिए एक पंक्ति जोड़ें (लैपटॉप, प्रोजेक्टर, फ़ाइलें…)।',
   );
+  String get sgRemove => _sg('Remove', 'हटाएँ');
+  String sgRemoveItem(int n) => _sg('Remove item $n', 'वस्तु $n हटाएँ');
+  String get sgNeedName => _sg(
+    'Give each item a name, or remove the empty row.',
+    'हर सामान का नाम लिखें, या खाली पंक्ति हटाएँ।',
+  );
+  String get sgChoose => _sg('Choose', 'चुनें');
   String sgItem(int n) => _sg('Item $n', 'वस्तु $n');
   String get sgQty => _sg('Quantity', 'मात्रा');
   String get sgSerial => _sg('Serial / asset no.', 'क्रमांक / संपत्ति संख्या');
@@ -474,7 +483,9 @@ class _Item {
   }
 }
 
-/// My own gate pass (0069): RGP (I come back today) or NRGP (I do not), with what I carry out (up to five).
+/// My own gate pass (0069), as the websites' Apply for a gate pass: RGP (I come back today) or NRGP (I do not) as two
+/// tiles, the date and times, the purpose and where, and what I carry out — none to start with, a row per item
+/// added (up to 30), each removable.
 class StaffGatePassForm extends ConsumerStatefulWidget {
   const StaffGatePassForm({super.key, required this.profile});
   final Profile profile;
@@ -490,7 +501,7 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
   TimeOfDay? _back;
   final _reason = TextEditingController();
   final _destination = TextEditingController();
-  final List<_Item> _items = [_Item()];
+  final List<_Item> _items = [];
   bool _busy = false;
   String? _error;
 
@@ -517,6 +528,8 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
         ? s.sgBackAfterOut
         : _reason.text.trim().length < 3
         ? s.sgNeedPurpose
+        : _items.any((i) => i.name.text.trim().length < 2)
+        ? s.sgNeedName
         : null;
     if (problem != null) {
       setState(() => _error = problem);
@@ -539,13 +552,12 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
               destination: _destination.text.trim().isEmpty ? null : _destination.text.trim(),
               items: [
                 for (final i in _items)
-                  if (i.name.text.trim().length >= 2)
-                    StaffPassDtoItemsItem(
-                      name: i.name.text.trim(),
-                      qty: int.tryParse(i.qty.text.trim()) ?? 1,
-                      serialNo: i.serial.text.trim().isEmpty ? null : i.serial.text.trim(),
-                      returnable: i.back,
-                    ),
+                  StaffPassDtoItemsItem(
+                    name: i.name.text.trim(),
+                    qty: int.tryParse(i.qty.text.trim()) ?? 1,
+                    serialNo: i.serial.text.trim().isEmpty ? null : i.serial.text.trim(),
+                    returnable: i.back,
+                  ),
               ],
             ),
           );
@@ -572,84 +584,113 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
       children: [
         Text(s.sgApplyHelp, style: TextStyle(color: muted)),
         SectionTitle(s.sgType),
-        RadioGroup<String>(
-          groupValue: _category,
-          onChanged: (v) => setState(() => _category = v ?? 'rgp'),
-          child: Column(
-            children: [
-              RadioListTile<String>(key: const Key('sgRgp'), value: 'rgp', title: Text(s.sgRgp)),
-              RadioListTile<String>(key: const Key('sgNrgp'), value: 'nrgp', title: Text(s.sgNrgp)),
-            ],
-          ),
-        ),
-        const SizedBox(height: Tokens.sp2),
+        // the type as two tiles, as on the websites
         Wrap(
           spacing: Tokens.sp2,
           runSpacing: Tokens.sp2,
           children: [
-            OutlinedButton.icon(
-              key: const Key('sgOn'),
-              icon: const Icon(Icons.event),
-              label: Text('${s.sgDate}: ${s.date(_on)}'),
-              onPressed: () async {
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: _on,
-                  firstDate: today,
-                  lastDate: today.add(const Duration(days: 365)),
-                );
-                if (d != null) setState(() => _on = d);
-              },
-            ),
-            OutlinedButton.icon(
-              key: const Key('sgOut'),
-              icon: const Icon(Icons.schedule),
-              label: Text('${s.sgOutAt}: ${_out == null ? '—' : _hm(_out!)}'),
-              onPressed: () async {
-                final t = await showTimePicker(
-                  context: context,
-                  initialTime: _out ?? const TimeOfDay(hour: 11, minute: 0),
-                );
-                if (t != null) setState(() => _out = t);
-              },
-            ),
-            if (_category == 'rgp')
-              OutlinedButton.icon(
-                key: const Key('sgBack'),
-                icon: const Icon(Icons.schedule),
-                label: Text('${s.sgBackAt}: ${_back == null ? '—' : _hm(_back!)}'),
-                onPressed: () async {
-                  final t = await showTimePicker(
-                    context: context,
-                    initialTime: _back ?? const TimeOfDay(hour: 13, minute: 0),
-                  );
-                  if (t != null) setState(() => _back = t);
-                },
+            for (final (key, value, label) in [
+              (const Key('sgRgp'), 'rgp', s.sgRgp),
+              (const Key('sgNrgp'), 'nrgp', s.sgNrgp),
+            ])
+              Semantics(
+                selected: _category == value,
+                inMutuallyExclusiveGroup: true,
+                child: _category == value
+                    ? FilledButton(key: key, onPressed: () {}, child: Text(label))
+                    : OutlinedButton(
+                        key: key,
+                        onPressed: () => setState(() => _category = value),
+                        child: Text(label),
+                      ),
               ),
           ],
         ),
+        const SizedBox(height: Tokens.sp4),
+        _PickField(
+          key: const Key('sgOn'),
+          label: s.sgDate,
+          value: s.date(_on),
+          icon: Icons.event,
+          onTap: () async {
+            final d = await showDatePicker(
+              context: context,
+              initialDate: _on,
+              firstDate: today,
+              lastDate: today.add(const Duration(days: 365)),
+            );
+            if (d != null) setState(() => _on = d);
+          },
+        ),
+        const SizedBox(height: Tokens.sp3),
+        _PickField(
+          key: const Key('sgOut'),
+          label: s.sgOutAt,
+          value: _out == null ? null : _hm(_out!),
+          hint: s.sgChoose,
+          icon: Icons.schedule,
+          onTap: () async {
+            final t = await showTimePicker(
+              context: context,
+              initialTime: _out ?? const TimeOfDay(hour: 11, minute: 0),
+            );
+            if (t != null) setState(() => _out = t);
+          },
+        ),
+        if (_category == 'rgp') ...[
+          const SizedBox(height: Tokens.sp3),
+          _PickField(
+            key: const Key('sgBack'),
+            label: s.sgBackAt,
+            value: _back == null ? null : _hm(_back!),
+            hint: s.sgChoose,
+            icon: Icons.schedule,
+            onTap: () async {
+              final t = await showTimePicker(
+                context: context,
+                initialTime: _back ?? const TimeOfDay(hour: 13, minute: 0),
+              );
+              if (t != null) setState(() => _back = t);
+            },
+          ),
+        ],
         const SizedBox(height: Tokens.sp3),
         TextField(
           key: const Key('sgPurpose'),
           controller: _reason,
           maxLength: 300,
-          decoration: InputDecoration(labelText: '${s.sgPurpose} *', counterText: ''),
+          decoration: InputDecoration(
+            labelText: s.sgPurpose,
+            border: const OutlineInputBorder(),
+            counterText: '',
+          ),
         ),
-        const SizedBox(height: Tokens.sp2),
+        const SizedBox(height: Tokens.sp3),
         TextField(
           key: const Key('sgGoingTo'),
           controller: _destination,
           maxLength: 160,
-          decoration: InputDecoration(labelText: s.sgGoingTo, counterText: ''),
+          decoration: InputDecoration(
+            labelText: s.sgGoingTo,
+            border: const OutlineInputBorder(),
+            counterText: '',
+          ),
         ),
         SectionTitle(s.sgItemsTitle),
+        if (_items.isEmpty)
+          Text(
+            s.sgNoItems,
+            key: const Key('sgNoItems'),
+            style: TextStyle(color: muted, fontSize: 13),
+          ),
         for (final (n, item) in _items.indexed)
           Card(
-            key: Key('sgItem-$n'),
+            key: ObjectKey(item),
             margin: const EdgeInsets.only(bottom: Tokens.sp2),
             child: Padding(
               padding: const EdgeInsets.all(Tokens.sp3),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TextField(
                     key: Key('sgItemName-$n'),
@@ -687,28 +728,75 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
                     title: Text(s.sgBringBack),
                     controlAffinity: ListTileControlAffinity.leading,
                   ),
+                  OutlinedButton(
+                    key: Key('sgItemRemove-$n'),
+                    onPressed: () => setState(() => _items.removeAt(n).dispose()),
+                    child: Semantics(
+                      label: s.sgRemoveItem(n + 1),
+                      excludeSemantics: true,
+                      child: Text(s.sgRemove),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-        if (_items.length < 5)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              key: const Key('sgAddItem'),
-              icon: const Icon(Icons.add),
-              label: Text(s.sgAddItem),
-              onPressed: () => setState(() => _items.add(_Item())),
-            ),
+        const SizedBox(height: Tokens.sp2),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton(
+            key: const Key('sgAddItem'),
+            onPressed: _items.length >= 30 ? null : () => setState(() => _items.add(_Item())),
+            child: Text(s.sgAddItem),
           ),
+        ),
         if (_error != null) ErrorText(_error!),
         const SizedBox(height: Tokens.sp3),
-        FilledButton(
-          key: const Key('sgSend'),
-          onPressed: _busy ? null : _send,
-          child: Text(s.sgSend),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton(
+            key: const Key('sgSend'),
+            onPressed: _busy ? null : _send,
+            child: Text(s.sgSend),
+          ),
         ),
       ],
     );
   }
+}
+
+/// A date or time chosen with a picker, shown as a labelled field (as the websites' inputs): the label, the value (or
+/// a hint) and its icon; a tap opens the picker.
+class _PickField extends StatelessWidget {
+  const _PickField({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+    this.hint,
+  });
+  final String label;
+  final String? value;
+  final String? hint;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: '$label: ${value ?? hint ?? ''}',
+    excludeSemantics: true,
+    child: InkWell(
+      onTap: onTap,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          suffixIcon: Icon(icon),
+        ),
+        child: Text(value ?? hint ?? ''),
+      ),
+    ),
+  );
 }
