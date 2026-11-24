@@ -30,6 +30,8 @@ export interface AssistantSetupValues {
   subtitles: Record<SetupAudience, string>;
   /** docs/design/93: Claude's help per audience (families wait for a consent that names Anthropic) */
   claude: Record<SetupAudience, boolean>;
+  /** docs/design/103: office and admin staff's data questions answered by the AI model */
+  nlq: boolean;
 }
 
 /** Claude's state on this server (docs/design/93): Mobilise's key, the audiences it may help, the month. */
@@ -41,6 +43,8 @@ export interface ClaudeInfo {
   audiences: SetupAudience[];
   /** docs/design/102: who runs the AI model (parents and students agree to it by name); null: not named */
   operator?: string | null;
+  /** docs/design/103: data questions need the AI model for all schools to be on */
+  nlqAvailable?: boolean;
   monthlyLimit: number;
   limitBy: 'default' | 'school';
   usedThisMonth: number;
@@ -92,12 +96,14 @@ export function editableValues(s: AssistantSetup): AssistantSetupValues {
       SetupAudience,
       boolean
     >,
+    nlq: s.nlq === true,
   };
 }
 
 /** Two sets of values the same (topics compared as sets, starters in order). */
 export function sameValues(a: AssistantSetupValues, b: AssistantSetupValues): boolean {
-  if (a.dailyLimit !== b.dailyLimit || a.name.trim() !== b.name.trim()) return false;
+  if (a.dailyLimit !== b.dailyLimit || a.name.trim() !== b.name.trim() || a.nlq !== b.nlq)
+    return false;
   return SETUP_AUDIENCES.every(
     (k) =>
       a.audiences[k] === b.audiences[k] &&

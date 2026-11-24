@@ -73,6 +73,11 @@ extension AssistantWords on S {
   String get asstRetry => _as('Try again', 'फिर कोशिश करें');
   String asstOpen(String screen) => _as('Open $screen', '$screen खोलें');
   String asstMore(int n) => _as('and $n more', 'और $n');
+  // docs/design/103: a data question's answer
+  String asstHow(String how) => _as('How this was worked out: $how', 'यह कैसे निकाला गया: $how');
+  String get asstChecked => _as('From a checked question', 'जाँचे हुए प्रश्न से');
+  String get asstNoRecords =>
+      _as('No records match this question.', 'इस प्रश्न से कोई अभिलेख नहीं मिला।');
   String asstSource(String t) => _as('Source: $t', 'स्रोत: $t');
   String get asstByClaude => _as('Answered with Claude', 'Claude की सहायता से उत्तर');
   String get asstByModel => _as('Answered with the AI model', 'AI मॉडल की सहायता से उत्तर');
@@ -659,6 +664,11 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
               const SizedBox(height: Tokens.sp2),
               _TableCard(card: card),
             ],
+            // docs/design/103: a data question — figures, sentences, a chart and the table
+            if (card['kind'] == 'data') ...[
+              const SizedBox(height: Tokens.sp2),
+              _DataCard(key: Key('asstData-$i'), card: card),
+            ],
             if (open != null)
               Align(
                 alignment: Alignment.centerLeft,
@@ -1205,4 +1215,288 @@ class _TableCard extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// docs/design/103: a data question's answer — the title, how it was worked out, the figures, the sentences, a chart
+/// and the table (the chart is drawn from the same rows as the table, so they always agree).
+class _DataCard extends ConsumerWidget {
+  const _DataCard({super.key, required this.card});
+  final Json card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
+    final rows = asList(card['rows']);
+    final figures = asList(card['figures']);
+    // the sentences are plain strings (asList keeps only objects)
+    final text = [for (final t in (card['text'] is List ? card['text'] as List : const [])) '$t'];
+    final hasRows = rows.isNotEmpty && asList(card['columns']).isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if ('${card['title'] ?? ''}'.isNotEmpty)
+          Text('${card['title']}', style: const TextStyle(fontWeight: Tokens.fwBold)),
+        if ('${card['explain'] ?? ''}'.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              s.asstHow('${card['explain']}'),
+              style: TextStyle(fontSize: 12, color: muted),
+            ),
+          ),
+        if (figures.isNotEmpty) ...[
+          const SizedBox(height: Tokens.sp2),
+          FigureGrid(
+            tiles: [
+              for (final f in figures)
+                FigureTile(
+                  label: s.hindi ? '${f['labelHi'] ?? f['label']}' : '${f['label']}',
+                  value: '${f['value'] ?? '—'}',
+                  icon: Icons.insights_outlined,
+                ),
+            ],
+          ),
+        ],
+        for (final t in text)
+          Padding(
+            padding: const EdgeInsets.only(top: Tokens.sp2),
+            child: Text(t),
+          ),
+        if (hasRows && card['chart'] is Map && rows.length >= 2) ...[
+          const SizedBox(height: Tokens.sp3),
+          _DataChart(card: card),
+        ],
+        if (hasRows) ...[
+          const SizedBox(height: Tokens.sp2),
+          _TableCard(card: {'columns': card['columns'], 'rows': rows, 'more': card['more']}),
+        ] else
+          Padding(
+            padding: const EdgeInsets.only(top: Tokens.sp2),
+            child: Text(s.asstNoRecords),
+          ),
+        if (card['checked'] == true)
+          Padding(
+            padding: const EdgeInsets.only(top: Tokens.sp1),
+            child: Text(s.asstChecked, style: TextStyle(fontSize: 12, color: muted)),
+          ),
+      ],
+    );
+  }
+}
+
+double? _chartNumber(Object? v) => v is num ? v.toDouble() : double.tryParse('$v');
+
+/// The chart of a data answer: bars (side by side or stacked), a line or a ring, drawn natively; its legend is text and
+/// a screen reader hears the values.
+class _DataChart extends ConsumerWidget {
+  const _DataChart({required this.card});
+  final Json card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final chart = asJson(card['chart']);
+    final type = '${chart['type']}';
+    final x = '${chart['x']}';
+    final ys = [for (final y in (chart['y'] is List ? chart['y'] as List : const [])) '$y'];
+    final rows = asList(card['rows']).map(asJson).toList();
+    final cols = asList(card['columns']).map(asJson).toList();
+    String name(String key) =>
+        '${cols.firstWhere((c) => c['key'] == key, orElse: () => {'label': key})['label']}';
+    final labels = [for (final r in rows) '${r[x] ?? '—'}'];
+    final values = [
+      for (final y in ys) [for (final r in rows) _chartNumber(r[y]) ?? 0],
+    ];
+    final palette = (dark
+        ? [
+            Tokens.mobCyan500,
+            Tokens.mobGreen600,
+            Tokens.mobAmber600,
+            Tokens.mobGray300,
+            Tokens.mobRed600,
+            Tokens.mobCyan100,
+            Tokens.mobNavy100,
+            Tokens.mobGray500,
+          ]
+        : [
+            Tokens.mobNavy700,
+            Tokens.mobCyan700,
+            Tokens.mobGreen600,
+            Tokens.mobAmber600,
+            Tokens.mobRed600,
+            Tokens.mobGray500,
+            Tokens.mobNavy100,
+            Tokens.mobCyan100,
+          ]);
+    final axis = (dark ? Tokens.mobGray300 : Tokens.textMuted);
+    final heard = [
+      '${card['title'] ?? ''}.',
+      for (final (i, l) in labels.indexed)
+        '$l: ${[for (final v in values) _plain(v[i])].join(', ')}',
+    ].join(' ');
+    final legend = type == 'donut'
+        ? [for (final (i, l) in labels.indexed) (l, palette[i % palette.length])]
+        : [for (final (i, y) in ys.indexed) (name(y), palette[i % palette.length])];
+    return Semantics(
+      label: heard,
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            key: const Key('asstChart'),
+            height: type == 'donut' ? 160 : 180,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: _ChartPainter(
+                type: type,
+                labels: labels,
+                values: values,
+                palette: palette,
+                axis: axis,
+              ),
+            ),
+          ),
+          const SizedBox(height: Tokens.sp1),
+          Wrap(
+            spacing: Tokens.sp3,
+            runSpacing: Tokens.sp1,
+            children: [
+              for (final (label, colour) in legend)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 10, height: 10, color: colour),
+                    const SizedBox(width: 4),
+                    Text(label, style: TextStyle(fontSize: 12, color: axis)),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _plain(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+
+class _ChartPainter extends CustomPainter {
+  _ChartPainter({
+    required this.type,
+    required this.labels,
+    required this.values,
+    required this.palette,
+    required this.axis,
+  });
+  final String type;
+  final List<String> labels;
+  final List<List<double>> values;
+  final List<Color> palette;
+  final Color axis;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (labels.isEmpty || values.isEmpty) return;
+    if (type == 'donut') return _donut(canvas, size);
+    const left = 4.0;
+    const bottom = 18.0;
+    final h = size.height - bottom;
+    final w = size.width - left;
+    final stacked = type == 'stacked_bar';
+    final tops = [
+      for (var i = 0; i < labels.length; i++)
+        stacked
+            ? values.fold<double>(0, (s, v) => s + (v[i] > 0 ? v[i] : 0))
+            : values.map((v) => v[i]).fold<double>(0, (a, b) => b > a ? b : a),
+    ];
+    final max = tops.fold<double>(0, (a, b) => b > a ? b : a);
+    if (max <= 0) return;
+    final base = Paint()
+      ..color = axis.withValues(alpha: 0.5)
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(left, h), Offset(size.width, h), base);
+    final step = w / labels.length;
+    if (type == 'line') {
+      for (final (si, series) in values.indexed) {
+        final paint = Paint()
+          ..color = palette[si % palette.length]
+          ..strokeWidth = 2.5
+          ..style = PaintingStyle.stroke;
+        final path = Path();
+        for (var i = 0; i < series.length; i++) {
+          final p = Offset(left + step * i + step / 2, h - (series[i] / max) * (h - 6));
+          i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+          canvas.drawCircle(p, 3, Paint()..color = palette[si % palette.length]);
+        }
+        canvas.drawPath(path, paint);
+      }
+    } else {
+      final groupW = step * 0.7;
+      for (var i = 0; i < labels.length; i++) {
+        var y = h;
+        for (final (si, series) in values.indexed) {
+          final v = series[i] > 0 ? series[i] : 0.0;
+          final bh = (v / max) * (h - 6);
+          final paint = Paint()..color = palette[si % palette.length];
+          if (stacked) {
+            canvas.drawRect(
+              Rect.fromLTWH(left + step * i + (step - groupW) / 2, y - bh, groupW, bh),
+              paint,
+            );
+            y -= bh;
+          } else {
+            final bw = groupW / values.length;
+            canvas.drawRect(
+              Rect.fromLTWH(left + step * i + (step - groupW) / 2 + bw * si, h - bh, bw - 1, bh),
+              paint,
+            );
+          }
+        }
+      }
+    }
+    // the labels under the axis: as many as fit
+    final every = (labels.length / (w / 48)).ceil().clamp(1, labels.length);
+    for (var i = 0; i < labels.length; i += every) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: labels[i],
+          style: TextStyle(fontSize: 10, color: axis),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: step * every - 2);
+      tp.paint(canvas, Offset(left + step * i + (step - tp.width) / 2, h + 3));
+    }
+  }
+
+  void _donut(Canvas canvas, Size size) {
+    final series = values.first;
+    final total = series.fold<double>(0, (s, v) => s + (v > 0 ? v : 0));
+    if (total <= 0) return;
+    final r = (size.height / 2) - 8;
+    final rect = Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: r);
+    var start = -3.14159 / 2;
+    for (final (i, v) in series.indexed) {
+      if (v <= 0) continue;
+      final sweep = (v / total) * 2 * 3.14159;
+      canvas.drawArc(
+        rect,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..color = palette[i % palette.length]
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 22,
+      );
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChartPainter old) => old.values != values || old.type != type;
 }

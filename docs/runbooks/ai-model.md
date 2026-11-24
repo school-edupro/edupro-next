@@ -73,6 +73,18 @@ pages their rights are about, with a link to the page on the office website; for
 own Help questions (Helpdesk set-up), with a link to the Help screen. "How do I …" questions reach the model even
 with words like "change" or "reset" in them.
 
+## Data questions (docs/design/103)
+
+Office and admin staff may also ask data questions — totals, comparisons, rankings across the school's records. The
+model writes one SELECT over the `nlq` views (42, in `packages/db/migrations/0420_nlq_views.sql`; their catalogue,
+rights and checked examples in `apps/api/src/modules/insights/nlq/catalogue.json`), offered only the views the
+person's rights open. EduPro checks the query (one SELECT, only those views, plain functions), runs it through
+`app.nlq_run` as `edupro_nlq` for the person's school only (read-only, 15 s, rolled back) and answers with figures,
+sentences whose numbers EduPro fills in, a chart and the table. A refused or failing query gets one retry with the
+reason. A question matching a checked example runs that example with no model. Per school: **Assistant set-up →
+Data questions with the AI model** (off by default). The query of every data question is kept in `ai_audit` (kind
+`tool`). The model is never sent a record for these questions.
+
 ## What is sent
 
 The assistant sends two prompts per question: first the rules, the person's approved queries (names and inputs, no

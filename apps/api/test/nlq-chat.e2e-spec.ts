@@ -200,7 +200,7 @@ describe('data questions in the chatbot (docs/design/103 phase B)', () => {
     const body = r.json();
     expect(body).toMatchObject({
       by: 'llm',
-      answer: 'Class VI collected the most (₹2,000).',
+      answer: 'Fee collected by class',
       card: {
         kind: 'data',
         title: 'Fee collected by class',

@@ -203,3 +203,16 @@ or prompts that drift.
   sent back once, a second bad query → EduPro's own reply; a checked question with no model; a class teacher not
   offered fee views and refused when naming payslips); the chatbot, AI model, assistant evaluation, red-team,
   sprint 15, family help and permission suites.
+- **C (24 Nov 2026).** The answer on screen. `@edupro/ui`: the admin's SVG charts (`BarChart`, `LineChart`,
+  `DonutChart` …) moved to `packages/ui/src/components/Charts.tsx` (the admin's old path re-exports them);
+  `AssistantCard` draws `kind: 'data'` — title, "How this was worked out", figures, sentences, the chart (drawn from
+  the table's own rows: bar, stacked bar, line, ring), the table (50 rows, "and n more"), "No records match" when
+  empty, and "From a checked question" for those (the chat already labels the AI model's answers) — in the web
+  window and the chat page alike. The chat message of a data answer is its title, so nothing is said twice. The app
+  (`apps/mobile/lib/family/assistant.dart`): `_DataCard` and a native `_ChartPainter` (bars, stacked bars, line,
+  ring; a text legend; screen readers hear every value). Assistant set-up: **Data questions with the AI model →
+  Office and admin staff** (off until the AI model for all schools is on). Help: a new in-app page `help/assistant`
+  (how a question is answered, a data answer, what keeps it safe, switching it on) and the runbook's "Data
+  questions". Tests: Storybook `Chatbot/Data answer` (3 stories with checks), axe clean on them at 1024 and 375 px
+  without sideways scroll; the admin's accessibility walk for Assistant set-up and `/help/assistant`; the app's
+  widget test (the card, the chart's spoken values, accessibility guidelines, twice the text size) — app 329.

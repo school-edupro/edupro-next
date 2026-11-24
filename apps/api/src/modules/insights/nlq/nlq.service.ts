@@ -195,9 +195,8 @@ export class NlqService {
       more,
       checked,
     };
-    const answer = rows.length
-      ? (text[0] ?? (figures[0] ? `${title}: ${figures[0].label} ${figures[0].value}.` : title))
-      : 'No records match this question.';
+    // the chat message is the title; the sentences, figures, chart and table are in the card (said once)
+    const answer = rows.length ? title : 'No records match this question.';
     return { card, answer };
   }
 

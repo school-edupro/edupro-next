@@ -156,3 +156,13 @@ export {
   type AssistantMessageView,
   type AssistantStartView,
 } from './components/AssistantChat';
+export {
+  BarChart,
+  ChartLegend,
+  DonutChart,
+  LineChart,
+  PercentBarChart,
+  ProgressRows,
+  type ChartSeries,
+  type ChartTone,
+} from './components/Charts';

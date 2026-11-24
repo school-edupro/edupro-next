@@ -156,6 +156,40 @@ class School {
         'by': 'claude',
       };
     }
+    if (w.contains('per class')) {
+      // docs/design/103: a data question worked out by the AI model over the school's data views
+      return {
+        'card': {
+          'kind': 'data',
+          'title': 'Fee collected by class',
+          'explain': 'From fee receipts not reversed or bounced, totalled by class.',
+          'figures': [
+            {'label': 'Collected', 'labelHi': 'Collected', 'value': '₹2,500'},
+          ],
+          'text': ['Class VI collected the most (₹2,000).'],
+          'chart': {
+            'type': 'bar',
+            'x': 'class',
+            'y': ['collected'],
+          },
+          'columns': [
+            {'key': 'class', 'label': 'Class', 'labelHi': 'Class', 'type': 'text'},
+            {'key': 'collected', 'label': 'Collected', 'labelHi': 'Collected', 'type': 'money'},
+          ],
+          'rows': [
+            {'class': 'Class VI', 'collected': 2000},
+            {'class': 'Class VII', 'collected': 500},
+          ],
+          'more': 0,
+          'checked': false,
+        },
+        'link': null,
+        'followUps': [],
+        'didYouMean': [],
+        'suggestions': [],
+        'by': 'llm',
+      };
+    }
     if (w.contains('glimmer')) {
       // answered with the AI model set up for all schools (docs/design/101)
       return {
@@ -713,6 +747,40 @@ void main() {
       expect(find.text('AI मॉडल की सहायता से उत्तर'), findsOneWidget);
     });
 
+    testWidgets(
+      'a data question: title, how, figures, sentences, chart and table (docs/design/103)',
+      (tester) async {
+        await tall(tester);
+        await pump(
+          tester,
+          const AssistantScreen(profile: staff),
+          school: School(kind: 'staff'),
+        );
+        await tester.enterText(find.byKey(const Key('asstQuestion')), 'money collected per class');
+        await tapIn(tester, find.byKey(const Key('asstAsk')));
+        expect(find.byKey(const Key('asstData-1')), findsOneWidget);
+        expect(find.text('Fee collected by class'), findsWidgets);
+        expect(find.textContaining('How this was worked out'), findsOneWidget);
+        expect(find.text('₹2,500'), findsOneWidget);
+        expect(find.text('Class VI collected the most (₹2,000).'), findsOneWidget);
+        expect(find.byKey(const Key('asstChart')), findsOneWidget);
+        expect(find.text('Class VII'), findsWidgets);
+        expect(find.text('Answered with the AI model'), findsOneWidget);
+        // a screen reader hears the chart's values
+        expect(
+          find.bySemanticsLabel(RegExp('Class VI: 2000, Class VII: 500|Class VI: 2000')),
+          findsOneWidget,
+        );
+        for (final g in [
+          textContrastGuideline,
+          androidTapTargetGuideline,
+          labeledTapTargetGuideline,
+        ]) {
+          await expectLater(tester, meetsGuideline(g));
+        }
+      },
+    );
+
     testWidgets('earlier conversations open from the header; the bin starts afresh', (
       tester,
     ) async {
@@ -1076,6 +1144,11 @@ void main() {
       text: 2,
     );
     await tapIn(tester, find.byKey(const Key('asstStarters-0')));
+    expect(tester.takeException(), isNull);
+    // docs/design/103: a data answer at twice the text size
+    await tester.enterText(find.byKey(const Key('asstQuestion')), 'money collected per class');
+    await tapIn(tester, find.byKey(const Key('asstAsk')));
+    expect(find.byKey(const Key('asstChart')), findsOneWidget);
     expect(tester.takeException(), isNull);
     await pump(tester, const HelpScreen(profile: parent), text: 2);
     await tapIn(tester, find.text('Attendance and leave'));

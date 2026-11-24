@@ -459,6 +459,30 @@ export function AssistantSetupEditor({
             );
           })}
         </div>
+        <div
+          style={{
+            marginTop: 'var(--sp-4)',
+            paddingTop: 'var(--sp-3)',
+            borderTop: '1px solid var(--border-subtle)',
+          }}
+          data-testid="as-nlq"
+        >
+          <h3 className="ep-form-section__title" style={{ marginTop: 0 }}>
+            Data questions with the AI model
+          </h3>
+          <Switch
+            id="as-nlq"
+            label="Office and admin staff"
+            help={
+              setup.claudeInfo.nlqAvailable
+                ? 'Questions like “fee collected by class this month against last month” are worked out by the AI model writing one query over the school’s data views — only the views each person’s rights open, read-only, for this school only. The model is told the views and the question, never a record. Answers show figures, a few sentences, a chart and the table.'
+                : 'Needs the AI model for all schools to be on (School settings → AI model).'
+            }
+            checked={!!setup.claudeInfo.nlqAvailable && values.nlq}
+            disabled={!canEdit || !setup.claudeInfo.nlqAvailable}
+            onChange={(on) => change({ nlq: on })}
+          />
+        </div>
         <p className="ep-field__help" data-testid="as-claude-month" style={{ marginBottom: 0 }}>
           This month: {String(setup.claudeInfo.usedThisMonth)} of{' '}
           {String(setup.claudeInfo.monthlyLimit)}{' '}

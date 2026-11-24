@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Badge } from './Badge';
+import { BarChart, DonutChart, LineChart, type ChartTone } from './Charts';
 import { RadioGroup } from './Radio';
 
 /**
@@ -13,11 +14,18 @@ export type AssistantAudience = 'student' | 'parent' | 'teacher' | 'admin';
 type Lang = 'en' | 'hi';
 
 export interface AssistantCardView {
-  kind: 'figures' | 'table';
+  kind: 'figures' | 'table' | 'data';
   figures?: Array<{ label: string; labelHi?: string; value: string }>;
   columns?: Array<{ key: string; label: string; labelHi?: string; type?: string }>;
   rows?: Array<Record<string, unknown>>;
   more?: number;
+  /** docs/design/103: a data question's answer — title, how it was worked out, sentences, a chart */
+  title?: string;
+  explain?: string;
+  text?: string[];
+  chart?: { type: 'bar' | 'stacked_bar' | 'line' | 'donut'; x: string; y: string[] } | null;
+  /** answered from a checked question (no AI model) */
+  checked?: boolean;
 }
 export interface AssistantLinkView {
   label: string;
@@ -121,6 +129,10 @@ const W = {
   records: ['The records', 'अभिलेख'],
   byClaude: ['Answered with Claude', 'Claude की सहायता से उत्तर'],
   byModel: ['Answered with the AI model', 'AI मॉडल की सहायता से उत्तर'],
+  // docs/design/103: a data question's answer
+  how: ['How this was worked out', 'यह कैसे निकाला गया'],
+  checked: ['From a checked question', 'जाँचे हुए प्रश्न से'],
+  noRecords: ['No records match this question.', 'इस प्रश्न से कोई अभिलेख नहीं मिला।'],
 } as const;
 
 const pick = (pair: readonly [string, string], lang: Lang) => (lang === 'hi' ? pair[1] : pair[0]);
@@ -270,10 +282,123 @@ function Chips({
   );
 }
 
+const CHART_TONES: ChartTone[] = ['navy', 'cyan', 'success', 'warning'];
+const DONUT_TONES: ChartTone[] = [
+  'navy',
+  'cyan',
+  'success',
+  'warning',
+  'info',
+  'danger',
+  'navy-soft',
+  'cyan-soft',
+];
+const chartNumber = (v: unknown) => {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : null;
+};
+
+/** docs/design/103: the chart of a data answer, drawn from the rows the table shows (so they always agree). */
+function DataChart({ card, lang }: { card: AssistantCardView; lang: Lang }) {
+  const chart = card.chart;
+  const rows = card.rows ?? [];
+  if (!chart || rows.length < 2) return null;
+  const colOf = (k: string) => card.columns?.find((c) => c.key === k);
+  const name = (k: string) => {
+    const c = colOf(k);
+    return c ? (lang === 'hi' ? (c.labelHi ?? c.label) : c.label) : k;
+  };
+  const xs = rows.map((r) => cell(colOf(chart.x)?.type, r[chart.x], lang));
+  const title = card.title ?? pick(W.records, lang);
+  if (chart.type === 'line')
+    return (
+      <LineChart
+        title={title}
+        labels={xs}
+        series={chart.y.map((k, i) => ({
+          label: name(k),
+          tone: CHART_TONES[i % CHART_TONES.length]!,
+          values: rows.map((r) => chartNumber(r[k])),
+        }))}
+      />
+    );
+  if (chart.type === 'donut') {
+    const k = chart.y[0]!;
+    const total = rows.reduce((n, r) => n + (chartNumber(r[k]) ?? 0), 0);
+    return (
+      <DonutChart
+        title={title}
+        parts={rows.map((r, i) => ({
+          label: xs[i]!,
+          tone: DONUT_TONES[i % DONUT_TONES.length]!,
+          value: chartNumber(r[k]) ?? 0,
+        }))}
+        centre={colOf(k)?.type === 'money' ? assistantMoney(total) : String(total)}
+        caption={name(k)}
+      />
+    );
+  }
+  return (
+    <BarChart
+      title={title}
+      data={rows.map((r, i) => ({
+        label: xs[i]!,
+        values: chart.y.map((k) => chartNumber(r[k]) ?? 0),
+      }))}
+      series={chart.y.map((k, i) => ({
+        label: name(k),
+        tone: CHART_TONES[i % CHART_TONES.length]!,
+      }))}
+      stacked={chart.type === 'stacked_bar'}
+    />
+  );
+}
+
 /** An answer's records: figures, or a short table with "and n more" (shared with the chat window). */
 export function AssistantCard({ card, lang }: { card: AssistantCardView; lang: Lang }) {
   const label = (x: { label: string; labelHi?: string }) =>
     lang === 'hi' ? (x.labelHi ?? x.label) : x.label;
+  // docs/design/103: a data question's answer — the title, how it was worked out, figures, sentences, chart, table
+  if (card.kind === 'data') {
+    const hasRows = !!card.rows?.length && !!card.columns?.length;
+    return (
+      <div data-testid="assistant-data" style={{ marginTop: 'var(--sp-2)' }}>
+        {card.title ? (
+          <p style={{ margin: 0, fontWeight: 'var(--fw-semibold)', color: 'var(--text-heading)' }}>
+            {card.title}
+          </p>
+        ) : null}
+        {card.explain ? (
+          <p className="ep-field__help" style={{ margin: 0 }}>
+            {pick(W.how, lang)}: {card.explain}
+          </p>
+        ) : null}
+        {card.figures?.length ? (
+          <AssistantCard card={{ kind: 'figures', figures: card.figures }} lang={lang} />
+        ) : null}
+        {card.text?.map((t, i) => (
+          <p key={i} style={{ margin: 'var(--sp-2) 0 0' }}>
+            {t}
+          </p>
+        ))}
+        {hasRows ? <DataChart card={card} lang={lang} /> : null}
+        {hasRows ? (
+          <AssistantCard
+            card={{ kind: 'table', columns: card.columns, rows: card.rows, more: card.more }}
+            lang={lang}
+          />
+        ) : (
+          <p style={{ margin: 'var(--sp-2) 0 0' }}>{pick(W.noRecords, lang)}</p>
+        )}
+        {/* the chat labels the AI model's answers already; a checked question says so here */}
+        {card.checked ? (
+          <p className="ep-field__help" style={{ margin: 'var(--sp-1) 0 0' }}>
+            {pick(W.checked, lang)}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
   if (card.kind === 'figures' && card.figures?.length) {
     return (
       <dl
