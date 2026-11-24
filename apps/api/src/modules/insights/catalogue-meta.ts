@@ -5,6 +5,8 @@
  * catalogue.ts; nothing here reads data.
  */
 
+import type { DataCard } from './nlq/nlq-answer';
+
 export type Lang = 'en' | 'hi' | 'hinglish';
 export type Row = Record<string, unknown>;
 
@@ -16,7 +18,9 @@ export interface CardColumn {
 }
 export type Card =
   | { kind: 'figures'; figures: Array<{ label: string; labelHi: string; value: string }> }
-  | { kind: 'table'; columns: CardColumn[]; rows: Row[]; more: number };
+  | { kind: 'table'; columns: CardColumn[]; rows: Row[]; more: number }
+  /** docs/design/103: a data question's answer — figures, text, chart and table */
+  | DataCard;
 
 export interface Screen {
   label: string;

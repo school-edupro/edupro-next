@@ -12,6 +12,7 @@ import { DepartmentsService } from './departments.service';
 import { InsightsController } from './insights.controller';
 import { InsightsService } from './insights.service';
 import { MisService } from './mis.service';
+import { NlqService } from './nlq/nlq.service';
 import { ResultsAnalyticsService } from './results-analytics.service';
 
 /** Sprint 12 (AI track): marts v1 and the principal dashboard; the query catalogue and assistant arrive in Sprint 14. */
@@ -27,6 +28,7 @@ import { ResultsAnalyticsService } from './results-analytics.service';
     AiReportsService,
     ResultsAnalyticsService,
     MisService,
+    NlqService,
     AuditService,
   ],
   exports: [

@@ -105,6 +105,8 @@ export interface AssistantSettings {
   claude: Record<Audience, boolean>;
   /** Claude answers a month, set by Mobilise (null: the server's default) */
   claudeMonthlyLimit: number | null;
+  /** docs/design/103: office and admin staff's data questions answered by the AI model over the nlq views */
+  nlq: boolean;
   updatedAt: string | null;
   updatedBy: string | null;
 }
@@ -118,6 +120,7 @@ export const DEFAULT_SETTINGS: AssistantSettings = {
   subtitles: { student: '', parent: '', teacher: '', admin: '' },
   claude: { student: false, parent: false, teacher: false, admin: false },
   claudeMonthlyLimit: null,
+  nlq: false,
   updatedAt: null,
   updatedBy: null,
 };
@@ -150,6 +153,8 @@ export const AssistantSettingsSchema = z.object({
   subtitles: PerAudience(z.string().trim().max(80)).optional(),
   /** docs/design/93: left out, the saved switches stay */
   claude: PerAudience(z.boolean()).optional(),
+  /** docs/design/103: left out, the saved switch stays */
+  nlq: z.boolean().optional(),
 });
 
 /** The audiences Claude may help today (docs/design/93: staff first; families after the consent names Anthropic). */

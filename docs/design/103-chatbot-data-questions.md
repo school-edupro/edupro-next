@@ -179,3 +179,27 @@ or prompts that drift.
   and column described, no personal-data column, no jsonb or arrays; counting rules on made-up rows (cancelled
   admission, deleted pupil, reversed receipt, period register, leave); the catalogue's rights exist and its examples
   run. `packages/db` 151. Every view and example also timed under a millisecond-range budget on the dev database.
+- **B (24 Nov 2026).** Migration **0421** (`assistant_settings.nlq`, the school's switch, off). API
+  `insights/nlq/`: `nlq-sql.ts` (a tokenizer-based check: one SELECT/WITH, no write or control words, no schema but
+  `nlq`, an allow-list of plain functions, and **only the views the person's rights cover** — the database lets
+  `edupro_nlq` read every nlq view, so rights are kept here), `nlq-catalogue.ts` (views by rights, picking views by
+  weighted word overlap with a small synonym list — "collected" → receipts, "due" → bills …; closest checked examples,
+  only those using open views; a checked question answered as it is), `nlq-answer.ts` (blanks filled and formatted:
+  ₹ with Indian grouping, %, dates; the chart kept only when it fits: x a column, y number columns, 2–60 rows, donut ≤
+  8; otherwise an automatic bar/line for one label and 1–3 numbers; the table's columns), `nlq.service.ts` (the
+  views' COMMENTs read once; the prompt's data part; `run()` inside a savepoint that is rolled back: `app.nlq_begin`,
+  `app.my_libraries`, read-only, 15 s, India time zone, `app.nlq_run` up to 5,001 rows; the card). In the assistant:
+  `ask()` offers data questions to office/admin staff when the AI model is on, the school's switch is on and their
+  rights open at least one view — with or without the "Help from the AI model" switch; one prompt offers approved
+  queries, help pages and the `{"sql": …}` answer; a refused or failing query gets one retry with the reason; a
+  question matching a checked one runs its checked SQL with no model (`by: 'local'`, `checked: true`, not counted);
+  an analytical question ("by", "per", "compare", "top", "average" …) tries the model first, unless it is exactly a
+  chip's question — EduPro's rules answer when the model cannot; data questions may hold words the rules take for a
+  change request, but not off-topic ones. The answer's card `kind: 'data'` (title, explain, figures, text, chart,
+  columns, rows ≤ 50, more, checked); the query is kept in `ai_audit` (kind `tool`, the row count). Set-up info
+  `claudeInfo.nlqAvailable`. Tests: unit `nlq.spec` (10: the checks, blanks, formats, charts, picking, checked
+  questions); API `nlq-chat.e2e-spec` (6: off until switched on; figures, sentences and chart from the real rows, no
+  record in the prompt, the query audited; a query outside the views refused with one retry; the database's error
+  sent back once, a second bad query → EduPro's own reply; a checked question with no model; a class teacher not
+  offered fee views and refused when naming payslips); the chatbot, AI model, assistant evaluation, red-team,
+  sprint 15, family help and permission suites.

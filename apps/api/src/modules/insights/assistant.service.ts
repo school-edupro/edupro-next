@@ -32,6 +32,15 @@ import { FamilyHelpService } from '../engagement/family-help.service';
 import { AiModelService } from './ai-model.service';
 import { familyModel, modelConsented } from './family-model';
 import { TOPIC_CHARS, staffHelpTopics } from './help-topics';
+import type { DataCard } from './nlq/nlq-answer';
+import {
+  closestExamples,
+  matchingExample,
+  pickViews,
+  viewsFor,
+  type NlqView,
+} from './nlq/nlq-catalogue';
+import { NlqService, type NlqReply } from './nlq/nlq.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -62,6 +71,10 @@ interface ModelHelp {
   model?: boolean;
   /** which app asked (the help link goes to its own pages) */
   surface?: 'admin' | 'teacher' | 'parent';
+  /** the school's "Help from the AI model" is on for this person (approved queries and help pages); default on */
+  approved?: boolean;
+  /** docs/design/103: the nlq views this person's data questions may read (the school's switch and their rights) */
+  nlq?: NlqView[] | null;
 }
 
 /** docs/design/102: a help topic offered to the AI model. */
@@ -71,6 +84,14 @@ interface HelpChoice {
   text: string;
   link: { label: string; labelHi: string; app: string | null; web: string | null } | null;
 }
+
+/** docs/design/103: an analytical question — totals, comparisons, groupings, rankings, trends. */
+const ANALYTIC =
+  /\b(per|by|each|every|compare|compared|comparison|versus|vs|trend|breakdown|break\s+down|top|bottom|highest|lowest|most|least|average|avg|ranking|rank|wise|distribution|share|percentage|growth|between|against|last\s+year|month\s+on\s+month)\b/i;
+
+/** docs/design/103: questions outside the school's records — never sent to the model as data questions. */
+const OFF_TOPIC =
+  /\b(poem|joke|story|weather|news|song|cricket|movie|recipe|translate|essay|who is the (?:pm|prime minister|president))\b/i;
 
 /** docs/design/102: a question on how to use EduPro (English, Hinglish, Hindi). */
 const HOW_TO =
@@ -330,6 +351,7 @@ export class AssistantService {
     private readonly viewer: ViewerService,
     private readonly aiModel: AiModelService,
     private readonly familyHelp: FamilyHelpService,
+    private readonly nlq: NlqService,
   ) {
     this.local = env.AI_PROVIDER !== 'claude';
     this.claude = claudeFromEnv({
@@ -544,6 +566,9 @@ export class AssistantService {
           !!fm &&
           (await modelConsented(c, fm.since, audience === 'student' ? scope.studentIds : null));
       }
+      // docs/design/103: office and admin staff's data questions — the AI model on, the school's switch on, and
+      // only the nlq views their rights cover
+      const nlqViews = llm && audience === 'admin' && settings.nlq ? viewsFor(ctx.permissions) : [];
       if (this.local || llm)
         return this.askLocal(c, ctx, dto, {
           entries: mine,
@@ -551,15 +576,18 @@ export class AssistantService {
           surface,
           today,
           self: scope.kind === 'student',
-          claude: helps
-            ? {
-                audience,
-                name: settings.name,
-                monthlyLimit: settings.claudeMonthlyLimit,
-                model: !!llm,
-                surface,
-              }
-            : null,
+          claude:
+            helps || nlqViews.length
+              ? {
+                  audience,
+                  name: settings.name,
+                  monthlyLimit: settings.claudeMonthlyLimit,
+                  model: !!llm,
+                  surface,
+                  approved: helps,
+                  nlq: nlqViews.length ? nlqViews : null,
+                }
+              : null,
         });
       const conversationId = await this.openConversation(c, dto.conversationId, language, surface);
       const history = await this.history(c, conversationId);
@@ -773,8 +801,56 @@ export class AssistantService {
       });
     };
     let helped: Awaited<ReturnType<AssistantService['claudeAnswer']>> = null;
+    const useHelped = (h: NonNullable<typeof helped>) => {
+      // docs/design/93: Claude chose the approved queries and wrote the answer from their rows
+      answer = h.text;
+      for (const call of h.calls) present(call.entry, call.rows, call.params);
+      // docs/design/103: or a data question: the answer card (figures, text, chart, table) from the nlq views
+      if (h.nlq) {
+        card = h.nlq.card;
+        citations.push({ query: 'nlq', title: h.nlq.card.title, params: {}, rows: h.nlq.rows });
+      }
+      // docs/design/102: or the AI model answered from a help page: its link and the page as the source
+      if (h.help) {
+        link = h.help.link;
+        citations.push({ query: `help:${h.help.id}`, title: h.help.title, params: {}, rows: 0 });
+      }
+    };
+    const modelHelp = () =>
+      this.claudeAnswer(c, ctx, dto, {
+        entries,
+        language,
+        today,
+        classes,
+        sections,
+        conversationId,
+        claude: o.claude!,
+      });
+    // docs/design/103: an analytical data question ("by class", "compare", "top …") goes to the AI model first when
+    // data questions are on — unless it is exactly a chip's question; if the model cannot answer, EduPro's rules do
+    const chipAsked =
+      match.kind === 'match' &&
+      [META[match.id]?.ask, META[match.id]?.askHi]
+        .filter((x): x is string => !!x)
+        .some(
+          (x) =>
+            x.trim().toLowerCase().replace(/\?$/, '') ===
+            dto.question.trim().toLowerCase().replace(/\?$/, ''),
+        );
+    let askedModel = false;
+    if (
+      o.claude?.nlq?.length &&
+      !chipAsked &&
+      ANALYTIC.test(dto.question) &&
+      !OFF_TOPIC.test(dto.question)
+    ) {
+      askedModel = true;
+      helped = await modelHelp();
+    }
 
-    if (match.kind === 'match') {
+    if (helped) {
+      useHelped(helped);
+    } else if (match.kind === 'match') {
       const entry = byId.get(match.id)!;
       let params = match.params;
       let ready = true;
@@ -835,33 +911,17 @@ export class AssistantService {
       }
     } else if (
       o.claude &&
+      !askedModel &&
       (match.kind === 'ambiguous' ||
         match.reason !== 'not_data' ||
         // docs/design/102: "how do I change …" asks how to use EduPro, for the AI model's help pages
-        (o.claude.model === true && HOW_TO.test(dto.question))) &&
-      (helped = await this.claudeAnswer(c, ctx, dto, {
-        entries,
-        language,
-        today,
-        classes,
-        sections,
-        conversationId,
-        claude: o.claude,
-      }))
+        (o.claude.model === true && HOW_TO.test(dto.question)) ||
+        // docs/design/103: a data question may hold words EduPro's rules take for a request to change something
+        // ("compare the change in collection"); the model only reads, and says none fits for anything else
+        (!!o.claude.nlq?.length && !OFF_TOPIC.test(dto.question))) &&
+      (helped = await modelHelp())
     ) {
-      // docs/design/93: Claude chose the approved queries and wrote the answer from their rows
-      answer = helped.text;
-      for (const call of helped.calls) present(call.entry, call.rows, call.params);
-      // docs/design/102: or the AI model answered from a help page: its link and the page as the source
-      if (helped.help) {
-        link = helped.help.link;
-        citations.push({
-          query: `help:${helped.help.id}`,
-          title: helped.help.title,
-          params: {},
-          rows: 0,
-        });
-      }
+      useHelped(helped);
     } else if (match.kind === 'ambiguous') {
       answer = t(
         'Did you mean one of these?',
@@ -916,6 +976,17 @@ export class AssistantService {
       redactions: question.total,
       at,
     });
+    // docs/design/103: the query a data question ran (the views only; no record), and how many rows it gave
+    if (helped?.nlq)
+      await sink.record({
+        ...base,
+        kind: 'tool',
+        text: helped.nlq.sql.slice(0, 4000),
+        redactions: 0,
+        latencyMs: helped.nlq.ms,
+        citations: [`nlq:${String(helped.nlq.rows)} rows`],
+        at,
+      });
     await sink.record({
       ...base,
       kind: refused ? 'refusal' : 'answer',
@@ -994,6 +1065,8 @@ export class AssistantService {
     calls: Array<{ entry: CatalogueEntry; params: Record<string, unknown>; rows: Row[] }>;
     /** docs/design/102: the help topic the AI model answered from */
     help?: { id: string; title: string; link: NonNullable<AskResponse['link']> | null };
+    /** docs/design/103: a data question's answer card, its query and how many rows it gave */
+    nlq?: { card: DataCard; sql: string; rows: number; ms: number };
     usage: {
       inputTokens: number;
       outputTokens: number;
@@ -1002,7 +1075,7 @@ export class AssistantService {
     };
     model: string;
     costPaise: number;
-    by: 'claude' | 'llm';
+    by: 'claude' | 'llm' | 'local';
   } | null> {
     // docs/design/101: the AI model for all schools answers instead of Claude when it is on
     const llm = await this.aiModel.provider();
@@ -1081,16 +1154,49 @@ export class AssistantService {
     o: Parameters<AssistantService['claudeAnswer']>[3],
     llm: HttpLlmProvider,
   ) {
+    // docs/design/103: the views this person's data questions may read, the ones this question needs
+    const question0 = dto.question.slice(0, 2000);
+    const nlqViews = o.claude.nlq?.length ? pickViews(question0, o.claude.nlq) : [];
+    const nlqOpen = new Set((o.claude.nlq ?? []).map((v) => v.view));
+    // a question that matches a checked one is answered with its checked query — no model, no wait
+    if (nlqViews.length) {
+      const checked = matchingExample(question0, nlqViews, nlqOpen);
+      if (checked) {
+        const run = await this.nlq.run(c, checked.sql, o.claude.nlq ?? []);
+        if (run.ok) {
+          const built = this.nlq.build({}, run.rows, nlqViews, true, checked.question);
+          return {
+            text: built.answer,
+            calls: [],
+            nlq: { card: built.card, sql: checked.sql, rows: run.rows.length, ms: run.ms },
+            usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+            model: 'checked-question',
+            costPaise: 0,
+            by: 'local' as const,
+          };
+        }
+      }
+    }
     const limit = o.claude.monthlyLimit ?? this.env.AI_CLAUDE_MONTHLY_QUESTIONS;
     if ((await this.claudeUsedThisMonth(c)) >= limit) return null;
-    const byId = new Map(o.entries.map((e) => [e.id, e]));
+    // the approved queries and help pages only when the school's "Help from the AI model" is on for them
+    const entries = o.claude.approved === false ? [] : o.entries;
+    const byId = new Map(entries.map((e) => [e.id, e]));
     // docs/design/102: the help topics for this person (staff: the help pages of their rights; families: the
     // school's Help questions for them)
-    const topics = await this.helpTopics(ctx, o.claude, o.language).catch((error: unknown) => {
-      this.logger.warn(`ai model help: ${error instanceof Error ? error.message : String(error)}`);
-      return [] as HelpChoice[];
-    });
-    if (!o.entries.length && !topics.length) return null;
+    const topics =
+      o.claude.approved === false
+        ? []
+        : await this.helpTopics(ctx, o.claude, o.language).catch((error: unknown) => {
+            this.logger.warn(
+              `ai model help: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return [] as HelpChoice[];
+          });
+    if (!entries.length && !topics.length && !nlqViews.length) return null;
+    const dataPart = nlqViews.length
+      ? await this.nlq.section(c, nlqViews, closestExamples(question0, nlqViews, 6, nlqOpen))
+      : '';
     const byTopic = new Map(topics.map((t) => [t.id, t]));
     const rules = modelRules(o.claude.name, o.claude.audience, o.language, o.today);
     const question = redact(dto.question.slice(0, 2000)).text;
@@ -1109,15 +1215,30 @@ export class AssistantService {
         await ask(
           [
             rules,
-            o.entries.length
-              ? `The queries you may use (id: what it answers; its inputs):\n${o.entries.map(queryLine).join('\n')}`
+            entries.length
+              ? `The queries you may use (id: what it answers; its inputs):\n${entries.map(queryLine).join('\n')}`
               : '',
             topics.length
               ? `The help topics on using EduPro (id: title):\n${topics.map((t) => `- ${t.id}: ${t.title}`).join('\n')}`
               : '',
+            dataPart,
+            dataPart ? NlqService.RULES : '',
             history.length ? `The conversation so far:\n${history.join('\n')}` : '',
             `The question: ${question}`,
-            'Reply with ONE line of JSON and nothing else: {"query": "<a query id>", "inputs": {<its inputs>}} to read the records; {"help": "<a help topic id>"} when the question asks how to use EduPro; {"none": true} when neither fits. Never answer in your own words.',
+            `Reply with ONE line of JSON and nothing else: ${[
+              entries.length
+                ? '{"query": "<a query id>", "inputs": {<its inputs>}} to read the records'
+                : '',
+              topics.length
+                ? '{"help": "<a help topic id>"} when the question asks how to use EduPro'
+                : '',
+              dataPart
+                ? 'the {"sql": …} answer above for a data question the views can answer'
+                : '',
+              '{"none": true} when nothing fits',
+            ]
+              .filter(Boolean)
+              .join('; ')}. Never answer in your own words.`,
           ]
             .filter(Boolean)
             .join('\n\n'),
@@ -1130,6 +1251,44 @@ export class AssistantService {
           { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
         );
       if (!pick) return null;
+      // docs/design/103: a data question — check, run (one retry with the error), the answer card
+      if (nlqViews.length && typeof pick.sql === 'string') {
+        let reply = pick as unknown as NlqReply;
+        let run = await this.nlq.run(c, reply.sql, o.claude.nlq ?? []);
+        if (!run.ok) {
+          const again = jsonIn(
+            await ask(
+              [
+                rules,
+                dataPart,
+                NlqService.RULES,
+                `The question: ${question}`,
+                `Your query could not run: ${run.error}\nThe query was: ${reply.sql}`,
+                'Reply with ONE line of JSON and nothing else: the corrected {"sql": …} answer in the same format, or {"none": true}.',
+              ].join('\n\n'),
+            ),
+          );
+          if (again && typeof again.sql === 'string') {
+            reply = again as unknown as NlqReply;
+            run = await this.nlq.run(c, reply.sql, o.claude.nlq ?? []);
+          }
+        }
+        await record();
+        if (!run.ok) {
+          this.logger.warn(`nlq: ${run.error}`);
+          return null;
+        }
+        const built = this.nlq.build(reply, run.rows, nlqViews, false, question.slice(0, 120));
+        return {
+          text: built.answer,
+          calls: [],
+          nlq: { card: built.card, sql: reply.sql, rows: run.rows.length, ms: run.ms },
+          usage,
+          model: llm.model,
+          costPaise: 0,
+          by: 'llm' as const,
+        };
+      }
       const entry = typeof pick.query === 'string' ? byId.get(pick.query) : undefined;
       const topic = !entry && typeof pick.help === 'string' ? byTopic.get(pick.help) : undefined;
       // docs/design/102: never the model's own words — nothing fits → EduPro's own reply
@@ -1346,11 +1505,12 @@ export class AssistantService {
       subtitles: Record<string, string>;
       claude: Record<string, boolean>;
       claude_monthly_limit: number | null;
+      nlq: boolean;
       updated_at: string;
       updated_by: string | null;
     }>(
       `SELECT s.audiences, s.daily_limit, s.topics_off, s.starters, s.name, s.subtitles, s.claude,
-              s.claude_monthly_limit, s.updated_at, u.display_name AS updated_by
+              s.claude_monthly_limit, s.nlq, s.updated_at, u.display_name AS updated_by
          FROM assistant_settings s LEFT JOIN users u ON u.id = s.updated_by`,
     );
     const row = r.rows[0];
@@ -1374,6 +1534,7 @@ export class AssistantService {
       subtitles: per(row.subtitles, DEFAULT_SETTINGS.subtitles),
       claude: per(row.claude, DEFAULT_SETTINGS.claude),
       claudeMonthlyLimit: row.claude_monthly_limit,
+      nlq: row.nlq,
       updatedAt: row.updated_at,
       updatedBy: row.updated_by,
     };
@@ -1425,6 +1586,8 @@ export class AssistantService {
         audiences: await this.helpAudiences(!!llm),
         // docs/design/102: who runs the AI model (parents and students are asked to agree to it by name)
         operator,
+        // docs/design/103: data questions need the AI model for all schools (Claude does not write queries)
+        nlqAvailable: !!llm,
         monthlyLimit: settings.claudeMonthlyLimit ?? this.env.AI_CLAUDE_MONTHLY_QUESTIONS,
         limitBy: settings.claudeMonthlyLimit === null ? 'default' : 'school',
         usedThisMonth: used,
@@ -1461,6 +1624,7 @@ export class AssistantService {
       name?: string;
       subtitles?: Record<Audience, string>;
       claude?: Record<Audience, boolean>;
+      nlq?: boolean;
     },
   ) {
     const tenant = requireTenant(ctx);
@@ -1499,13 +1663,14 @@ export class AssistantService {
     await this.db.tenant(tenant, (c) =>
       c.query(
         // the name and subtitles left out of the body: the saved ones stay (docs/design/92)
-        `INSERT INTO assistant_settings (school_id, audiences, daily_limit, topics_off, starters, name, subtitles, claude, updated_by, updated_at)
+        `INSERT INTO assistant_settings (school_id, audiences, daily_limit, topics_off, starters, name, subtitles, claude, nlq, updated_by, updated_at)
          VALUES (app.current_school_id(), $1::jsonb, $2, $3::jsonb, $4::jsonb, COALESCE($5, 'MobiAI'), COALESCE($6::jsonb, '{}'::jsonb),
-                 COALESCE($7::jsonb, '{}'::jsonb), app.current_user_id(), now())
+                 COALESCE($7::jsonb, '{}'::jsonb), COALESCE($8, false), app.current_user_id(), now())
          ON CONFLICT (school_id) DO UPDATE SET audiences = EXCLUDED.audiences, daily_limit = EXCLUDED.daily_limit,
            topics_off = EXCLUDED.topics_off, starters = EXCLUDED.starters,
            name = COALESCE($5, assistant_settings.name), subtitles = COALESCE($6::jsonb, assistant_settings.subtitles),
            claude = COALESCE($7::jsonb, assistant_settings.claude),
+           nlq = COALESCE($8, assistant_settings.nlq),
            updated_by = EXCLUDED.updated_by, updated_at = now()`,
         [
           JSON.stringify(dto.audiences),
@@ -1515,6 +1680,7 @@ export class AssistantService {
           dto.name ?? null,
           dto.subtitles ? JSON.stringify(dto.subtitles) : null,
           dto.claude ? JSON.stringify(dto.claude) : null,
+          dto.nlq ?? null,
         ],
       ),
     );
