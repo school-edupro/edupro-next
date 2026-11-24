@@ -4,6 +4,7 @@ import { MyProfileRowForm } from '@/components/MyProfileRowForm';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { editable, listEditable, shown, type MyProfile } from '@/lib/my-profile';
+import { fieldRules } from '@/lib/profile-rules';
 import { sendChanges, sendRowChange } from '../actions';
 
 /**
@@ -94,6 +95,7 @@ export default async function EditMyProfile({
         {fields.map((f) => {
           const id = `f-${f.key}`;
           const waiting = f.pending !== undefined;
+          const rules = fieldRules(f);
           const was =
             f.type === 'date' ? dateValue(f.value) : f.value === null ? '' : String(f.value);
           return (
@@ -118,6 +120,7 @@ export default async function EditMyProfile({
                   className="ep-select"
                   defaultValue={was}
                   disabled={waiting}
+                  required={!waiting && f.required}
                 >
                   <option value="">—</option>
                   {was && !f.options.includes(was) ? <option value={was}>{was}</option> : null}
@@ -132,22 +135,26 @@ export default async function EditMyProfile({
                   id={id}
                   name={`v.${f.key}`}
                   className="ep-input"
-                  type={
-                    f.type === 'date'
-                      ? 'date'
-                      : f.type === 'email'
-                        ? 'email'
-                        : f.type === 'mobile'
-                          ? 'tel'
-                          : 'text'
-                  }
+                  type={rules.type ?? 'text'}
+                  inputMode={rules.inputMode}
+                  required={!waiting && rules.required}
+                  pattern={rules.pattern}
+                  title={rules.title ? t(lang, rules.title) : undefined}
+                  min={rules.min}
+                  max={rules.max}
+                  step={rules.step}
                   defaultValue={was}
-                  maxLength={300}
+                  maxLength={rules.maxLength}
                   disabled={waiting}
+                  aria-describedby={rules.title || f.help ? `${id}-help` : undefined}
                   style={f.upper ? { textTransform: 'uppercase' } : undefined}
                 />
               )}
-              {f.help ? <span className="ep-field__help">{f.help}</span> : null}
+              {rules.title || f.help ? (
+                <span className="ep-field__help" id={`${id}-help`}>
+                  {[rules.title ? t(lang, rules.title) : null, f.help].filter(Boolean).join(' · ')}
+                </span>
+              ) : null}
             </div>
           );
         })}

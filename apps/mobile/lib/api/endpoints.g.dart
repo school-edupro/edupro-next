@@ -1212,13 +1212,9 @@ class EduProApi {
   Future<ApiFile> employeeSelfMyFile({required String fileId}) =>
       _t.file('GET', '/me/employee-profile/files/${Uri.encodeComponent(fileId)}');
 
-  /// POST /me/employee-profile/print — My profile as PDF (my ID numbers in full)
-  Future<dynamic> employeeSelfPrint() =>
-      _t.send('POST', '/me/employee-profile/print');
-
-  /// GET /me/exports/{id} — One of my own exports (the profile PDF)
-  Future<dynamic> employeeSelfMyExport({required String id}) =>
-      _t.send('GET', '/me/exports/${Uri.encodeComponent(id)}');
+  /// GET /me/employee-profile/pdf — My profile as a PDF, made at once (base64 in JSON)
+  Future<ApiFile> employeeSelfPdfNow() =>
+      _t.file('GET', '/me/employee-profile/pdf');
 }
 
 /** The OtpStartDto the API takes. */

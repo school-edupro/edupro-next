@@ -279,10 +279,22 @@ class DioTransport implements ApiTransport {
       }
     }
     if (data is Map) {
+      // the fields the server refused, each with what is wrong (as the websites show them), else its one line
+      final errs = data['errors'];
+      final each = errs is List
+          ? [
+              for (final e in errs)
+                if (e is Map && e['message'] != null) '${e['message']}' else if (e is String) e,
+            ]
+          : errs is Map
+          ? [for (final v in errs.values) '$v']
+          : const <String>[];
       return ApiException(
         r.statusCode ?? 0,
         '${data['type'] ?? 'request-error'}',
-        '${data['detail'] ?? data['title'] ?? 'Something went wrong'}',
+        each.isNotEmpty
+            ? each.join('; ')
+            : '${data['detail'] ?? data['title'] ?? 'Something went wrong'}',
       );
     }
     return ApiException(r.statusCode ?? 0, 'request-error', 'Something went wrong');

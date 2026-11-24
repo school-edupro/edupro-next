@@ -324,12 +324,20 @@ export class EmployeeOnboardDto extends createZodDto(EmployeeOnboardSchema) {}
 const year = z.coerce.number().int().min(1940).max(2100);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const txt = (n = 200) => z.string().trim().max(n);
+/** The school's date (India), read when a row is checked. */
+const todayIst = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+/** A date that has already happened (a passing, a training, a job): not after today. */
+const pastDay = day.refine((v) => v <= todayIst(), { message: 'cannot be in the future' });
+/** A year already passed or this one. */
+const pastYear = year.refine((v) => v <= Number(todayIst().slice(0, 4)), {
+  message: 'cannot be a future year',
+});
 export const EMPLOYEE_ROW_SCHEMAS = {
   education: z.object({
     qualification: txt(80).min(1),
     specialisation: txt(120).optional(),
     institution: txt(200).optional(),
-    passingYear: year.optional(),
+    passingYear: pastYear.optional(),
     score: txt(20).optional(),
     mode: txt(30).optional(),
   }),
@@ -343,8 +351,8 @@ export const EMPLOYEE_ROW_SCHEMAS = {
     .object({
       organisation: txt(200).min(1),
       designation: txt(120).optional(),
-      fromOn: day.optional(),
-      toOn: day.optional(),
+      fromOn: pastDay.optional(),
+      toOn: pastDay.optional(),
       reason: txt(300).optional(),
     })
     .refine((v) => !v.fromOn || !v.toOn || v.fromOn <= v.toOn, {
@@ -352,12 +360,12 @@ export const EMPLOYEE_ROW_SCHEMAS = {
       path: ['toOn'],
     }),
   training: z.object({
-    trainedOn: day,
+    trainedOn: pastDay,
     topic: txt(200).min(1),
     venue: txt(200).optional(),
     duration: txt(60).optional(),
     organisation: txt(200).optional(),
-    enteredOn: day.optional(),
+    enteredOn: pastDay.optional(),
   }),
   transfers: z.object({
     onDate: day,

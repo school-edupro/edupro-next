@@ -5,6 +5,7 @@ import 'package:edupro/app_services.dart';
 import 'package:edupro/family/common.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
+import 'package:edupro/staff/data.dart' show ymd;
 import 'package:edupro/staff/my_profile.dart';
 import 'package:edupro/staff/office_orders.dart';
 import 'package:edupro/theme/theme.dart';
@@ -234,18 +235,12 @@ class School {
       case 'POST /me/employee-change-requests/41/cancel':
         _keep('cancel', c.body);
         return {'ok': true};
-      case 'POST /me/employee-profile/print':
-        return {'id': '600'};
-      case 'GET /me/exports/600':
-        return {
-          'export': {'id': '600', 'status': 'done'},
-          'download': {'url': 'https://files.example.test/p.pdf'},
-        };
-      case 'GET https://files.example.test/p.pdf':
-        return ApiFile(
-          bytes: const [37, 80, 68, 70],
+      // the PDF is made at once by the API (no workers)
+      case 'GET /me/employee-profile/pdf':
+        return const ApiFile(
+          bytes: [37, 80, 68, 70],
           contentType: 'application/pdf',
-          name: 'p.pdf',
+          name: 'employee-profile-E01.pdf',
         );
     }
     throw ApiException(404, 'not-found', 'no fake for $key');
@@ -399,10 +394,72 @@ void main() {
     expect(school.sent['changes'], isNull);
   });
 
-  testWidgets('my profile as a PDF, once the school has made it', (tester) async {
-    await pump(tester, const StaffProfileScreen(profile: staff));
+  testWidgets('my profile as a PDF, made at once (no waiting for the workers)', (tester) async {
+    final (t, _) = await pump(tester, const StaffProfileScreen(profile: staff));
     await tapIn(tester, find.byKey(const Key('mpPdf')));
     expect(find.byType(FileScreen), findsOneWidget);
+    expect(t.calls.where((c) => c.path == '/me/employee-profile/pdf'), hasLength(1));
+    expect(t.calls.where((c) => c.path.contains('print') || c.path.contains('exports')), isEmpty);
+  });
+
+  testWidgets('the section form checks each field before sending: required, names', (tester) async {
+    final (_, school) = await pump(tester, const StaffProfileScreen(profile: staff));
+    await tapIn(tester, find.byKey(const Key('mpUpdate-basic')));
+    await tester.enterText(find.byKey(const Key('mpField-first_name')), '');
+    await tapIn(tester, find.byKey(const Key('mpSend')));
+    expect(find.text(s.mpFixFields), findsOneWidget);
+    expect(find.text(s.mpIsRequired('First name')), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('mpField-first_name')), 'Asha2');
+    await tapIn(tester, find.byKey(const Key('mpSend')));
+    expect(find.text(s.mpRuleName), findsOneWidget);
+    expect(school.sent['changes'], isNull);
+    await tester.enterText(find.byKey(const Key('mpField-first_name')), "Asha D'Souza");
+    await tapIn(tester, find.byKey(const Key('mpSend')));
+    expect(school.sent['changes']!.single['changes'], {'first_name': "Asha D'Souza"});
+  });
+
+  test('every rule as the server checks it', () {
+    Map<String, Object?> f(String key, String type, {bool required = false}) => {
+      'key': key,
+      'label': key,
+      'type': type,
+      'required': required,
+    };
+    String? c(Map<String, Object?> field, String v, [Map<String, String> all = const {}]) =>
+        mpCheck(s, field, v, all);
+    final now = DateTime.now();
+    String ago(int years) => ymd(DateTime(now.year - years, now.month, now.day));
+    // required, names
+    expect(c(f('first_name', 'text', required: true), ''), s.mpIsRequired('first_name'));
+    expect(c(f('last_name', 'text'), ''), isNull);
+    expect(c(f('father_name', 'text'), 'R2D2'), s.mpRuleName);
+    expect(c(f('father_name', 'text'), "Ravi O'Neil-Kumar"), isNull);
+    // the formats
+    expect(c(f('mobile', 'mobile'), '12345'), s.mpRuleMobile);
+    expect(c(f('mobile', 'mobile'), '+91 98765 43210'), isNull);
+    expect(c(f('email', 'email'), 'a@b'), s.mpRuleEmail);
+    expect(c(f('aadhaar', 'digits12'), '1234 5678 9012'), isNull);
+    expect(c(f('uan', 'digits12'), '1234'), s.mpRule12);
+    expect(c(f('pan', 'pan'), 'abcde1234f'), isNull);
+    expect(c(f('pan', 'pan'), 'ABCD1234F'), s.mpRulePan);
+    expect(c(f('bank_ifsc', 'ifsc'), 'SBIN1001234'), s.mpRuleIfsc);
+    expect(c(f('bank_account_no', 'account'), '12345678'), s.mpRuleAccount);
+    // numbers, dates
+    expect(c(f('sons', 'number'), '21'), s.mpRuleChildren);
+    expect(c(f('sons', 'number'), '2'), isNull);
+    expect(c(f('dob', 'date'), ago(10)), s.mpRuleAge);
+    expect(c(f('dob', 'date'), ago(-1)), s.mpRuleFuture);
+    expect(c(f('dob', 'date'), ago(30)), isNull);
+    expect(c(f('anniversary', 'date'), ago(40), {'dob': ago(30)}), s.mpRuleAfterBirth);
+    expect(c(f('anniversary', 'date'), ago(5), {'dob': ago(30)}), isNull);
+    // phone, the emergency mobile
+    expect(c(f('phone', 'text'), 'call me'), s.mpRulePhone);
+    expect(c(f('phone', 'text'), '+91 22 2345 6789'), isNull);
+    expect(
+      c(f('emergency_mobile', 'mobile'), '9876543210', {'mobile': '9876543210'}),
+      s.mpRuleOwnMobile,
+    );
+    expect(c(f('emergency_mobile', 'mobile'), '9876543211', {'mobile': '9876543210'}), isNull);
   });
 
   testWidgets('a sign-in with no staff record is told so', (tester) async {

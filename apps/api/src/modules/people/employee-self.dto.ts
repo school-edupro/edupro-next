@@ -46,13 +46,23 @@ export const EmployeePolicySchema = z.object({
 export class EmployeePolicyDto extends createZodDto(EmployeePolicySchema) {}
 
 /** A document the employee adds from My profile (0187). */
-export const EmployeeDocumentRowSchema = z.object({
-  typeId: Id,
-  fileId: Id,
-  number: z.string().trim().max(80).optional(),
-  issuedOn: day.optional(),
-  expiresOn: day.optional(),
-});
+export const EmployeeDocumentRowSchema = z
+  .object({
+    typeId: Id,
+    fileId: Id,
+    number: z.string().trim().max(80).optional(),
+    // issued already (not after today); valid till after it was issued
+    issuedOn: day
+      .refine((v) => v <= new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10), {
+        message: 'cannot be in the future',
+      })
+      .optional(),
+    expiresOn: day.optional(),
+  })
+  .refine((v) => !v.issuedOn || !v.expiresOn || v.expiresOn > v.issuedOn, {
+    message: 'the valid-till date must be after the issue date',
+    path: ['expiresOn'],
+  });
 
 /** One row change on a list: add (data), edit (rowId + data) or remove (rowId). */
 export const EmployeeRowChangeSchema = z.object({

@@ -1,13 +1,12 @@
 import { ApiError } from '@edupro/bff';
 import { PageHeader } from '@edupro/ui';
-import { ExportWatcher } from '@/components/ExportWatcher';
 import { FileLinks } from '@/components/FileLinks';
 import { MyPhoto } from '@/components/MyPhoto';
 import { MyProfileLists } from '@/components/MyProfileLists';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { editable, shown, type MyProfile } from '@/lib/my-profile';
-import { myProfilePdf, removeRow, sendPhoto, withdrawRequest } from './actions';
+import { removeRow, sendPhoto, withdrawRequest } from './actions';
 
 const STATUS: Record<string, string> = {
   pending: 'Waiting for approval',
@@ -21,25 +20,15 @@ const STATUS: Record<string, string> = {
 export default async function MyProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ export?: string; ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
-  const [p, exp] = await Promise.all([
-    // a sign-in with no staff record (a school administrator who is not an employee) has no profile here
-    bff.api.fetch<MyProfile>('/me/employee-profile').catch((e: unknown) => {
-      if (e instanceof ApiError && e.status === 404) return null;
-      throw e;
-    }),
-    sp.export && /^\d{1,18}$/.test(sp.export)
-      ? bff.api
-          .fetch<{
-            export: { id: string; status: string };
-            download: { url: string; saveUrl?: string } | null;
-          }>(`/me/exports/${sp.export}`)
-          .catch(() => null)
-      : Promise.resolve(null),
-  ]);
+  // a sign-in with no staff record (a school administrator who is not an employee) has no profile here
+  const p = await bff.api.fetch<MyProfile>('/me/employee-profile').catch((e: unknown) => {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  });
   if (!p)
     return (
       <main>
@@ -60,11 +49,17 @@ export default async function MyProfilePage({
         title={p.employee.name}
         description={`${t(lang, 'Employee code')} ${p.employee.code} · ${t(lang, 'profile')} ${String(p.completeness.percent)}% ${t(lang, 'complete')}`}
         actions={
-          <form action={myProfilePdf}>
-            <button type="submit" className="ep-btn ep-btn--secondary">
-              {t(lang, 'Download PDF')}
-            </button>
-          </form>
+          // made at once by the API (it no longer waits for the background workers)
+          <span className="ep-filecell">
+            {t(lang, 'My profile (PDF)')}
+            <FileLinks
+              url="/api/my-profile-pdf"
+              saveUrl="/api/my-profile-pdf?save=1"
+              label={t(lang, 'My profile (PDF)')}
+              viewLabel={t(lang, 'View')}
+              saveLabel={t(lang, 'Download')}
+            />
+          </span>
         }
       />
       {sp.ok ? (
@@ -75,32 +70,6 @@ export default async function MyProfilePage({
       {sp.error ? (
         <div className="ep-alert ep-alert--danger" role="alert">
           {sp.detail || t(lang, 'That did not go through.')}
-        </div>
-      ) : null}
-      {exp ? (
-        <div className="ep-alert ep-alert--info" role="status">
-          {exp.export.status !== 'failed' ? (
-            <ExportWatcher id={exp.export.id} url={exp.download?.url ?? null} />
-          ) : null}
-          {exp.download ? (
-            <span className="ep-filecell">
-              {t(lang, 'My profile (PDF)')}
-              <FileLinks
-                url={exp.download.url}
-                saveUrl={exp.download.saveUrl}
-                label={t(lang, 'My profile (PDF)')}
-                viewLabel={t(lang, 'View')}
-                saveLabel={t(lang, 'Download')}
-              />
-            </span>
-          ) : exp.export.status === 'failed' ? (
-            t(lang, 'The PDF could not be prepared. Please try again.')
-          ) : (
-            <>
-              {t(lang, 'Your PDF is being prepared.')}{' '}
-              <a href={`/profile?export=${exp.export.id}`}>{t(lang, 'Refresh')}</a>
-            </>
-          )}
         </div>
       ) : null}
       {!p.window.open || p.window.message ? (

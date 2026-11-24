@@ -31,11 +31,6 @@ extension MyProfileWords on S {
   );
   String get mpPdf => _m('Download PDF', 'PDF डाउनलोड करें');
   String get mpPdfTitle => _m('My profile (PDF)', 'मेरी प्रोफ़ाइल (PDF)');
-  String get mpPdfPreparing => _m('Your PDF is being prepared.', 'आपकी PDF तैयार हो रही है।');
-  String get mpPdfFailed => _m(
-    'The PDF could not be prepared. Please try again.',
-    'PDF तैयार नहीं हो सकी। फिर से प्रयास करें।',
-  );
   String get mpClosed =>
       _m('Profile updates are closed at the moment.', 'प्रोफ़ाइल बदलाव अभी बंद हैं।');
   String get mpPhoto => _m('My photo', 'मेरी फ़ोटो');
@@ -153,6 +148,42 @@ extension MyProfileWords on S {
   String get mpPhotoChanged => _m('Your photo is changed.', 'आपकी फ़ोटो बदल गई।');
   String get mpPhotoSent =>
       _m('Your new photo is sent for approval.', 'आपकी नई फ़ोटो स्वीकृति के लिए भेजी गई।');
+  // the checks of the inputs (as the server's)
+  String mpIsRequired(String label) => _m('$label is required.', '$label आवश्यक है।');
+  String get mpFixFields => _m(
+    'Some values need a fix: see the fields marked below.',
+    'कुछ मान ठीक करने हैं: नीचे चिह्नित क्षेत्र देखें।',
+  );
+  String get mpRuleName =>
+      _m("Letters, spaces and . ' - only.", "केवल अक्षर, रिक्त स्थान और . ' -।");
+  String get mpRuleMobile => _m(
+    '10-digit mobile starting 6-9, no +91 or 0.',
+    '6-9 से शुरू होने वाला 10 अंकों का मोबाइल, +91 या 0 नहीं।',
+  );
+  String get mpRuleEmail => _m('A valid email address.', 'सही ईमेल पता।');
+  String get mpRule12 => _m('12 digits, no spaces.', '12 अंक, बिना रिक्त स्थान।');
+  String get mpRulePan => _m('10 characters, e.g. ABCDE1234F.', '10 अक्षर, जैसे ABCDE1234F।');
+  String get mpRuleIfsc =>
+      _m('11 characters, 5th is 0, e.g. SBIN0001234.', '11 अक्षर, 5वाँ 0, जैसे SBIN0001234।');
+  String get mpRuleAccount => _m('9 to 18 digits.', '9 से 18 अंक।');
+  String get mpRuleChildren => _m('A whole number from 0 to 20.', '0 से 20 तक पूर्ण संख्या।');
+  String get mpRuleNumber => _m('A number of 0 or more.', '0 या अधिक की संख्या।');
+  String get mpRuleAge => _m('The age must be from 18 to 80.', 'आयु 18 से 80 के बीच होनी चाहिए।');
+  String get mpRuleFuture => _m('Cannot be in the future.', 'भविष्य की तिथि नहीं हो सकती।');
+  String get mpRuleAfterBirth =>
+      _m('Must be after the date of birth.', 'जन्म तिथि के बाद होनी चाहिए।');
+  String get mpRulePhone => _m('A phone number of 6 to 15 digits.', '6 से 15 अंकों का फ़ोन नंबर।');
+  String get mpRuleOwnMobile => _m(
+    "Give another person's number, not your own.",
+    'किसी अन्य व्यक्ति का नंबर दें, अपना नहीं।',
+  );
+  String mpRuleYear(int now) => _m('A year from 1940 to $now.', '1940 से $now तक का वर्ष।');
+  String get mpRuleEndBeforeStart =>
+      _m('The end is before the start.', 'अंत की तिथि शुरुआत से पहले है।');
+  String get mpRuleValidTill => _m(
+    'The valid-till date must be after the issue date.',
+    'वैध-तक तिथि जारी तिथि के बाद होनी चाहिए।',
+  );
   String get mpFileWrong =>
       _m('Attach a PDF or a photo of up to 5 MB.', '5 MB तक की PDF या फ़ोटो संलग्न करें।');
 }
@@ -195,6 +226,95 @@ String mpShown(S s, Object? v) {
 
 bool _editable(Object? level) => level == 'edit_approval' || level == 'edit_direct';
 
+/// The people's names among the fields (letters, spaces and . ' - only).
+const _names = {
+  'first_name',
+  'last_name',
+  'spouse_name',
+  'father_name',
+  'emergency_name',
+  'bank_account_name',
+};
+
+/// Today (India) as YYYY-MM-DD.
+String _today() => ymd(schoolToday());
+
+/// Whole years between two YYYY-MM-DD dates.
+int _years(String from, String to) {
+  final f = DateTime.parse(from);
+  final t = DateTime.parse(to);
+  return t.year - f.year - ((t.month < f.month || (t.month == f.month && t.day < f.day)) ? 1 : 0);
+}
+
+/// What is wrong with one value of my profile, as the server checks it (each field's format and the staff's own
+/// checks: required, names, age, anniversary, children, phone, the emergency mobile); null when it is fine.
+/// [all] are the form's values (the other half of a pair: the date of birth, my mobile).
+String? mpCheck(S s, Json f, String raw, Map<String, String> all) {
+  final key = '${f['key']}';
+  final v = raw.trim();
+  if (v.isEmpty) return f['required'] == true ? s.mpIsRequired('${f['label']}') : null;
+  if (_names.contains(key)) {
+    return RegExp(r"^[A-Za-z][A-Za-z .'-]*$").hasMatch(v) ? null : s.mpRuleName;
+  }
+  final today = _today();
+  switch ('${f['type']}') {
+    case 'mobile':
+      final m = v
+          .replaceAll(RegExp(r'[\s-]'), '')
+          .replaceFirst(RegExp(r'^(\+91|0091|0)(?=\d{10}$)'), '');
+      if (!RegExp(r'^[6-9]\d{9}$').hasMatch(m)) return s.mpRuleMobile;
+      if (key == 'emergency_mobile' &&
+          (all['mobile'] ?? '').replaceAll(RegExp(r'\D'), '').endsWith(m)) {
+        return s.mpRuleOwnMobile;
+      }
+      return null;
+    case 'email':
+      return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$').hasMatch(v) ? null : s.mpRuleEmail;
+    case 'digits12':
+      return RegExp(r'^\d{12}$').hasMatch(v.replaceAll(RegExp(r'[\s-]'), '')) ? null : s.mpRule12;
+    case 'pan':
+      return RegExp(r'^[A-Z]{5}\d{4}[A-Z]$').hasMatch(v.toUpperCase()) ? null : s.mpRulePan;
+    case 'ifsc':
+      return RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(v.toUpperCase()) ? null : s.mpRuleIfsc;
+    case 'account':
+      return RegExp(r'^\d{9,18}$').hasMatch(v.replaceAll(RegExp(r'[\s-]'), ''))
+          ? null
+          : s.mpRuleAccount;
+    case 'number':
+      final n = num.tryParse(v);
+      if (key == 'sons' || key == 'daughters') {
+        return n != null && n == n.roundToDouble() && n >= 0 && n <= 20 ? null : s.mpRuleChildren;
+      }
+      return n != null && n >= 0 ? null : s.mpRuleNumber;
+    case 'date':
+      if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v)) return null;
+      if (key == 'dob') {
+        if (v.compareTo(today) > 0) return s.mpRuleFuture;
+        final age = _years(v, today);
+        return age < 18 || age > 80 ? s.mpRuleAge : null;
+      }
+      if (key == 'anniversary') {
+        if (v.compareTo(today) > 0) return s.mpRuleFuture;
+        final dob = all['dob'] ?? '';
+        return RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dob) && v.compareTo(dob) <= 0
+            ? s.mpRuleAfterBirth
+            : null;
+      }
+      return null;
+    default:
+      if (key == 'phone') {
+        final digits = v.replaceAll(RegExp(r'\D'), '');
+        return RegExp(r'^\+?[\d\s-]+$').hasMatch(v) && digits.length >= 6 && digits.length <= 15
+            ? null
+            : s.mpRulePhone;
+      }
+      return null;
+  }
+}
+
+/// The list columns that record what already happened (not after today).
+const _pastDates = {'fromOn', 'toOn', 'trainedOn', 'enteredOn', 'issuedOn'};
+
 final _okFile = RegExp(r'^(application/pdf|image/(png|jpeg|webp))$');
 
 /// Picks one PDF or photo of up to 5 MB; null when none (or a wrong one, said in a note).
@@ -227,7 +347,6 @@ class StaffProfileScreen extends ConsumerStatefulWidget {
 
 class _StaffProfileScreenState extends ConsumerState<StaffProfileScreen> {
   bool _busy = false;
-  String? _pdfNote;
 
   void _say(String text) {
     if (!mounted) return;
@@ -239,45 +358,15 @@ class _StaffProfileScreenState extends ConsumerState<StaffProfileScreen> {
 
   void _reload() => ref.invalidate(myStaffProfileProvider(widget.profile));
 
+  /// My profile as a PDF, made at once by the API (it no longer waits for the background workers).
   Future<void> _pdf() async {
     final s = ref.read(stringsProvider);
-    final api = ref.read(apiProvider);
-    setState(() {
-      _busy = true;
-      _pdfNote = s.mpPdfPreparing;
-    });
-    try {
-      final id = '${asJson(await api.employeeSelfPrint())['id']}';
-      // the PDF is made by the workers: ask again until it is ready (about two minutes at most)
-      for (var i = 0; i < 60 && mounted; i++) {
-        final e = asJson(await api.employeeSelfMyExport(id: id));
-        final url = asJson(e['download'])['url'];
-        if (url is String) {
-          setState(() => _pdfNote = null);
-          if (!mounted) return;
-          await Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => FileScreen(
-                title: s.mpPdfTitle,
-                load: () => ref
-                    .read(transportProvider)
-                    .download(url, name: 'my-profile.pdf', contentType: 'application/pdf'),
-              ),
-            ),
-          );
-          return;
-        }
-        if (asJson(e['export'])['status'] == 'failed') {
-          setState(() => _pdfNote = s.mpPdfFailed);
-          return;
-        }
-        await Future<void>.delayed(const Duration(seconds: 2));
-      }
-    } catch (e) {
-      if (mounted) setState(() => _pdfNote = errorText(s, e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            FileScreen(title: s.mpPdfTitle, load: () => ref.read(apiProvider).employeeSelfPdfNow()),
+      ),
+    );
   }
 
   Future<void> _photo(Json photo) async {
@@ -421,13 +510,9 @@ class _StaffProfileScreenState extends ConsumerState<StaffProfileScreen> {
               key: const Key('mpPdf'),
               icon: const Icon(Icons.picture_as_pdf_outlined),
               label: Text(s.mpPdf),
-              onPressed: _busy ? null : _pdf,
+              onPressed: _pdf,
             ),
           ),
-          if (_pdfNote != null) ...[
-            const SizedBox(height: Tokens.sp2),
-            Notice(key: const Key('mpPdfNote'), text: _pdfNote!),
-          ],
           if (window['open'] != true || window['message'] != null) ...[
             const SizedBox(height: Tokens.sp2),
             Notice(text: '${window['message'] ?? s.mpClosed}'),
@@ -494,7 +579,18 @@ class _StaffProfileScreenState extends ConsumerState<StaffProfileScreen> {
                     action: canEdit && asList(sec['fields']).any((f) => _editable(f['level']))
                         ? TextButton(
                             key: Key('mpUpdate-${sec['id']}'),
-                            onPressed: () => _open('${sec['title']}', _SectionForm(section: sec)),
+                            onPressed: () => _open(
+                              '${sec['title']}',
+                              _SectionForm(
+                                section: sec,
+                                known: {
+                                  for (final x in asList(p['sections']))
+                                    for (final f in asList(x['fields']))
+                                      if (f['key'] == 'mobile' || f['key'] == 'dob')
+                                        '${f['key']}': f['value'] == null ? '' : '${f['value']}',
+                                },
+                              ),
+                            ),
                             child: Text(s.mpUpdate),
                           )
                         : null,
@@ -789,15 +885,22 @@ class _Photo extends ConsumerWidget {
 
 /// A date or a choice shown as a labelled field; a tap opens its picker.
 class _PickField extends StatelessWidget {
-  const _PickField({super.key, required this.label, required this.value, required this.onTap});
+  const _PickField({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onTap,
+    this.error,
+  });
   final String label;
   final String value;
   final VoidCallback? onTap;
+  final String? error;
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: onTap != null,
-    label: '$label: $value',
+    label: '$label: $value${error != null ? '. $error' : ''}',
     excludeSemantics: true,
     child: InkWell(
       onTap: onTap,
@@ -807,6 +910,7 @@ class _PickField extends StatelessWidget {
           border: const OutlineInputBorder(),
           suffixIcon: const Icon(Icons.event),
           enabled: onTap != null,
+          errorText: error,
         ),
         child: Text(value),
       ),
@@ -818,8 +922,11 @@ class _PickField extends StatelessWidget {
 /// approval; a field already waiting cannot be changed again; the documents the school asks for are attached here.
 /// Pops with what happened.
 class _SectionForm extends ConsumerStatefulWidget {
-  const _SectionForm({required this.section});
+  const _SectionForm({required this.section, this.known = const {}});
   final Json section;
+
+  /// the profile's other values the checks pair with (my mobile, my date of birth)
+  final Map<String, String> known;
 
   @override
   ConsumerState<_SectionForm> createState() => _SectionFormState();
@@ -841,6 +948,7 @@ class _SectionFormState extends ConsumerState<_SectionForm> {
   };
   final _reason = TextEditingController();
   final Map<String, PickedFile> _proofs = {};
+  Map<String, String> _errors = {};
   bool _busy = false;
   String? _error;
 
@@ -858,6 +966,21 @@ class _SectionFormState extends ConsumerState<_SectionForm> {
     for (final e in _text.entries) {
       _now[e.key] = e.value.text.trim();
     }
+    // every field that can be changed now, as the server checks it (my mobile and birth date from the whole profile)
+    final all = {...widget.known, ..._now};
+    final errors = <String, String>{};
+    for (final f in _fields) {
+      if (f.containsKey('pending')) continue;
+      final e = mpCheck(s, f, _now['${f['key']}'] ?? '', all);
+      if (e != null) errors['${f['key']}'] = e;
+    }
+    if (errors.isNotEmpty) {
+      return setState(() {
+        _errors = errors;
+        _error = s.mpFixFields;
+      });
+    }
+    _errors = {};
     final changes = <String, Object?>{
       for (final f in _fields)
         if (!f.containsKey('pending') && _now['${f['key']}'] != _was['${f['key']}'])
@@ -935,6 +1058,7 @@ class _SectionFormState extends ConsumerState<_SectionForm> {
                   key: Key('mpField-$key'),
                   label: Text(label),
                   enabled: !waiting,
+                  errorText: _errors[key],
                   trailingIcon: dropArrow(label),
                   selectedTrailingIcon: dropArrow(label, open: true),
                   expandedInsets: EdgeInsets.zero,
@@ -954,6 +1078,7 @@ class _SectionFormState extends ConsumerState<_SectionForm> {
                 input = _PickField(
                   key: Key('mpField-$key'),
                   label: label,
+                  error: _errors[key],
                   value: mpShown(s, _now[key]),
                   onTap: waiting
                       ? null
@@ -962,29 +1087,43 @@ class _SectionFormState extends ConsumerState<_SectionForm> {
                             context: context,
                             initialDate: DateTime.tryParse(_now[key]!) ?? DateTime(1990),
                             firstDate: DateTime(1940),
-                            lastDate: DateTime(2100),
+                            // a birth or an anniversary has happened already
+                            lastDate: key == 'dob' || key == 'anniversary'
+                                ? schoolToday()
+                                : DateTime(2100),
                           );
                           if (d != null) setState(() => _now[key] = ymd(d));
                         },
                 );
               } else {
+                final type = '${f['type']}';
                 input = TextField(
                   key: Key('mpField-$key'),
                   controller: _text[key],
                   enabled: !waiting,
-                  maxLength: 300,
-                  keyboardType: switch ('${f['type']}') {
+                  maxLength: switch (type) {
+                    'mobile' => 15,
+                    'digits12' => 14,
+                    'pan' => 10,
+                    'ifsc' => 11,
+                    'account' => 18,
+                    _ => 300,
+                  },
+                  keyboardType: switch (type) {
                     'email' => TextInputType.emailAddress,
                     'mobile' => TextInputType.phone,
-                    _ => TextInputType.text,
+                    'digits12' || 'account' || 'number' => TextInputType.number,
+                    _ => key == 'phone' ? TextInputType.phone : TextInputType.text,
                   },
-                  textCapitalization: f['upper'] == true
+                  textCapitalization: f['upper'] == true || type == 'pan' || type == 'ifsc'
                       ? TextCapitalization.characters
                       : TextCapitalization.none,
                   decoration: InputDecoration(
                     labelText: label,
                     border: const OutlineInputBorder(),
                     counterText: '',
+                    errorText: _errors[key],
+                    errorMaxLines: 3,
                   ),
                 );
               }
@@ -1094,6 +1233,26 @@ class _RowFormState extends ConsumerState<_RowForm> {
 
   Future<void> _send() async {
     final s = ref.read(stringsProvider);
+    final now = schoolToday().year;
+    for (final c in _cols) {
+      final key = '${c['key']}';
+      if (c['type'] == 'year' && (_text[key]?.text.trim() ?? '').isNotEmpty) {
+        final y = int.tryParse(_text[key]!.text.trim());
+        if (y == null || y < 1940 || y > now) {
+          return setState(() => _error = '${c['label']}: ${s.mpRuleYear(now)}');
+        }
+      }
+    }
+    final from = '${_data['fromOn'] ?? ''}';
+    final to = '${_data['toOn'] ?? ''}';
+    if (from.isNotEmpty && to.isNotEmpty && to.compareTo(from) < 0) {
+      return setState(() => _error = s.mpRuleEndBeforeStart);
+    }
+    final issued = '${_data['issuedOn'] ?? ''}';
+    final till = '${_data['expiresOn'] ?? ''}';
+    if (issued.isNotEmpty && till.isNotEmpty && till.compareTo(issued) <= 0) {
+      return setState(() => _error = s.mpRuleValidTill);
+    }
     final data = <String, Object?>{};
     for (final c in _cols) {
       final key = '${c['key']}';
@@ -1247,11 +1406,14 @@ class _RowFormState extends ConsumerState<_RowForm> {
                     label: label,
                     value: now == null || now.isEmpty ? s.mpChoose : mpShown(s, now),
                     onTap: () async {
+                      final last = _pastDates.contains(key) ? schoolToday() : DateTime(2100);
+                      final at = DateTime.tryParse(now ?? '') ?? schoolToday();
                       final d = await showDatePicker(
                         context: context,
-                        initialDate: DateTime.tryParse(now ?? '') ?? DateTime.now(),
+                        initialDate: at.isAfter(last) ? last : at,
                         firstDate: DateTime(1940),
-                        lastDate: DateTime(2100),
+                        // what already happened (a job, a training, an issue) is not after today
+                        lastDate: last,
                       );
                       if (d != null) setState(() => _data[key] = ymd(d));
                     },

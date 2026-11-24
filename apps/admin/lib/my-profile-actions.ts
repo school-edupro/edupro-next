@@ -122,17 +122,6 @@ export async function withdrawMyRequest(fd: FormData) {
   done('Request withdrawn.');
 }
 
-/** Queues my own profile PDF (ID numbers in full) and shows it on the page when the workers are done. */
-export async function myProfilePdf() {
-  let id = '';
-  try {
-    id = (await apiFetch<{ id: string }>('/me/employee-profile/print', { method: 'POST' })).id;
-  } catch (error) {
-    fail(BASE, error);
-  }
-  redirect(`${BASE}?export=${id}`);
-}
-
 /** Reads the row fields of a list form (`r.<key>`, `bool`/`num` markers) into one row change. */
 function rowDataOf(fd: FormData): Record<string, string | number | boolean | null> {
   const data: Record<string, string | number | boolean | null> = {};

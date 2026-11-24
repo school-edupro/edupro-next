@@ -370,5 +370,4 @@ EmployeeSelfController_submit
 EmployeeSelfController_cancel
 EmployeeSelfController_myPhoto !file
 EmployeeSelfController_myFile !file
-EmployeeSelfController_print
-EmployeeSelfController_myExport
+EmployeeSelfController_pdfNow !file

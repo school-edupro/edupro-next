@@ -113,6 +113,33 @@ void main() {
     expect(session.accessToken, isNull);
   });
 
+  test('the fields the server refused come back each with what is wrong', () async {
+    final f = build(
+      api: (_) => (
+        400,
+        {
+          'type': 'validation-failed',
+          'detail': 'Some values were not accepted',
+          'errors': [
+            {'path': 'mobile', 'message': 'Mobile: 10-digit mobile starting 6-9, no +91 or 0'},
+            {'path': 'dob', 'message': 'Date of birth: the age must be from 18 to 80'},
+          ],
+        },
+      ),
+      refresh: renewed,
+    );
+    await expectLater(
+      f.t.send('POST', '/me/employee-profile/changes', body: {'a': 1}),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.detail,
+          'detail',
+          'Mobile: 10-digit mobile starting 6-9, no +91 or 0; Date of birth: the age must be from 18 to 80',
+        ),
+      ),
+    );
+  });
+
   test("the API's problem comes back as an ApiException; no network as offline", () async {
     final f = build(
       api: (_) => (409, {'type': 'conflict', 'detail': 'Already held'}),

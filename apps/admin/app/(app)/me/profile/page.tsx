@@ -4,15 +4,9 @@ import { getTranslations } from 'next-intl/server';
 import { FileLinks } from '@/components/FileLinks';
 import { MyProfileLists } from '@/components/MyProfileLists';
 import { Notice } from '@/components/Notice';
-import { RefreshWhilePending } from '@/components/RefreshWhilePending';
 import { ApiError, apiFetch } from '@/lib/api';
 import { editable, REQUEST_STATUS, shown, type MyProfile } from '@/lib/my-profile';
-import {
-  myProfilePdf,
-  removeMyRow,
-  sendMyPhoto,
-  withdrawMyRequest,
-} from '@/lib/my-profile-actions';
+import { removeMyRow, sendMyPhoto, withdrawMyRequest } from '@/lib/my-profile-actions';
 
 /**
  * My profile for staff who work in the admin app (docs/design/33-people-dashboards.md): the same
@@ -22,7 +16,7 @@ import {
 export default async function MyProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ export?: string; ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
   const sp = await searchParams;
   const t = await getTranslations('pages.me_profile');
@@ -34,13 +28,6 @@ export default async function MyProfilePage({
     if (error instanceof ApiError && error.problem.type === 'people.not_staff') notStaff = true;
     else throw error;
   }
-  const exp =
-    p && sp.export && /^\d{1,18}$/.test(sp.export)
-      ? await apiFetch<{
-          export: { id: string; status: string; error?: string | null };
-          download: { url: string; saveUrl?: string } | null;
-        }>(`/me/exports/${sp.export}`).catch(() => null)
-      : null;
   if (!p) {
     return (
       <>
@@ -61,34 +48,14 @@ export default async function MyProfilePage({
         title={p.employee.name}
         description={`Employee code ${p.employee.code} · profile ${String(p.completeness.percent)}% complete`}
         actions={
-          <form action={myProfilePdf}>
-            <Button type="submit" variant="secondary">
-              Download PDF
-            </Button>
-          </form>
+          // made at once by the API (it no longer waits for the workers)
+          <span className="ep-filecell">
+            My profile (PDF)
+            <FileLinks href="/api/me/profile-pdf" label="My profile (PDF)" />
+          </span>
         }
       />
       <Notice params={sp} />
-      {exp ? (
-        <div style={{ marginBottom: 'var(--sp-4)' }}>
-          <Alert tone={exp.export.status === 'failed' ? 'danger' : 'info'}>
-            <RefreshWhilePending ready={Boolean(exp.download) || exp.export.status === 'failed'} />
-            {exp.download ? (
-              <span className="ep-filecell">
-                My profile (PDF)
-                <FileLinks href={`/me/exports/${exp.export.id}/file`} label="My profile (PDF)" />
-              </span>
-            ) : exp.export.status === 'failed' ? (
-              `The PDF could not be prepared${exp.export.error ? `: ${exp.export.error}` : ''}. Please try again.`
-            ) : (
-              <>
-                Your PDF is being prepared by the workers service.{' '}
-                <a href={`/me/profile?export=${exp.export.id}`}>Refresh</a>
-              </>
-            )}
-          </Alert>
-        </div>
-      ) : null}
       {!p.window.open || p.window.message ? (
         <div style={{ marginBottom: 'var(--sp-4)' }}>
           <Alert tone={p.window.open ? 'info' : 'warning'}>

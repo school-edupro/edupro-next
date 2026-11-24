@@ -631,4 +631,96 @@ describe('employee self-service profile (e2e)', () => {
     });
     expect(hidden.statusCode).toBe(422);
   });
+
+  it('my PDF comes at once (no workers); only staff have one', async () => {
+    const r = await call(teacher, 'GET', '/me/employee-profile/pdf');
+    expect(r.statusCode).toBe(200);
+    const b = r.json() as { filename: string; contentType: string; base64: string };
+    expect(b.contentType).toBe('application/pdf');
+    expect(b.filename).toBe('employee-profile-T1.pdf');
+    expect(Buffer.from(b.base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
+    // a sign-in with no staff record has no profile, so no PDF
+    expect(
+      (await call(admin, 'GET', '/me/employee-profile/pdf')).statusCode,
+    ).toBeGreaterThanOrEqual(400);
+  });
+
+  it('every field is checked: required, names, age, anniversary, children, phone, emergency mobile; rows by date', async () => {
+    const base = (await call(admin, 'GET', '/people/staff-profile/policy')).json().policy;
+    const open = await call(admin, 'PUT', '/people/staff-profile/policy', {
+      ...base,
+      window: { mode: 'open' },
+      fields: {
+        ...base.fields,
+        first_name: 'edit_direct',
+        last_name: 'edit_direct',
+        dob: 'edit_direct',
+        anniversary: 'edit_direct',
+        sons: 'edit_direct',
+        phone: 'edit_direct',
+        emergency_mobile: 'edit_direct',
+        personal_email: 'edit_direct',
+        uan: 'edit_direct',
+      },
+      lists: {
+        ...base.lists,
+        education: { level: 'edit_direct' },
+        training: { level: 'edit_direct' },
+      },
+    });
+    expect(open.statusCode).toBe(200);
+    const said = async (changes: Record<string, unknown>) => {
+      const r = await call(teacher, 'POST', '/me/employee-profile/changes', { changes });
+      expect(r.statusCode).toBe(400);
+      return ((r.json() as { errors?: Array<{ message: string }> }).errors ?? [])
+        .map((e) => e.message)
+        .join('; ');
+    };
+    const year = new Date().getUTCFullYear();
+    expect(await said({ first_name: '' })).toContain('First name: is required');
+    expect(await said({ first_name: 'Tara2' })).toContain('letters');
+    expect(await said({ dob: `${String(year + 1)}-01-01` })).toContain('cannot be in the future');
+    expect(await said({ dob: `${String(year - 10)}-01-01` })).toContain('from 18 to 80');
+    expect(await said({ dob: '1990-05-04', anniversary: '1985-01-01' })).toContain(
+      'after the date of birth',
+    );
+    expect(await said({ sons: '25' })).toContain('0 to 20');
+    expect(await said({ phone: 'call me' })).toContain('6 to 15 digits');
+    // the emergency contact's mobile cannot be one's own (as on file now)
+    const own = (
+      (await call(teacher, 'GET', '/me/employee-profile')).json() as {
+        sections: Array<{ fields: Array<{ key: string; value: unknown }> }>;
+      }
+    ).sections
+      .flatMap((x) => x.fields)
+      .find((f) => f.key === 'mobile')!.value as string;
+    expect(await said({ emergency_mobile: own })).toContain('not your own');
+    // the formats were already checked (and still are)
+    expect(await said({ personal_email: 'not-an-email' })).toContain('a valid email address');
+    expect(await said({ uan: '1234' })).toContain('12 digits');
+    // good values go through
+    const ok = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      changes: {
+        first_name: "Tara D'Souza",
+        dob: '1990-05-04',
+        sons: '1',
+        phone: '+91 22 2345 6789',
+      },
+    });
+    expect(ok.statusCode).toBe(201);
+    // rows: a training not yet done, a passing in a future year
+    const future = `${String(year + 1)}-06-01`;
+    const t = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [{ kind: 'training', op: 'add', data: { topic: 'First aid', trainedOn: future } }],
+    });
+    expect(t.statusCode).toBe(400);
+    expect(JSON.stringify(t.json())).toContain('cannot be in the future');
+    const e = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [
+        { kind: 'education', op: 'add', data: { qualification: 'B.Ed', passingYear: year + 2 } },
+      ],
+    });
+    expect(e.statusCode).toBe(400);
+    expect(JSON.stringify(e.json())).toContain('future year');
+  });
 });

@@ -1,5 +1,5 @@
 'use server';
-/** My profile: send changes with their proof documents, withdraw a request, get my PDF. */
+/** My profile: send changes with their proof documents, withdraw a request (the PDF is /api/my-profile-pdf). */
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
@@ -110,16 +110,6 @@ export async function withdrawRequest(fd: FormData) {
     fail('/profile', error);
   }
   redirect(`/profile?ok=1&detail=${encodeURIComponent('Request withdrawn.')}`);
-}
-
-export async function myProfilePdf() {
-  let id = '';
-  try {
-    id = (await bff.api.fetch<{ id: string }>('/me/employee-profile/print', { method: 'POST' })).id;
-  } catch (error) {
-    fail('/profile', error);
-  }
-  redirect(`/profile?export=${id}`);
 }
 
 /** As an approver: accept the ticked fields, refuse the rest (a note when refusing). */

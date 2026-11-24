@@ -1,5 +1,6 @@
 import { Button } from '@edupro/ui';
 import type { MyList, MyListRow } from '@/lib/my-profile';
+import { columnRules } from '@/lib/profile-rules';
 
 /**
  * Add or change one row of a list on My profile (0187). Field names: `r.<key>` for the row, `bool`
@@ -105,9 +106,11 @@ export function MyProfileRowForm({
               id={id}
               name={`r.${c.key}`}
               className="ep-input"
-              type={c.type === 'date' ? 'date' : c.type === 'year' ? 'number' : 'text'}
-              min={c.type === 'year' ? 1940 : undefined}
-              max={c.type === 'year' ? 2100 : undefined}
+              type={columnRules(c).type ?? 'text'}
+              min={columnRules(c).min}
+              max={columnRules(c).max}
+              step={columnRules(c).step}
+              title={columnRules(c).title}
               defaultValue={str(c.key)}
               maxLength={c.max ?? 200}
               required={c.required}

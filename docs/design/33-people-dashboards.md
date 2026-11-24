@@ -87,3 +87,25 @@ routes, the staff app's `/api/my-file/:id`), never the uploaded file's name; the
 the type, number and dates. `GET me/employee-profile/files/:fileId` gives a staff member the signed
 address of a document on their record, their photo or an upload of theirs; an approver opens a document
 row's file through the request's proofs endpoint.
+
+## My profile: the PDF at once, every field checked (24 Nov 2026)
+
+- **The PDF is made at once by the API** (`GET me/employee-profile/pdf`, base64 in JSON;
+  `apps/api/src/modules/people/employee-profile-pdf.ts`), as the students' profile already was: the letterhead, the
+  photo and key facts, every section the school shows staff (filled fields), the lists as tables, the documents, a
+  declaration and signatures. Before, "Download PDF" queued a workers' export and stayed on "Your PDF is being
+  prepared" whenever the workers were not running. The staff website (`/api/my-profile-pdf`), the admin website's
+  My profile (`/api/me/profile-pdf`) and the staff app open it with View / Download. The workers' print
+  (`POST me/employee-profile/print`) stays for the office's printouts.
+- **Every input is checked** — on the server (the authority) and before sending in the staff website (HTML rules:
+  required, pattern, min / max, with a hint line under each field) and the staff app (`mpCheck`, the message under
+  the field). On top of each field's format (mobile, email, PAN, IFSC, Aadhaar / UAN, account, dates, numbers, list
+  values): a required field cannot be emptied; names are letters, spaces and . ' -; the date of birth is not in the
+  future and gives an age of 18 to 80; the anniversary is not in the future and after the birth; sons / daughters
+  0 to 20; a landline 6 to 15 digits; the emergency mobile is not one's own
+  (`apps/api/src/modules/people/employee-self-rules.ts`). List rows: a passing year not in the future; a job's,
+  a training's and a document's dates not after today; the end not before the start; a document's valid-till after
+  its issue date. The app now shows each refused field's message from the server (not only "Some values were not
+  accepted").
+- Tests: `apps/api/test/employee-self.e2e-spec.ts` (instant PDF; every check); app
+  `test/staff_orders_profile_test.dart` (the PDF, the checks), `test/dio_transport_test.dart` (the messages).

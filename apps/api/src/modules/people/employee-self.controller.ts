@@ -61,6 +61,13 @@ export class EmployeeSelfController {
     return this.svc.myFileUrl(ctx, fileId);
   }
 
+  @Get('me/employee-profile/pdf')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'My profile as a PDF, made at once (base64 in JSON)' })
+  pdfNow(@ReqCtx() ctx: RequestContext) {
+    return this.svc.pdfNow(ctx);
+  }
+
   @Post('me/employee-profile/print')
   @AuthenticatedOnly()
   @ApiOperation({ summary: 'My profile as PDF (my ID numbers in full)' })

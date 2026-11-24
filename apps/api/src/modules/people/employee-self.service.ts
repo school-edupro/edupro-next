@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import {
@@ -44,6 +44,10 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { FilesService } from '../files/files.service';
+import { STORAGE_DRIVER, type StorageDriver } from '../files/storage';
+import { registerGeneratedOn } from '../exams/register-head';
+import { employeeProfilePdf } from './employee-profile-pdf';
+import { selfFieldErrors } from './employee-self-rules';
 import { ReportsService } from '../reports/reports.service';
 import {
   EmployeeDocumentRowSchema,
@@ -158,6 +162,7 @@ export class EmployeeSelfService {
     private readonly audit: AuditService,
     private readonly reports: ReportsService,
     private readonly files: FilesService,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   private async myEmployee(c: PoolClient): Promise<string> {
@@ -412,6 +417,14 @@ export class EmployeeSelfService {
           extra: { errors: Object.entries(v.errors).map(([path, message]) => ({ path, message })) },
         });
       const current = (await readEmployeeProfile(c, id, true))!.values;
+      // the staff's own checks on top of the formats (the website and the app check the same before sending)
+      const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+      const own = selfFieldErrors(FIELD, v.values, current, today);
+      if (Object.keys(own).length)
+        throw new DomainError('validation-failed', 'Some values were not accepted', {
+          status: 400,
+          extra: { errors: Object.entries(own).map(([path, message]) => ({ path, message })) },
+        });
       const changed = Object.entries(v.values).filter(([k, val]) => !same(current[k] ?? null, val));
       // a field (or a row) already waiting cannot be asked for again
       const waiting = await c.query<{ changes: Record<string, ChangeItem> }>(
@@ -900,6 +913,144 @@ export class EmployeeSelfService {
       },
       'people.employee.self_print',
     );
+  }
+
+  /**
+   * My profile as a PDF made at once (the staff website and the staff app; the workers' printout made it wait):
+   * exactly what My profile shows me — the fields the school shows staff, filled — with the lists and documents.
+   */
+  async pdfNow(ctx: RequestContext) {
+    const me = await this.mine(ctx);
+    const meta = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const school = await c.query<{
+        name: string;
+        affiliation_no: string | null;
+        board: string | null;
+        address: Record<string, unknown> | null;
+        contact: Record<string, unknown> | null;
+        logo: string | null;
+      }>(
+        `SELECT name, affiliation_no, board, address, contact, NULLIF(branding->>'logoFileId', '') AS logo
+           FROM schools WHERE id = app.current_school_id()`,
+      );
+      const ids = [me.photo.fileId, school.rows[0]?.logo].filter(
+        (x): x is string => typeof x === 'string' && /^\d{1,18}$/.test(x),
+      );
+      const files = ids.length
+        ? await c.query<{ id: string; object_key: string; content_type: string }>(
+            `SELECT id::text, object_key, content_type FROM files WHERE id = ANY($1::bigint[]) AND status = 'ready'`,
+            [ids],
+          )
+        : { rows: [] as Array<{ id: string; object_key: string; content_type: string }> };
+      return { school: school.rows[0], files: files.rows };
+    });
+    const fileOf = new Map(meta.files.map((f) => [f.id, f]));
+    const image = async (id: string | null | undefined, max: number) => {
+      const f = id ? fileOf.get(id) : undefined;
+      if (!f || !/^image\/(png|jpe?g)$/.test(f.content_type)) return null;
+      try {
+        const bytes = await this.storage.read(f.object_key);
+        return bytes.length <= max ? { contentType: f.content_type, bytes } : null;
+      } catch {
+        return null; // a photo that cannot be read leaves its box empty; the paper still comes
+      }
+    };
+    const MB = 1024 * 1024;
+    const [logo, photo] = await Promise.all([
+      image(meta.school?.logo, 2 * MB),
+      image(me.photo.fileId, 3 * MB),
+    ]);
+    const dmy = (t: string) =>
+      /^\d{4}-\d{2}-\d{2}$/.test(t) ? `${t.slice(8, 10)}-${t.slice(5, 7)}-${t.slice(0, 4)}` : t;
+    const shown = (v: unknown, type?: string): string => {
+      if (v === null || v === undefined || v === '') return '';
+      if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+      const t = String(v);
+      return type === 'date' ? dmy(t) : t;
+    };
+    const fields = new Map(
+      me.sections.flatMap((sec) => sec.fields.map((f) => [f.key, shown(f.value, f.type)] as const)),
+    );
+    const str = (x: unknown) => (typeof x === 'string' ? x.trim() : '');
+    const a = meta.school?.address ?? {};
+    const ct = meta.school?.contact ?? {};
+    const extra = [
+      meta.school?.affiliation_no
+        ? `${meta.school.board ?? ''} Affiliation No. ${meta.school.affiliation_no}`.trim()
+        : '',
+      [str(ct.phone), str(ct.email), str(ct.website)].filter(Boolean).join(' · '),
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const tables = me.lists.map((l) =>
+      l.id === 'documents'
+        ? {
+            title: l.title,
+            columns: ['Document', 'Number', 'Issued on', 'Valid till', 'Checked by HR'],
+            rows: l.rows.map((r) => [
+              shown(r.values.typeName),
+              shown(r.values.number),
+              shown(r.values.issuedOn, 'date'),
+              shown(r.values.expiresOn, 'date'),
+              r.values.verified ? 'Yes' : 'Not yet',
+            ]),
+          }
+        : {
+            title: l.title,
+            columns: l.columns.map((c) => c.label),
+            rows: l.rows.map((r) => l.columns.map((c) => shown(r.values[c.key], c.type))),
+          },
+    );
+    const bytes = await employeeProfilePdf({
+      school: {
+        name: meta.school?.name ?? '',
+        address:
+          [a.line1, a.line2, a.line3, a.city, a.state, a.pin ?? a.pincode]
+            .map(str)
+            .filter(Boolean)
+            .join(', ') || null,
+      },
+      extra: extra || null,
+      logo,
+      title: 'Employee Profile · Employee copy',
+      details: `Downloaded ${registerGeneratedOn()} · Profile ${String(me.completeness.percent)}% complete`,
+      name: me.employee.name,
+      facts: (
+        [
+          ['Employee code', me.employee.code],
+          ['Designation', fields.get('designation') ?? ''],
+          ['Department', fields.get('department') ?? ''],
+          ['Date of joining', fields.get('joined_on') ?? ''],
+          ['Mobile', fields.get('mobile') ?? ''],
+          ['Email', fields.get('email') ?? ''],
+        ] as Array<[string, string]>
+      ).filter(([, v]) => v),
+      photo,
+      sections: me.sections.map((sec) => ({
+        title: sec.title,
+        rows: sec.fields
+          .map((f): [string, string] => [f.label, shown(f.value, f.type)])
+          .filter(([, v]) => v),
+      })),
+      tables,
+      foot: `${meta.school?.name ?? ''} · Employee profile ${me.employee.code}`,
+    });
+    // a download of my full profile is kept in the audit trail, as the workers' print was
+    await this.audit.record(
+      ctx,
+      {
+        action: 'people.employee.self_print',
+        entityType: 'employees',
+        entityId: me.employee.id,
+        after: { instant: true },
+      },
+      'people.employee.self_print',
+    );
+    return {
+      filename: `employee-profile-${me.employee.code}`.replace(/[^A-Za-z0-9-]+/g, '-') + '.pdf',
+      contentType: 'application/pdf',
+      base64: bytes.toString('base64'),
+    };
   }
 
   async exportStatus(ctx: RequestContext, exportId: string) {
