@@ -142,29 +142,59 @@ class StaffGatePassesScreen extends ConsumerWidget {
     final waiting = ref.watch(staffGateInboxProvider(profile)).value?.data.length ?? 0;
     return DefaultTabController(
       length: 2,
-      child: Column(
-        children: [
-          Material(
-            color: Theme.of(context).colorScheme.surface,
-            child: TabBar(
-              key: const Key('sgTabs'),
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              tabs: [
-                Tab(text: s.sgInboxTab(waiting)),
-                Tab(text: s.sgMineTab),
-              ],
+      // Apply for a gate pass on both tabs (as the website's header button); a sent one shows under My gate passes.
+      // Its own messenger: the "requested" note shows above the button, not over it.
+      child: ScaffoldMessenger(
+        child: Builder(
+          builder: (context) => Scaffold(
+            backgroundColor: Colors.transparent,
+            floatingActionButton: FloatingActionButton.extended(
+              key: const Key('sgApply'),
+              icon: const Icon(Icons.add),
+              label: Text(s.sgApply),
+              onPressed: () async {
+                final tabs = DefaultTabController.of(context);
+                final sent = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => FamilyPage(
+                      title: s.sgApply,
+                      child: StaffGatePassForm(profile: profile),
+                    ),
+                  ),
+                );
+                if (sent == true && context.mounted) {
+                  tabs.animateTo(1);
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text(s.sgRequested)));
+                }
+              },
             ),
-          ),
-          Expanded(
-            child: TabBarView(
+            body: Column(
               children: [
-                _InboxTab(profile: profile),
-                _MineTab(profile: profile),
+                Material(
+                  color: Theme.of(context).colorScheme.surface,
+                  child: TabBar(
+                    key: const Key('sgTabs'),
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    tabs: [
+                      Tab(text: s.sgInboxTab(waiting)),
+                      Tab(text: s.sgMineTab),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _InboxTab(profile: profile),
+                      _MineTab(profile: profile),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -197,6 +227,8 @@ class _InboxTab extends ConsumerWidget {
       children: (rows) => [
         if (rows.isEmpty) Notice(text: s.sgNothingWaits),
         for (final p in rows) _InboxCard(profile: profile, pass: p),
+        // room for the floating Apply button
+        const SizedBox(height: 88),
       ],
     );
   }
@@ -336,18 +368,10 @@ class _MineTab extends ConsumerWidget {
       value: ref.watch(staffGateMineProvider(profile)),
       refresh: () => ref.refresh(staffGateMineProvider(profile).future),
       children: (rows) => [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            key: const Key('sgApply'),
-            icon: const Icon(Icons.add),
-            label: Text(s.sgApply),
-            onPressed: () => pushPage(context, s.sgApply, StaffGatePassForm(profile: profile)),
-          ),
-        ),
-        const SizedBox(height: Tokens.sp3),
         if (rows.isEmpty) Notice(text: s.sgNoneMine),
         for (final p in rows) _MineCard(profile: profile, pass: p),
+        // room for the floating Apply button
+        const SizedBox(height: 88),
       ],
     );
   }
@@ -563,8 +587,8 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
           );
       ref.invalidate(staffGateMineProvider(widget.profile));
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.sgRequested)));
-      Navigator.of(context).pop();
+      // the Gate passes screen says it was requested
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) setState(() => _error = errorText(s, e));
     } finally {
@@ -584,28 +608,19 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
       children: [
         Text(s.sgApplyHelp, style: TextStyle(color: muted)),
         SectionTitle(s.sgType),
-        // the type as two tiles, as on the websites
-        Wrap(
-          spacing: Tokens.sp2,
-          runSpacing: Tokens.sp2,
-          children: [
-            for (final (key, value, label) in [
-              (const Key('sgRgp'), 'rgp', s.sgRgp),
-              (const Key('sgNrgp'), 'nrgp', s.sgNrgp),
-            ])
-              Semantics(
-                selected: _category == value,
-                inMutuallyExclusiveGroup: true,
-                child: _category == value
-                    ? FilledButton(key: key, onPressed: () {}, child: Text(label))
-                    : OutlinedButton(
-                        key: key,
-                        onPressed: () => setState(() => _category = value),
-                        child: Text(label),
-                      ),
-              ),
-          ],
-        ),
+        // the type as two tiles, as on the websites: the chosen one navy, the other outlined; the words wrap
+        for (final (key, value, label) in [
+          (const Key('sgRgp'), 'rgp', s.sgRgp),
+          (const Key('sgNrgp'), 'nrgp', s.sgNrgp),
+        ]) ...[
+          _TypeTile(
+            key: key,
+            label: label,
+            selected: _category == value,
+            onTap: () => setState(() => _category = value),
+          ),
+          const SizedBox(height: Tokens.sp2),
+        ],
         const SizedBox(height: Tokens.sp4),
         _PickField(
           key: const Key('sgOn'),
@@ -696,29 +711,51 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
                     key: Key('sgItemName-$n'),
                     controller: item.name,
                     maxLength: 120,
-                    decoration: InputDecoration(labelText: s.sgItem(n + 1), counterText: ''),
+                    decoration: InputDecoration(
+                      labelText: s.sgItem(n + 1),
+                      border: const OutlineInputBorder(),
+                      counterText: '',
+                    ),
                   ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          key: Key('sgItemQty-$n'),
-                          controller: item.qty,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(labelText: s.sgQty),
+                  const SizedBox(height: Tokens.sp3),
+                  Builder(
+                    builder: (context) {
+                      final qty = TextField(
+                        key: Key('sgItemQty-$n'),
+                        controller: item.qty,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: s.sgQty,
+                          border: const OutlineInputBorder(),
                         ),
-                      ),
-                      const SizedBox(width: Tokens.sp2),
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          key: Key('sgItemSerial-$n'),
-                          controller: item.serial,
-                          maxLength: 60,
-                          decoration: InputDecoration(labelText: s.sgSerial, counterText: ''),
+                      );
+                      final serial = TextField(
+                        key: Key('sgItemSerial-$n'),
+                        controller: item.serial,
+                        maxLength: 60,
+                        decoration: InputDecoration(
+                          labelText: s.sgSerial,
+                          border: const OutlineInputBorder(),
+                          counterText: '',
                         ),
-                      ),
-                    ],
+                      );
+                      // with large text the two fields go one under the other, their labels whole
+                      return MediaQuery.textScalerOf(context).scale(10) > 13
+                          ? Column(
+                              children: [
+                                qty,
+                                const SizedBox(height: Tokens.sp3),
+                                serial,
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(child: qty),
+                                const SizedBox(width: Tokens.sp2),
+                                Expanded(flex: 2, child: serial),
+                              ],
+                            );
+                    },
                   ),
                   CheckboxListTile(
                     key: Key('sgItemBack-$n'),
@@ -728,13 +765,17 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
                     title: Text(s.sgBringBack),
                     controlAffinity: ListTileControlAffinity.leading,
                   ),
-                  OutlinedButton(
-                    key: Key('sgItemRemove-$n'),
-                    onPressed: () => setState(() => _items.removeAt(n).dispose()),
-                    child: Semantics(
-                      label: s.sgRemoveItem(n + 1),
-                      excludeSemantics: true,
-                      child: Text(s.sgRemove),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton.icon(
+                      key: Key('sgItemRemove-$n'),
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => setState(() => _items.removeAt(n).dispose()),
+                      label: Semantics(
+                        label: s.sgRemoveItem(n + 1),
+                        excludeSemantics: true,
+                        child: Text(s.sgRemove),
+                      ),
                     ),
                   ),
                 ],
@@ -744,10 +785,11 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
         const SizedBox(height: Tokens.sp2),
         Align(
           alignment: Alignment.centerLeft,
-          child: OutlinedButton(
+          child: OutlinedButton.icon(
             key: const Key('sgAddItem'),
+            icon: const Icon(Icons.add),
             onPressed: _items.length >= 30 ? null : () => setState(() => _items.add(_Item())),
-            child: Text(s.sgAddItem),
+            label: Text(s.sgAddItem),
           ),
         ),
         if (_error != null) ErrorText(_error!),
@@ -761,6 +803,62 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One type of pass as the websites' tile: the chosen one navy with white words and a tick, the other outlined; the
+/// words wrap with large text.
+class _TypeTile extends StatelessWidget {
+  const _TypeTile({super.key, required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final ink = (dark ? Tokens.mobGray100 : Tokens.mobNavy800);
+    return Semantics(
+      button: true,
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      child: Material(
+        color: selected ? Tokens.mobNavy800 : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Tokens.radiusMd),
+          side: BorderSide(color: selected ? Tokens.mobNavy800 : ink, width: 1.5),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(Tokens.radiusMd),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Tokens.sp4, vertical: Tokens.sp3),
+              child: Row(
+                children: [
+                  Icon(
+                    selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                    color: selected ? Tokens.textInverse : ink,
+                  ),
+                  const SizedBox(width: Tokens.sp3),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: selected ? Tokens.textInverse : ink,
+                        fontWeight: Tokens.fwSemibold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

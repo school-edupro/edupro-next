@@ -241,7 +241,8 @@ void main() {
     'gate passes: apply as the websites — tiles, time out, back by for RGP, the purpose, items added',
     (tester) async {
       final (_, school) = await pump(tester, const StaffGatePassesScreen(profile: staff));
-      await tapIn(tester, find.text(s.sgMineTab));
+      // Apply for a gate pass is on To approve too (a floating button on both tabs)
+      expect(find.byKey(const Key('sgApply')), findsOneWidget);
       await tapIn(tester, find.byKey(const Key('sgApply')));
       expect(find.byKey(const Key('sgForm')), findsOneWidget);
       await tapIn(tester, find.byKey(const Key('sgSend')));
@@ -277,13 +278,42 @@ void main() {
           {'name': 'Microscope', 'qty': 1, 'serialNo': 'LAB-7', 'returnable': true},
         ],
       });
+      // the note shows above the floating button, which stays to tap
+      expect(find.text(s.sgRequested), findsOneWidget);
+      expect(
+        tester.getRect(find.byKey(const Key('sgApply'))).bottom,
+        lessThanOrEqualTo(tester.getRect(find.byType(SnackBar)).top),
+      );
+      // sent from To approve: My gate passes is shown
+      expect(tester.widget<TabBar>(find.byKey(const Key('sgTabs'))).controller, isNull);
+      expect(DefaultTabController.of(tester.element(find.byKey(const Key('sgTabs')))).index, 1);
       // NRGP: no return time asked; the chosen tile is marked selected
       await tapIn(tester, find.byKey(const Key('sgApply')));
       expect(find.byKey(const Key('sgBack')), findsOneWidget);
       await tapIn(tester, find.byKey(const Key('sgNrgp')));
       expect(find.byKey(const Key('sgBack')), findsNothing);
-      expect(tester.widget(find.byKey(const Key('sgNrgp'))), isA<FilledButton>());
-      expect(tester.widget(find.byKey(const Key('sgRgp'))), isA<OutlinedButton>());
+      expect(
+        tester
+            .widget<Semantics>(
+              find
+                  .descendant(of: find.byKey(const Key('sgNrgp')), matching: find.byType(Semantics))
+                  .first,
+            )
+            .properties
+            .selected,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<Semantics>(
+              find
+                  .descendant(of: find.byKey(const Key('sgRgp')), matching: find.byType(Semantics))
+                  .first,
+            )
+            .properties
+            .selected,
+        isFalse,
+      );
     },
   );
 
