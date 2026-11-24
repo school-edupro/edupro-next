@@ -1307,3 +1307,36 @@ found from the **lists, the PI page and the staff app**.
   acknowledged; `received=1` returns them; the raiser opens the slip PDF. Checked: Alpha's GRN prints the
   inspector's new signature; a sample issue slip with Alpha's SK01 and E003 signatures; the admin Slip
   column and the staff page with axe.
+
+## As built — Purchase Indents on the staff website and the staff app as the admin's page (24 Nov 2026)
+
+Asked by the user ("staff mobile app and web app Purchase indents same as /purchase/indents").
+
+- **Staff website** `/purchase`: the admin's list — tabs **Waiting for me (n)**, **Raised by me**, **All I can
+  see** (the default, as the admin's), and for those with `purchase.indent.view` **Waiting for the PR** and **PR
+  skipped: for the PO**; the filters (department when there are several, from, to, status, search) and **Excel** /
+  **PDF** of the list as filtered (`/api/purchase-list-file` → `GET purchase/indents/export`, the API keeping to
+  what the person may see); a table (indent with Urgent, purpose and lines; department; raised by and for whom;
+  needed by; the estimate for those who see rates; the status with where it waits or went); pages of 50; the
+  hand-over link stays. `/purchase/<id>`: the admin's page — header with Print (View / Download) and Change; Status
+  with the decision note, where an approved one went and its PR numbers, and the actions, each asked first in a
+  dialog (`components/ConfirmAction.tsx`: Approve; Send back and Reject with the reason the raiser sees; Send for
+  approval; Withdraw with why); The indent (facts, the department's approved indents this year); Items (#, item,
+  quantity, in store when raised, and rate / amount / rate from with the estimate for those who see rates; line
+  documents and issue slips); Approvals as a table (a level that needs all ticks who approved); History. The PR
+  numbers are text (the staff website has no PR page for a raiser). The raise and change form was already the
+  admin's. Hindi for every new word.
+- **Staff app** (`lib/staff/purchase_indents.dart`, menu `/purchase` and `/purchase/hand-over`; no web page): the
+  same list (tabs, folded Filters, Excel / PDF in the file viewer, rows as cards, pages, **Raise an indent**
+  floating for those with the raise right — read from `GET /me`), the indent in full (`IndentDetailScreen`, the
+  same sections; the actions ask first, a reason where the website asks one; the header's Approvals count reads
+  again), the raise / change form (`IndentFormScreen`: department, for a colleague, needed by, purpose, priority;
+  lines with the item list searchable, the stores' free stock, "Buy new instead?", the unit for an item in words,
+  the rate for those who see rates, a note, a document — PDF / JPEG / PNG up to 5 MB through `/platform/files` —
+  and the item sheet by Excel; Save as draft or Save and send; a new one saved but not sent opens saying why) and
+  **Hand over my approvals** (colleague, days, reason; End now). The app's Approvals open a purchase indent on its
+  own page. The withdraw request has its own class `IndentCancelDto` (the app's client takes one name per request).
+- Tests: `apps/mobile/test/staff_purchase_test.dart` (the list and its filters and files, an indent at my level —
+  send back needs a reason, approve —, my own sent back — send, withdraw —, raising with the checks, the stores'
+  stock and the sheet, the hand-over; a11y light / dark / Hindi; 2× text); `teacher-a11y` gets `/purchase`,
+  `/purchase?view=mine`, `/purchase/672`.

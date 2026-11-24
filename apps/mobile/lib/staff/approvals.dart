@@ -11,6 +11,7 @@ import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
 import '../ui/widgets.dart';
 import 'approval_forms.dart';
+import 'purchase_indents.dart' show IndentDetailScreen;
 import 'queries.dart' show StaffTicketDetail;
 import 'data.dart';
 
@@ -140,6 +141,19 @@ class _ApprovalsScreenState extends ConsumerState<ApprovalsScreen> {
   }
 
   Future<void> _open(Json item) async {
+    if (item['kind'] == 'purchase') {
+      // a purchase indent at my level: its own page in the app, as the admin's (approve, send back, reject)
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => FamilyPage(
+            title: '${item['title']}'.split(' · ').first,
+            child: IndentDetailScreen(profile: widget.profile, id: '${item['id']}'),
+          ),
+        ),
+      );
+      if (mounted) ref.invalidate(approvalsProvider(widget.profile));
+      return;
+    }
     if (item['kind'] == 'query') {
       // a query with me: its own screen in the app (reply, hand over, close), as Queries opens it
       await Navigator.of(context).push(

@@ -371,3 +371,25 @@ EmployeeSelfController_cancel
 EmployeeSelfController_myPhoto !file
 EmployeeSelfController_myFile !file
 EmployeeSelfController_pdfNow !file
+
+# Purchase indents as on the staff website and the admin's page (docs/design/83, part 2): the list with its tabs,
+# filters and Excel / PDF; one indent in full (print, line documents, issue slips); raise and change (the form's
+# lists, the item sheet); send, withdraw, approve / send back / reject; hand over my purchase approvals
+PurchaseController_listIndents
+PurchaseController_exportIndents !file
+PurchaseController_listFilters
+PurchaseController_indentForm
+PurchaseController_indent
+PurchaseController_indentPdf !file
+PurchaseController_indentLineFile !file
+PurchaseStockController_issuePdf !file
+PurchaseController_createIndent
+PurchaseController_updateIndent
+PurchaseController_submitIndent
+PurchaseController_decideIndent
+PurchaseController_cancelIndent
+PurchaseController_indentSheet !file
+PurchaseController_readIndentSheet
+PurchaseController_delegations
+PurchaseController_delegate
+PurchaseController_revokeDelegation

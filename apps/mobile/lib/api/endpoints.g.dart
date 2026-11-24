@@ -1215,6 +1215,78 @@ class EduProApi {
   /// GET /me/employee-profile/pdf — My profile as a PDF, made at once (base64 in JSON)
   Future<ApiFile> employeeSelfPdfNow() =>
       _t.file('GET', '/me/employee-profile/pdf');
+
+  /// GET /purchase/indents — Indents I may see: mine, my department’s, those I approve (all with the view right)
+  Future<dynamic> purchaseListIndents({String? view, String? status, String? route, String? departmentId, String? q, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/purchase/indents', query: {if (view != null) 'view': view, if (status != null) 'status': status, if (route != null) 'route': route, if (departmentId != null) 'departmentId': departmentId, if (q != null) 'q': q, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// GET /purchase/indents/export — The indents list as on screen (its filters), as Excel or PDF
+  Future<ApiFile> purchaseExportIndents({String? view, String? status, String? route, String? departmentId, String? q, String? from, String? to, String? format}) =>
+      _t.file('GET', '/purchase/indents/export', query: {if (view != null) 'view': view, if (status != null) 'status': status, if (route != null) 'route': route, if (departmentId != null) 'departmentId': departmentId, if (q != null) 'q': q, if (from != null) 'from': from, if (to != null) 'to': to, if (format != null) 'format': format});
+
+  /// GET /purchase/list-filters — What the purchase lists filter by: departments, and vendors (office)
+  Future<dynamic> purchaseListFilters() =>
+      _t.send('GET', '/purchase/list-filters');
+
+  /// GET /purchase/indent-form
+  Future<dynamic> purchaseIndentForm() =>
+      _t.send('GET', '/purchase/indent-form');
+
+  /// GET /purchase/indents/{id}
+  Future<dynamic> purchaseIndent({required String id}) =>
+      _t.send('GET', '/purchase/indents/${Uri.encodeComponent(id)}');
+
+  /// GET /purchase/indents/{id}/pdf — The printed Purchase Indent, once sent (rates only for those who see them)
+  Future<ApiFile> purchaseIndentPdf({required String id}) =>
+      _t.file('GET', '/purchase/indents/${Uri.encodeComponent(id)}/pdf');
+
+  /// GET /purchase/indents/{id}/lines/{lineId}/file — An indent line’s document
+  Future<ApiFile> purchaseIndentLineFile({required String id, required String lineId}) =>
+      _t.file('GET', '/purchase/indents/${Uri.encodeComponent(id)}/lines/${Uri.encodeComponent(lineId)}/file');
+
+  /// GET /purchase/issues/{id}/pdf — The issue slip
+  Future<ApiFile> purchaseStockIssuePdf({required String id}) =>
+      _t.file('GET', '/purchase/issues/${Uri.encodeComponent(id)}/pdf');
+
+  /// POST /purchase/indents — Raise a Purchase Indent (a draft until submitted)
+  Future<dynamic> purchaseCreateIndent({required IndentDto body}) =>
+      _t.send('POST', '/purchase/indents', body: body.toJson());
+
+  /// PUT /purchase/indents/{id}
+  Future<dynamic> purchaseUpdateIndent({required IndentDto body, required String id}) =>
+      _t.send('PUT', '/purchase/indents/${Uri.encodeComponent(id)}', body: body.toJson());
+
+  /// POST /purchase/indents/{id}/submit — Send a draft (or one sent back) to the department’s approval levels
+  Future<dynamic> purchaseSubmitIndent({required String id}) =>
+      _t.send('POST', '/purchase/indents/${Uri.encodeComponent(id)}/submit');
+
+  /// POST /purchase/indents/{id}/decide — Approve, reject or send back (the current level’s approver or their delegate)
+  Future<dynamic> purchaseDecideIndent({required IndentDecisionDto body, required String id}) =>
+      _t.send('POST', '/purchase/indents/${Uri.encodeComponent(id)}/decide', body: body.toJson());
+
+  /// POST /purchase/indents/{id}/cancel
+  Future<dynamic> purchaseCancelIndent({required IndentCancelDto body, required String id}) =>
+      _t.send('POST', '/purchase/indents/${Uri.encodeComponent(id)}/cancel', body: body.toJson());
+
+  /// GET /purchase/indent-sheet — The indent item sheet to fill (items as a drop-down)
+  Future<ApiFile> purchaseIndentSheet() =>
+      _t.file('GET', '/purchase/indent-sheet');
+
+  /// POST /purchase/indent-sheet — Read a filled item sheet into indent lines (nothing is saved)
+  Future<dynamic> purchaseReadIndentSheet({required IndentSheetDto body}) =>
+      _t.send('POST', '/purchase/indent-sheet', body: body.toJson());
+
+  /// GET /purchase/delegations
+  Future<dynamic> purchaseDelegations() =>
+      _t.send('GET', '/purchase/delegations');
+
+  /// POST /purchase/delegations — Hand my purchase approvals (or, school admin, someone’s) to a colleague for some days
+  Future<dynamic> purchaseDelegate({required PurchaseDelegationDto body}) =>
+      _t.send('POST', '/purchase/delegations', body: body.toJson());
+
+  /// DELETE /purchase/delegations/{id}
+  Future<dynamic> purchaseRevokeDelegation({required String id}) =>
+      _t.send('DELETE', '/purchase/delegations/${Uri.encodeComponent(id)}');
 }
 
 /** The OtpStartDto the API takes. */
@@ -2771,5 +2843,93 @@ class EmployeeChangesDtoProofsItem {
   Map<String, Object?> toJson() => {
         'typeId': typeId,
         'fileId': fileId,
+      };
+}
+
+/** The IndentDto the API takes. */
+class IndentDto {
+  const IndentDto({this.departmentId, this.onBehalfEmployeeId, required this.purpose, this.requiredBy, this.priority, required this.lines});
+  final String? departmentId;
+  final String? onBehalfEmployeeId;
+  final String purpose;
+  final String? requiredBy;
+  final String? priority;
+  final List<IndentDtoLinesItem> lines;
+  Map<String, Object?> toJson() => {
+        if (departmentId != null) 'departmentId': departmentId,
+        if (onBehalfEmployeeId != null) 'onBehalfEmployeeId': onBehalfEmployeeId,
+        'purpose': purpose,
+        if (requiredBy != null) 'requiredBy': requiredBy,
+        if (priority != null) 'priority': priority,
+        'lines': lines.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The IndentDtoLinesItem the API takes. */
+class IndentDtoLinesItem {
+  const IndentDtoLinesItem({this.itemId, this.freeText, required this.quantity, this.uomId, this.estRate, this.note, this.fileId, this.stockReason});
+  final String? itemId;
+  final String? freeText;
+  final num quantity;
+  final String? uomId;
+  final num? estRate;
+  final String? note;
+  final String? fileId;
+  final String? stockReason;
+  Map<String, Object?> toJson() => {
+        if (itemId != null) 'itemId': itemId,
+        if (freeText != null) 'freeText': freeText,
+        'quantity': quantity,
+        if (uomId != null) 'uomId': uomId,
+        if (estRate != null) 'estRate': estRate,
+        if (note != null) 'note': note,
+        if (fileId != null) 'fileId': fileId,
+        if (stockReason != null) 'stockReason': stockReason,
+      };
+}
+
+/** The IndentDecisionDto the API takes. */
+class IndentDecisionDto {
+  const IndentDecisionDto({required this.action, this.note});
+  final String action;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'action': action,
+        if (note != null) 'note': note,
+      };
+}
+
+/** The IndentCancelDto the API takes. */
+class IndentCancelDto {
+  const IndentCancelDto({required this.reason});
+  final String reason;
+  Map<String, Object?> toJson() => {
+        'reason': reason,
+      };
+}
+
+/** The IndentSheetDto the API takes. */
+class IndentSheetDto {
+  const IndentSheetDto({required this.file});
+  final String file;
+  Map<String, Object?> toJson() => {
+        'file': file,
+      };
+}
+
+/** The PurchaseDelegationDto the API takes. */
+class PurchaseDelegationDto {
+  const PurchaseDelegationDto({this.fromUserId, required this.toEmployeeId, required this.startsOn, required this.endsOn, required this.reason});
+  final String? fromUserId;
+  final String toEmployeeId;
+  final String startsOn;
+  final String endsOn;
+  final String reason;
+  Map<String, Object?> toJson() => {
+        if (fromUserId != null) 'fromUserId': fromUserId,
+        'toEmployeeId': toEmployeeId,
+        'startsOn': startsOn,
+        'endsOn': endsOn,
+        'reason': reason,
       };
 }

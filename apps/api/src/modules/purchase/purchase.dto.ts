@@ -402,6 +402,8 @@ export class IndentDecisionDto extends createZodDto(IndentDecisionSchema) {}
 
 export const ReasonSchema = z.object({ reason: z.string().trim().min(3).max(500) });
 export class ReasonDto extends createZodDto(ReasonSchema) {}
+/** Withdrawing an indent: why (a class of its own: the staff app's client takes one name per request). */
+export class IndentCancelDto extends createZodDto(ReasonSchema) {}
 
 export const PurchaseDelegationSchema = z
   .object({

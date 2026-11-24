@@ -33,6 +33,7 @@ import {
   IndentSheetDto,
   PURCHASE,
   PurchaseDelegationDto,
+  IndentCancelDto,
   ReasonDto,
   PaymentTermDto,
   TermListQueryDto,
@@ -203,7 +204,11 @@ export class PurchaseController {
 
   @Post('indents/:id/cancel')
   @RequirePermission(PURCHASE.indentRaise)
-  cancelIndent(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReasonDto) {
+  cancelIndent(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: IndentCancelDto,
+  ) {
     return this.indents.cancel(ctx, id, body);
   }
 

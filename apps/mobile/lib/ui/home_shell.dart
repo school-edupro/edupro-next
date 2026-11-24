@@ -36,6 +36,7 @@ import '../staff/office_orders.dart' show OfficeOrdersScreen;
 import '../staff/queries.dart' show StaffQueriesScreen;
 import '../staff/student_leave.dart' show StudentLeaveScreen;
 import '../staff/gate_passes.dart' show StaffGatePassesScreen;
+import '../staff/purchase_indents.dart' show PurchaseHandOverScreen, PurchaseIndentsScreen;
 import '../staff/approvals.dart';
 import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
@@ -165,6 +166,10 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/library' => LibraryScreen(profile: p),
       // My day (the daily activity log) as on the staff website: the day's slots, leave, draft or submit, my log
       '/activity-log' => ActivityLogScreen(profile: p),
+      // purchase indents as on the staff website and the admin's page: tabs, filters, Excel / PDF, raise and change,
+      // each in full (approve, send back, reject, send, withdraw), hand over my approvals (docs/design/83, part 2)
+      '/purchase' => PurchaseIndentsScreen(profile: p),
+      '/purchase/hand-over' => PurchaseHandOverScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
       '/assistant' => AssistantScreen(profile: p),
       // Help for staff kept on Helpdesk set-up, as on the staff website: headings, search, the screen, helpful?

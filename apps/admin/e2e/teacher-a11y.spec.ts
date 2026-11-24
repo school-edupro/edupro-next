@@ -42,6 +42,10 @@ const PAGES = [
   '/gate-passes/new',
   // a pass in full, as the admin's page (dev-teacher's own RGP in the sample data)
   '/gate-passes/61',
+  // purchase indents as the admin's page (the sample data's indents dev-teacher approves)
+  '/purchase',
+  '/purchase?view=mine',
+  '/purchase/672',
   '/library',
   '/library?view=history',
   '/library?view=find&q=a',
