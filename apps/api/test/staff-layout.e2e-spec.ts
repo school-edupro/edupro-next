@@ -1,6 +1,7 @@
 /**
  * The staff app's layout kept by the school (docs/design/94 phase B; 0413): the standard layout until the school
- * publishes (the app's tabs as they were); a person gets only what they can open (a tab they cannot open gives its
+ * publishes (the app's tabs as they were; there a tab a person cannot open gives its place; once published the
+ * school's tabs stay for everyone); a person gets only what they can open (a tab they cannot open gives its
  * place); the office's draft is checked, previewed and published, or discarded; a staff member keeps their own
  * shortcuts; only the settings rights change the layout.
  */
@@ -168,6 +169,14 @@ describe('the staff app layout (e2e, docs/design/94 phase B)', () => {
     const t = await mine(teacher);
     expect(t.published).toBe(true);
     expect(hrefs(t.tabs)).toEqual(['/', '/my-leave', '/messages', '/timetable', 'more']);
+    // published: the school's tabs for everyone, the timetable too for the clerk without classes
+    expect(hrefs((await mine(clerk)).tabs)).toEqual([
+      '/',
+      '/my-leave',
+      '/messages',
+      '/timetable',
+      'more',
+    ]);
     expect(t.cards.map((c) => c.key)).toEqual(['approvals', 'my_leave']);
 
     // a new draft thrown away: back to what staff have
@@ -399,11 +408,12 @@ describe('the staff app layout (e2e, docs/design/94 phase B)', () => {
       '/marks',
     ]);
 
-    // the clerk cannot mark a class or post daily work: no Attendance or Classes tab, the places go on
+    // the clerk cannot mark a class or post daily work: the school's tabs stay all the same (decided with the user
+    // 24 Nov 2026), each listing only what the clerk can open — Classes nothing (the app and website say so)
     const c = await mine(clerk);
-    expect(hrefs(c.tabs)).not.toContain('attendance');
-    expect(hrefs(c.tabs)).not.toContain('classes');
-    expect(c.tabs).toHaveLength(5);
+    expect(hrefs(c.tabs)).toEqual(['/', 'attendance', 'list-office', 'classes', 'more']);
+    expect(hrefs(c.lists.find((x) => x.key === 'classes')!.items)).toEqual([]);
+    expect(hrefs(c.lists.find((x) => x.key === 'attendance')!.items)).not.toContain('/attendance');
     for (const x of c.lists) for (const i of x.items) expect(hrefs(c.screens)).toContain(i.href);
 
     // a layout kept before the lists: its /attendance tab is the Attendance list

@@ -8,7 +8,9 @@ import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/staff/classes.dart';
 import 'package:edupro/staff/data.dart' show PickedFile;
+import 'package:edupro/family/layout.dart' show LayoutList;
 import 'package:edupro/staff/issues.dart';
+import 'package:edupro/staff/layout.dart' show StaffListTab;
 import 'package:edupro/staff/my_certificates.dart';
 import 'package:edupro/staff/my_tax.dart';
 import 'package:edupro/staff/resignation.dart';
@@ -562,6 +564,21 @@ void main() {
     expect(find.byKey(const Key('download-payslip-r1')), findsOneWidget);
     expect(find.byKey(const Key('view-salcert-2026')), findsOneWidget);
     expect(find.text(s.psLetter('INCREMENT', 'INC/2026/03', s.date('2026-04-01'))), findsOneWidget);
+  });
+
+  testWidgets('a school tab with nothing open to the person says so (the school keeps its tabs)', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const StaffListTab(
+        profile: staff,
+        list: LayoutList('list-1', 'Daily Task', null, 'book', []),
+      ),
+    );
+    expect(find.byKey(const Key('listEmpty-list-1')), findsOneWidget);
+    expect(find.text('Nothing here is open to you.'), findsOneWidget);
+    await expectLater(tester, meetsGuideline(textContrastGuideline));
   });
 
   for (final (name, hindi, dark) in [

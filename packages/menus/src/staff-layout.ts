@@ -336,8 +336,14 @@ export function myStaffLayout(
   waiting: StaffWaiting,
   given: StaffLayout,
   own: string[] | null,
+  /**
+   * the school published this layout: its tabs stay for everyone, even a tab with nothing the person can open (it
+   * then says so) — decided with the user 24 Nov 2026; the layout as built still gives such a tab's place away
+   */
+  keepTabs = false,
 ): MyStaffLayout {
   const layout = staffLayoutOf(given);
+  const every = new Map(staffLayoutScreens().map((e) => [e.href, e]));
   // a screen the school hides is as one the person cannot open (its page still opens from a link)
   const hidden = staffHiddenScreens(layout);
   const open = staffScreens(permissions, waiting).flatMap((g) =>
@@ -354,19 +360,23 @@ export function myStaffLayout(
     const x = layout.lists.find((y) => y.key === key);
     const lead = x?.items.find((h) => !hidden.has(h));
     const first = lead ? byHref.get(lead) : undefined;
-    if (!x || !first) return null;
+    if (!x || (!first && !keepTabs)) return null;
+    // the icon of its first screen (the person's, else the catalogue's)
+    const icon = first?.icon ?? (lead ? every.get(lead)?.icon : undefined) ?? 'grid';
     lists.push({
       key: x.key,
       label: x.label,
       labelHi: x.labelHi,
-      icon: first.icon,
+      icon,
       items: pick(x.items),
     });
-    return { href: x.key, label: x.label, labelHi: x.labelHi, icon: first.icon };
+    return { href: x.key, label: x.label, labelHi: x.labelHi, icon };
   };
   const tabs: StaffEntry[] = [];
   for (const t of layout.tabs) {
-    const e = t.startsWith('/') ? byHref.get(t) : listTab(t);
+    const e = t.startsWith('/')
+      ? (byHref.get(t) ?? (keepTabs ? every.get(t) : undefined))
+      : listTab(t);
     if (e && !tabs.some((x) => x.href === e.href)) tabs.push(e);
   }
   for (const e of [...pick(layout.shortcuts), ...open]) {

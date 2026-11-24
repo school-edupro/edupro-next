@@ -191,7 +191,14 @@ export class StaffLayoutService {
       const r = await this.row(c);
       const own = await this.own(c);
       return {
-        ...myStaffLayout(permissions, waiting, r?.published ?? DEFAULT_STAFF_LAYOUT, own),
+        // a published layout's tabs stay for everyone (a tab with nothing open to the person says so)
+        ...myStaffLayout(
+          permissions,
+          waiting,
+          r?.published ?? DEFAULT_STAFF_LAYOUT,
+          own,
+          !!r?.published,
+        ),
         // never published: the staff website keeps its menu and phone bar as built
         published: !!r?.published,
         waiting,

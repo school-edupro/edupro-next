@@ -192,3 +192,14 @@ Phases: **J** the model and the API · **K** admin's sections · **L** the app a
 - **Fix (22 Nov 2026).** Two new lists were both called "New list", so the same problem showed twice and React
   warned of a duplicate key; a new list is now named New list, New list 2…, and every check (admin and API, staff
   and families) gives each problem once.
+
+## As built — the school's tabs stay for everyone (24 Nov 2026)
+
+Asked by the user (a staff member without a role saw Home, Attendance, My leave, My attendance, More instead of the
+school's Attendance, Exam and Daily Task). Decided with the user: **always the school's three tabs**. Once the school
+has published its layout, `myStaffLayout(…, keepTabs)` keeps every tab it chose for every staff member: a list tab
+lists only the screens the person can open — none at all says "Nothing here is open to you." (staff app
+`StaffListTab`, website `/tabs/<key>`) — and a screen tab the person cannot open still shows (its page refuses).
+The layout as built (never published) is unchanged: there a tab the person cannot open still gives its place to
+their first shortcuts, so Classes stays for those with classes. Tests: `staff-layout.e2e-spec.ts` (published: the
+clerk gets the school's tabs, an empty Classes list), `staff_office_test.dart` (the empty list's note).

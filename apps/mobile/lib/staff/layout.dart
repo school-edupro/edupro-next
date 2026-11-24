@@ -12,6 +12,7 @@ import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/home_shell.dart' show AppTab, MoreList, nativeScreen;
 import '../ui/outbox_view.dart';
+import '../ui/widgets.dart' show Notice;
 import 'my_day.dart';
 
 /// The standard list tabs (docs/design/94, part 3): the app's Attendance and Classes tabs as they were.
@@ -164,6 +165,15 @@ class StaffListTab extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: Tokens.sp4),
             child: OutboxBanner(),
+          ),
+        // the school keeps its tabs for everyone: one with nothing open to this person says so
+        if (list.items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(Tokens.sp4),
+            child: Notice(
+              key: Key('listEmpty-${list.key}'),
+              text: s.hindi ? 'यहाँ आपके लिए कुछ खुला नहीं है।' : 'Nothing here is open to you.',
+            ),
           ),
         for (final e in list.items)
           ListTile(
