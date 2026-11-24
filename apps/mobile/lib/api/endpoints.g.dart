@@ -904,6 +904,30 @@ class EduProApi {
   Future<dynamic> gatePassMineCancel({required PassCancelDto body, required String id}) =>
       _t.send('POST', '/gate-passes/mine/${Uri.encodeComponent(id)}/cancel', body: body.toJson());
 
+  /// GET /gate-passes/staff — My own RGP / NRGP passes
+  Future<dynamic> gatePassStaff({String? state, String? studentId, String? q, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/gate-passes/staff', query: {if (state != null) 'state': state, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// POST /gate-passes/staff — An employee asks for a gate pass (RGP / NRGP) with the items carried out
+  Future<dynamic> gatePassStaffApply({required StaffPassDto body}) =>
+      _t.send('POST', '/gate-passes/staff', body: body.toJson());
+
+  /// POST /gate-passes/staff/{id}/cancel
+  Future<dynamic> gatePassStaffCancel({required PassCancelDto body, required String id}) =>
+      _t.send('POST', '/gate-passes/staff/${Uri.encodeComponent(id)}/cancel', body: body.toJson());
+
+  /// GET /gate-passes/staff/{id}/card — My own pass card as base64 (teacher app)
+  Future<ApiFile> gatePassStaffCardJson({required String id}) =>
+      _t.file('GET', '/gate-passes/staff/${Uri.encodeComponent(id)}/card');
+
+  /// GET /gate-passes/inbox — Gate passes waiting for my approval, and the ones I decided lately
+  Future<dynamic> gatePassInbox() =>
+      _t.send('GET', '/gate-passes/inbox');
+
+  /// POST /gate-passes/{id}/decide — Approve or reject at my level (only when the pass waits on me)
+  Future<dynamic> gatePassDecide({required PassDecideDto body, required String id}) =>
+      _t.send('POST', '/gate-passes/${Uri.encodeComponent(id)}/decide', body: body.toJson());
+
   /// GET /engagement/mine/queries
   Future<dynamic> engagementMine({String? status, String? kind, String? categoryCode, String? studentId, String? q, String? order, int? page, int? size}) =>
       _t.send('GET', '/engagement/mine/queries', query: {if (status != null) 'status': status, if (kind != null) 'kind': kind, if (categoryCode != null) 'categoryCode': categoryCode, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (order != null) 'order': order, if (page != null) 'page': page, if (size != null) 'size': size});
@@ -967,6 +991,10 @@ class EduProApi {
   /// POST /appointments/mine/{id}/cancel
   Future<dynamic> appointmentsMineCancel({required AppointmentCancelDto body, required String id}) =>
       _t.send('POST', '/appointments/mine/${Uri.encodeComponent(id)}/cancel', body: body.toJson());
+
+  /// GET /appointments/with-me — Confirmed appointments with me: list or between two days (no visitor contact details)
+  Future<dynamic> appointmentsWithMe({String? when, String? from, String? to, String? q, int? page, int? size}) =>
+      _t.send('GET', '/appointments/with-me', query: {if (when != null) 'when': when, if (from != null) 'from': from, if (to != null) 'to': to, if (q != null) 'q': q, if (page != null) 'page': page, if (size != null) 'size': size});
 
   /// GET /engagement/mine/categories
   Future<dynamic> engagementMyCategories() =>
@@ -2172,6 +2200,53 @@ class PassCancelDto {
   final String? reason;
   Map<String, Object?> toJson() => {
         if (reason != null) 'reason': reason,
+      };
+}
+
+/** The StaffPassDto the API takes. */
+class StaffPassDto {
+  const StaffPassDto({required this.category, this.onDate, required this.atTime, this.returnTime, required this.reason, this.destination, this.items});
+  final String category;
+  final String? onDate;
+  final String atTime;
+  final String? returnTime;
+  final String reason;
+  final String? destination;
+  final List<StaffPassDtoItemsItem>? items;
+  Map<String, Object?> toJson() => {
+        'category': category,
+        if (onDate != null) 'onDate': onDate,
+        'atTime': atTime,
+        if (returnTime != null) 'returnTime': returnTime,
+        'reason': reason,
+        if (destination != null) 'destination': destination,
+        if (items != null) 'items': items?.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The StaffPassDtoItemsItem the API takes. */
+class StaffPassDtoItemsItem {
+  const StaffPassDtoItemsItem({required this.name, this.qty, this.serialNo, this.returnable});
+  final String name;
+  final int? qty;
+  final String? serialNo;
+  final bool? returnable;
+  Map<String, Object?> toJson() => {
+        'name': name,
+        if (qty != null) 'qty': qty,
+        if (serialNo != null) 'serialNo': serialNo,
+        if (returnable != null) 'returnable': returnable,
+      };
+}
+
+/** The PassDecideDto the API takes. */
+class PassDecideDto {
+  const PassDecideDto({required this.outcome, this.note});
+  final String outcome;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'outcome': outcome,
+        if (note != null) 'note': note,
       };
 }
 

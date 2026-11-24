@@ -28,6 +28,8 @@ import '../family/messages.dart';
 import '../family/common.dart';
 import '../family/data.dart' show unreadProvider;
 import '../family/today.dart';
+import '../staff/appointments.dart' show StaffAppointmentsScreen;
+import '../staff/gate_passes.dart' show StaffGatePassesScreen;
 import '../staff/approvals.dart';
 import '../staff/class_attendance.dart';
 import '../staff/classes.dart';
@@ -139,6 +141,10 @@ Widget? nativeScreen(Profile p, String href, S s) {
       // my classes and subjects with their coverage; a subject's topics to mark (docs/design/96 part 9)
       '/syllabus' => MySyllabusScreen(profile: p),
       '/messages' => MessagesScreen(profile: p),
+      // gate passes as on the staff website: those waiting on me to approve, my own RGP / NRGP, apply, the card
+      '/gate-passes' => StaffGatePassesScreen(profile: p),
+      // appointments with me as on the staff website: today, still to come, past, and the week calendar
+      '/appointments' => StaffAppointmentsScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
       '/assistant' => AssistantScreen(profile: p),
       _ => null,
