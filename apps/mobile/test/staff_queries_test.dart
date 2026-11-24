@@ -222,49 +222,6 @@ class School {
       case 'POST /helpdesk/tickets/8/rate':
         _keep('rate', c.body);
         return {'ok': true};
-      case 'GET /engagement/queries':
-        return {
-          'data': [
-            {
-              'id': '61',
-              'number': 'Q-61',
-              'kind': 'leave',
-              'studentName': 'Kid Sample',
-              'section': 'VI-A',
-              'raisedBy': 'Mina Sample',
-              'subject': 'Leave for a wedding',
-              'status': 'open',
-              'leaveFrom': '2026-11-27',
-              'leaveTo': '2026-11-28',
-              'openedAt': '2026-11-22T04:30:00.000Z',
-            },
-          ],
-        };
-      case 'GET /engagement/queries/61':
-        return {
-          'id': '61',
-          'number': 'Q-61',
-          'kind': 'leave',
-          'categoryName': 'Leave',
-          'studentName': 'Kid Sample',
-          'section': 'VI-A',
-          'raisedBy': 'Mina Sample',
-          'subject': 'Leave for a wedding',
-          'body': 'Family wedding out of town.',
-          'leaveFrom': '2026-11-27',
-          'leaveTo': '2026-11-28',
-          'status': 'open',
-          'decision': null,
-          'rating': null,
-          'openedAt': '2026-11-22T04:30:00.000Z',
-          'responses': <Object>[],
-        };
-      case 'POST /engagement/queries/61/responses':
-        _keep('respond', c.body);
-        return {'ok': true};
-      case 'POST /engagement/queries/61/close':
-        _keep('closeQuery', c.body);
-        return {'ok': true};
     }
     throw ApiException(404, 'not-found', 'no fake for $key');
   }
@@ -321,11 +278,15 @@ Future<void> choose(WidgetTester tester, Key menu, String label) async {
 void main() {
   final s = S(false);
 
-  test('the staff menu opens Queries and helpdesk natively, on the tab asked for', () {
-    expect(nativeScreen(staff, '/queries', s), isA<StaffQueriesScreen>());
-    expect((nativeScreen(staff, '/queries?tab=leave', s)! as StaffQueriesScreen).initialTab, 1);
-    expect((nativeScreen(staff, '/queries?tab=mine', s)! as StaffQueriesScreen).initialTab, 2);
-  });
+  test(
+    'the staff menu opens Queries and helpdesk natively, on the tab asked for; no leave tab',
+    () {
+      expect(nativeScreen(staff, '/queries', s), isA<StaffQueriesScreen>());
+      // student leave is decided under Student leave, not in Queries: an old leave link opens To answer
+      expect((nativeScreen(staff, '/queries?tab=leave', s)! as StaffQueriesScreen).initialTab, 0);
+      expect((nativeScreen(staff, '/queries?tab=mine', s)! as StaffQueriesScreen).initialTab, 1);
+    },
+  );
 
   testWidgets('to answer: not what I raised; the ticket in full; reply as an internal note', (
     tester,
@@ -431,7 +392,7 @@ void main() {
   ) async {
     final (t, school) = await pump(
       tester,
-      const StaffQueriesScreen(profile: staff, initialTab: 2),
+      const StaffQueriesScreen(profile: staff, initialTab: 1),
       school: School(mineClosed: true),
     );
     expect(find.byKey(const Key('sqTicket-8')), findsOneWidget);
@@ -448,29 +409,23 @@ void main() {
     expect(school.sent['rate']!.single, {'rating': 4});
   });
 
-  testWidgets('leave requests: reply, then close with the decision', (tester) async {
-    final (_, school) = await pump(tester, const StaffQueriesScreen(profile: staff, initialTab: 1));
-    expect(find.text('Leave for a wedding'), findsOneWidget);
-    await tapIn(tester, find.byKey(const Key('sqLeave-61')));
-    expect(find.byKey(const Key('sqQueryDetail')), findsOneWidget);
-    expect(find.text('Family wedding out of town.'), findsOneWidget);
-    await tester.enterText(find.byKey(const Key('sqQueryText')), 'Noted.');
-    await tapIn(tester, find.byKey(const Key('sqQueryReply')));
-    expect(school.sent['respond']!.single, {'body': 'Noted.', 'isInternal': false});
-    expect(find.byKey(const Key('sqQuerySaved')), findsOneWidget);
-    await choose(tester, const Key('sqDecision'), s.sqReject);
-    await tapIn(tester, find.byKey(const Key('sqQueryClose')));
-    expect(school.sent['closeQuery']!.single, {'decision': 'rejected'});
-  });
+  testWidgets(
+    'two tabs, To answer and My requests: no leave requests (they are under Student leave)',
+    (tester) async {
+      final (t, _) = await pump(tester, const StaffQueriesScreen(profile: staff));
+      expect(find.text(s.sqAnswerTab), findsOneWidget);
+      expect(find.text(s.sqMineTab), findsOneWidget);
+      expect(find.text('Leave requests'), findsNothing);
+      expect(t.calls.where((c) => c.path.startsWith('/engagement/queries')), isEmpty);
+    },
+  );
 
   for (final (name, hindi, dark) in [
     ('light', false, false),
     ('dark', false, true),
     ('Hindi', true, false),
   ]) {
-    testWidgets('accessibility ($name): the lists, a ticket, the raise form, a leave query', (
-      tester,
-    ) async {
+    testWidgets('accessibility ($name): the lists, a ticket, the raise form', (tester) async {
       Future<void> check() async {
         for (final g in [
           textContrastGuideline,
@@ -499,14 +454,7 @@ void main() {
       await check();
       await pump(
         tester,
-        const StaffQueryDetail(id: '61'),
-        hindi: hindi,
-        dark: dark,
-      );
-      await check();
-      await pump(
-        tester,
-        const StaffQueriesScreen(profile: staff, initialTab: 2),
+        const StaffQueriesScreen(profile: staff, initialTab: 1),
         hindi: hindi,
         dark: dark,
       );
@@ -521,7 +469,6 @@ void main() {
       StaffTicketDetail(id: '5'),
       StaffTicketDetail(id: '8'),
       StaffRaiseForm(desk: 'provider'),
-      StaffQueryDetail(id: '61'),
     ]) {
       await pump(tester, w, text: 2, size: const Size(360, 5000));
       expect(tester.takeException(), isNull);

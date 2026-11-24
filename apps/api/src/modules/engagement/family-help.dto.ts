@@ -267,9 +267,9 @@ export const STAFF_STANDARD_QUESTIONS: readonly StandardQuestion[] = [
     question: 'How do I answer a family query?',
     questionHi: 'परिवार के प्रश्न का उत्तर कैसे दूँ?',
     answer:
-      'Queries lists the queries of your sections; reply, add an internal note, or close with a decision. Leave requests are approved the same way.',
+      'Queries lists the queries of your sections; reply, add an internal note, hand it over or close it. A student’s leave is approved under Student leave.',
     answerHi:
-      'प्रश्न आपके अनुभागों के प्रश्न दिखाता है; उत्तर दें, आंतरिक टिप्पणी जोड़ें, या निर्णय के साथ बंद करें। अवकाश अनुरोध भी ऐसे ही स्वीकृत होते हैं।',
+      'प्रश्न आपके अनुभागों के प्रश्न दिखाता है; उत्तर दें, आंतरिक टिप्पणी जोड़ें, आगे सौंपें या बंद करें। विद्यार्थी की छुट्टी “विद्यार्थी अवकाश” में स्वीकृत होती है।',
   },
   {
     key: 's_meeting',

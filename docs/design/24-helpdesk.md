@@ -95,3 +95,12 @@ the page.
   search, **Open <screen>** (the app's own screen), "Was this helpful?"; the next step for anything else is a staff
   query.
 - Tests: `apps/api/test/staff-help.e2e-spec.ts`; app `test/assistant_help_test.dart` (staff Help).
+
+### Student leave is not in Queries (24 Nov 2026)
+
+The staff website's and the staff app's **Queries** had a third tab, **Leave requests**: the families' leave-type
+queries (`kind = 'leave'`, sprint 10). Families no longer raise leave as a query (the parent website's and the app's
+new-request forms send them to Attendance → Leave, decided under **Student leave** with its approval levels), so the
+tab only showed old ones and duplicated Student leave. At the user's ask it is gone from both: Queries has **To answer**
+and **My requests**; an old `?tab=leave` link opens To answer. A leftover open leave query is closed by the office under
+Parent engagement → Leave requests (admin). The staff website's `/queries/<id>` page stays (helpdesk alerts link to it).

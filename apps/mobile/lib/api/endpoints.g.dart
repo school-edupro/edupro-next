@@ -1163,22 +1163,6 @@ class EduProApi {
   /// GET /helpdesk/assignees
   Future<dynamic> helpdeskAssignees() =>
       _t.send('GET', '/helpdesk/assignees');
-
-  /// GET /engagement/queries — Queries, complaints and leave requests visible to the viewer (scoped for teachers)
-  Future<dynamic> engagementList({String? status, String? kind, String? categoryCode, String? studentId, String? q, String? order, int? page, int? size}) =>
-      _t.send('GET', '/engagement/queries', query: {if (status != null) 'status': status, if (kind != null) 'kind': kind, if (categoryCode != null) 'categoryCode': categoryCode, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (order != null) 'order': order, if (page != null) 'page': page, if (size != null) 'size': size});
-
-  /// GET /engagement/queries/{id}
-  Future<dynamic> engagementGet({required String id}) =>
-      _t.send('GET', '/engagement/queries/${Uri.encodeComponent(id)}');
-
-  /// POST /engagement/queries/{id}/responses — Staff reply (or internal note); a reply marks the query answered and notifies the family
-  Future<dynamic> engagementRespond({required RespondDto body, required String id}) =>
-      _t.send('POST', '/engagement/queries/${Uri.encodeComponent(id)}/responses', body: body.toJson());
-
-  /// POST /engagement/queries/{id}/close
-  Future<dynamic> engagementClose({required QueryCloseDto body, required String id}) =>
-      _t.send('POST', '/engagement/queries/${Uri.encodeComponent(id)}/close', body: body.toJson());
 }
 
 /** The OtpStartDto the API takes. */
@@ -2643,16 +2627,5 @@ class RateTicketDto {
   Map<String, Object?> toJson() => {
         'rating': rating,
         if (comment != null) 'comment': comment,
-      };
-}
-
-/** The QueryCloseDto the API takes. */
-class QueryCloseDto {
-  const QueryCloseDto({this.decision, this.note});
-  final String? decision;
-  final String? note;
-  Map<String, Object?> toJson() => {
-        if (decision != null) 'decision': decision,
-        if (note != null) 'note': note,
       };
 }

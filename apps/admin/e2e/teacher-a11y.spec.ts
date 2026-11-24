@@ -6,7 +6,6 @@ const BASE = 'http://localhost:3002';
 const PAGES = [
   '/',
   '/queries',
-  '/queries?tab=leave',
   '/queries?tab=mine',
   '/queries/new?desk=provider',
   '/queries/t/208',

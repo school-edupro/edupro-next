@@ -18,7 +18,6 @@ extension StaffQueryWords on S {
   String _sq(String en, String hi) => hindi ? hi : en;
 
   String get sqAnswerTab => _sq('To answer', 'उत्तर देने हेतु');
-  String get sqLeaveTab => _sq('Leave requests', 'अवकाश अनुरोध');
   String get sqMineTab => _sq('My requests', 'मेरे अनुरोध');
   String get sqShowClosed => _sq('Show closed', 'बंद दिखाएँ');
   String get sqRaiseStaff => _sq('Raise a staff query', 'स्टाफ़ प्रश्न भेजें');
@@ -26,7 +25,6 @@ extension StaffQueryWords on S {
   String get sqNoneAnswer => _sq('Nothing waiting for you.', 'आपके लिए कुछ प्रतीक्षा में नहीं।');
   String get sqNoneMine =>
       _sq('You have not raised anything yet.', 'आपने अभी तक कुछ नहीं भेजा है।');
-  String get sqNoLeave => _sq('No leave requests.', 'कोई अवकाश अनुरोध नहीं।');
   String get sqNotYours => _sq(
     'Answering queries is not part of your role.',
     'प्रश्नों का उत्तर देना आपकी भूमिका में नहीं है।',
@@ -100,22 +98,6 @@ extension StaffQueryWords on S {
     'rated' => _sq('Rated', 'रेटिंग दी'),
     _ => kind,
   };
-  // a family's leave query
-  String get sqReplyFamily => _sq(
-    'Your reply to the family (or a closing note)',
-    'परिवार को आपका उत्तर (या समापन टिप्पणी)',
-  );
-  String get sqInternalFamily =>
-      _sq('Internal note (hidden from the family)', 'आंतरिक टिप्पणी (परिवार से छिपी)');
-  String get sqDecision => _sq('Leave decision (when closing)', 'अवकाश निर्णय (बंद करते समय)');
-  String get sqApprove => _sq('Approve', 'स्वीकृत करें');
-  String get sqReject => _sq('Reject', 'अस्वीकार करें');
-  String get sqSendReply => _sq('Send reply', 'उत्तर भेजें');
-  String get sqClose => _sq('Close', 'बंद करें');
-  String get sqFamilyNotified =>
-      _sq('Saved. The family has been notified.', 'सहेजा गया। परिवार को सूचित कर दिया गया।');
-  String sqFamilyRated(Object n) => _sq('The family rated this $n/5.', 'परिवार ने इसे $n/5 दिया।');
-  String get sqFamily => _sq('Family', 'परिवार');
 }
 
 /// A list of tickets: `(profile, view, closed)` — view `answer` (handed to me, not raised by me) or `mine`.
@@ -145,31 +127,8 @@ final staffTicketsProvider = FutureProvider.autoDispose
       return Loaded(asJson(r.data), r.at, stale: r.stale);
     });
 
-/// The families' leave queries to decide: `(profile, closed)`; none when it is not the person's role.
-final staffLeaveQueriesProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profile, bool)>((
-  ref,
-  k,
-) async {
-  final (p, closed) = k;
-  final r = await cached('staff-leave-queries:${p.id}:$closed', () async {
-    try {
-      return await ref
-          .read(apiProvider)
-          .engagementList(kind: 'leave', size: 100, status: closed ? null : 'open');
-    } on ApiException catch (e) {
-      if (e.status == 403) return const {'data': <Object>[]};
-      rethrow;
-    }
-  });
-  return Loaded(asJson(r.data), r.at, stale: r.stale);
-});
-
 final staffTicketProvider = FutureProvider.autoDispose.family<Json, String>(
   (ref, id) async => asJson(await ref.read(apiProvider).helpdeskGet(id: id)),
-);
-
-final staffQueryProvider = FutureProvider.autoDispose.family<Json, String>(
-  (ref, id) async => asJson(await ref.read(apiProvider).engagementGet(id: id)),
 );
 
 final _headsProvider = FutureProvider.autoDispose.family<List<Json>, String>(
@@ -193,9 +152,9 @@ String _when(S s, Object? v) {
 String _who(Json t) => '${t['assignedTo'] ?? t['assignedRoleName'] ?? '—'}';
 
 /// Queries and helpdesk as on the staff website: queries to answer (the families of my sections and anything
-/// handed to me), the families' leave requests to decide, and my own staff queries and tickets to the ERP
-/// provider — each in full on its own screen, with replies, files, handing over, closing, reopening and rating.
-/// No web page.
+/// handed to me) and my own staff queries and tickets to the ERP provider — each in full on its own screen, with
+/// replies, files, handing over, closing, reopening and rating. No web page. Student leave is decided under Student
+/// leave (families apply for it under Attendance), not here.
 class StaffQueriesScreen extends ConsumerStatefulWidget {
   const StaffQueriesScreen({super.key, required this.profile, this.initialTab = 0});
   final Profile profile;
@@ -260,8 +219,8 @@ class _StaffQueriesScreenState extends ConsumerState<StaffQueriesScreen> {
       ],
     );
     return DefaultTabController(
-      length: 3,
-      initialIndex: widget.initialTab.clamp(0, 2),
+      length: 2,
+      initialIndex: widget.initialTab.clamp(0, 1),
       child: Column(
         children: [
           Material(
@@ -272,7 +231,6 @@ class _StaffQueriesScreenState extends ConsumerState<StaffQueriesScreen> {
               tabAlignment: TabAlignment.start,
               tabs: [
                 Tab(text: s.sqAnswerTab),
-                Tab(text: s.sqLeaveTab),
                 Tab(text: s.sqMineTab),
               ],
             ),
@@ -281,7 +239,6 @@ class _StaffQueriesScreenState extends ConsumerState<StaffQueriesScreen> {
             child: TabBarView(
               children: [
                 _Tickets(profile: widget.profile, view: 'answer', closed: _closed, head: head),
-                _LeaveQueries(profile: widget.profile, closed: _closed, head: head),
                 _Tickets(profile: widget.profile, view: 'mine', closed: _closed, head: head),
               ],
             ),
@@ -384,63 +341,6 @@ class _TicketCard extends ConsumerWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _LeaveQueries extends ConsumerWidget {
-  const _LeaveQueries({required this.profile, required this.closed, required this.head});
-  final Profile profile;
-  final bool closed;
-  final Widget Function() head;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(stringsProvider);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
-    final key = (profile, closed);
-    return LoadedList<Json>(
-      value: ref.watch(staffLeaveQueriesProvider(key)),
-      refresh: () => ref.refresh(staffLeaveQueriesProvider(key).future),
-      children: (d) {
-        final rows = asList(d['data']);
-        return [
-          head(),
-          if (rows.isEmpty) Notice(text: s.sqNoLeave),
-          for (final q in rows)
-            Card(
-              key: Key('sqLeave-${q['id']}'),
-              margin: const EdgeInsets.only(bottom: Tokens.sp2),
-              child: InkWell(
-                onTap: () =>
-                    pushPage(context, '${q['number']}', StaffQueryDetail(id: '${q['id']}')),
-                child: Padding(
-                  padding: const EdgeInsets.all(Tokens.sp3),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${q['subject']}',
-                        style: const TextStyle(fontWeight: Tokens.fwSemibold),
-                      ),
-                      Text(
-                        [
-                          q['number'],
-                          '${q['studentName'] ?? ''}${q['section'] != null ? ' (${q['section']})' : ''}',
-                          '${s.date('${q['leaveFrom'] ?? ''}')} → ${s.date('${q['leaveTo'] ?? ''}')}',
-                        ].join(' · '),
-                        style: TextStyle(color: muted, fontSize: 13),
-                      ),
-                      const SizedBox(height: Tokens.sp1),
-                      StatusChip(s.qryStatus('${q['status']}'), queryStatusTone('${q['status']}')),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ];
-      },
     );
   }
 }
@@ -1028,250 +928,6 @@ class _StaffTicketDetailState extends ConsumerState<StaffTicketDetail> {
                   '• ${s.sqEvent('${e['kind']}')}${e['to'] != null ? ' ${e['to']}' : ''} · ${_when(s, e['at'])}',
                 ),
               ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// A family's leave query in full, as on the staff website: what they wrote and the days, the replies (internal
-/// notes marked); reply, or close it with the leave decision. The family is told.
-class StaffQueryDetail extends ConsumerStatefulWidget {
-  const StaffQueryDetail({super.key, required this.id});
-  final String id;
-
-  @override
-  ConsumerState<StaffQueryDetail> createState() => _StaffQueryDetailState();
-}
-
-class _StaffQueryDetailState extends ConsumerState<StaffQueryDetail> {
-  final _body = TextEditingController();
-  bool _internal = false;
-  String _decision = 'approved';
-  bool _saved = false;
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _body.dispose();
-    super.dispose();
-  }
-
-  Future<void> _act(bool close) async {
-    final s = ref.read(stringsProvider);
-    final api = ref.read(apiProvider);
-    final body = _body.text.trim();
-    if (!close && body.isEmpty) return setState(() => _error = s.qryNeedDetails);
-    setState(() {
-      _busy = true;
-      _error = null;
-      _saved = false;
-    });
-    try {
-      final q = ref.read(staffQueryProvider(widget.id)).value ?? const {};
-      if (close) {
-        await api.engagementClose(
-          id: widget.id,
-          body: QueryCloseDto(
-            decision: q['kind'] == 'leave' ? _decision : null,
-            note: body.isEmpty ? null : body,
-          ),
-        );
-      } else {
-        await api.engagementRespond(
-          id: widget.id,
-          body: RespondDto(body: body, isInternal: _internal),
-        );
-      }
-      ref.invalidate(staffQueryProvider(widget.id));
-      ref.invalidate(staffLeaveQueriesProvider);
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _saved = true;
-          _body.clear();
-          _internal = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = errorText(s, e);
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ref.watch(stringsProvider);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
-    return AsyncBody<Json>(
-      value: ref.watch(staffQueryProvider(widget.id)),
-      retry: () => ref.invalidate(staffQueryProvider(widget.id)),
-      data: (q) {
-        final status = '${q['status']}';
-        final leave = q['kind'] == 'leave';
-        return ListView(
-          key: const Key('sqQueryDetail'),
-          padding: const EdgeInsets.all(Tokens.sp4),
-          children: [
-            Text(
-              [
-                q['number'],
-                s.qryKind('${q['kind']}'),
-                q['categoryName'],
-              ].where((x) => x != null).join(' · '),
-              style: TextStyle(color: muted, fontSize: 14),
-            ),
-            Text(
-              '${q['subject'] ?? ''}',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: Tokens.fwBold),
-            ),
-            Text(
-              [
-                '${q['studentName'] ?? ''}${q['section'] != null ? ' (${q['section']})' : ''}',
-                if (q['raisedBy'] != null) q['raisedBy'],
-                _when(s, q['openedAt']),
-              ].join(' · '),
-              style: TextStyle(color: muted, fontSize: 13),
-            ),
-            const SizedBox(height: Tokens.sp2),
-            Wrap(
-              spacing: Tokens.sp1,
-              runSpacing: Tokens.sp1,
-              children: [
-                StatusChip(s.qryStatus(status), queryStatusTone(status)),
-                if (q['decision'] != null)
-                  StatusChip(
-                    s.qryDecision('${q['decision']}'),
-                    q['decision'] == 'approved' ? Tone.success : Tone.danger,
-                  ),
-              ],
-            ),
-            if (_saved) ...[
-              const SizedBox(height: Tokens.sp3),
-              Notice(key: const Key('sqQuerySaved'), text: s.sqFamilyNotified),
-            ],
-            if (_error != null) ...[const SizedBox(height: Tokens.sp3), ErrorText(_error!)],
-            const SizedBox(height: Tokens.sp3),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(Tokens.sp4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SelectionArea(child: Text('${q['body'] ?? ''}')),
-                    if (leave)
-                      Padding(
-                        padding: const EdgeInsets.only(top: Tokens.sp2),
-                        child: Text(
-                          s.qryLeave(s.date(q['leaveFrom'] ?? ''), s.date(q['leaveTo'] ?? '')),
-                          style: TextStyle(color: muted, fontSize: 13),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            for (final r in asList(q['responses']))
-              Card(
-                key: Key('sqResponse-${r['id']}'),
-                shape: r['isInternal'] == true
-                    ? RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(Tokens.radiusMd),
-                        side: const BorderSide(color: Tokens.statusWarning, width: 2),
-                      )
-                    : null,
-                child: Padding(
-                  padding: const EdgeInsets.all(Tokens.sp4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Wrap(
-                        spacing: Tokens.sp1,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            '${r['author'] ?? (r['authorKind'] == 'staff' ? '' : s.sqFamily)} · ${_when(s, r['createdAt'])}',
-                            style: TextStyle(color: muted, fontSize: 13),
-                          ),
-                          if (r['isInternal'] == true)
-                            Tag(s.sqInternalTag, color: Tokens.mobAmber50),
-                        ],
-                      ),
-                      SelectionArea(child: Text('${r['body'] ?? ''}')),
-                    ],
-                  ),
-                ),
-              ),
-            if (status != 'closed') ...[
-              SectionTitle(s.qryReply),
-              TextField(
-                key: const Key('sqQueryText'),
-                controller: _body,
-                maxLines: 4,
-                maxLength: 4000,
-                decoration: InputDecoration(
-                  labelText: s.sqReplyFamily,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              CheckboxListTile(
-                key: const Key('sqQueryInternal'),
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _internal,
-                onChanged: (v) => setState(() => _internal = v ?? false),
-                title: Text(s.sqInternalFamily),
-              ),
-              if (leave) ...[
-                const SizedBox(height: Tokens.sp2),
-                DropdownMenu<String>(
-                  key: const Key('sqDecision'),
-                  label: Text(s.sqDecision),
-                  trailingIcon: dropArrow(s.sqDecision),
-                  selectedTrailingIcon: dropArrow(s.sqDecision, open: true),
-                  expandedInsets: EdgeInsets.zero,
-                  enableFilter: true,
-                  enableSearch: true,
-                  requestFocusOnTap: true,
-                  initialSelection: _decision,
-                  onSelected: (v) => setState(() => _decision = v ?? 'approved'),
-                  dropdownMenuEntries: [
-                    DropdownMenuEntry(value: 'approved', label: s.sqApprove),
-                    DropdownMenuEntry(value: 'rejected', label: s.sqReject),
-                  ],
-                ),
-              ],
-              const SizedBox(height: Tokens.sp3),
-              Wrap(
-                spacing: Tokens.sp2,
-                runSpacing: Tokens.sp2,
-                children: [
-                  FilledButton(
-                    key: const Key('sqQueryReply'),
-                    onPressed: _busy ? null : () => _act(false),
-                    child: Text(s.sqSendReply),
-                  ),
-                  OutlinedButton(
-                    key: const Key('sqQueryClose'),
-                    onPressed: _busy ? null : () => _act(true),
-                    child: Text(s.sqClose),
-                  ),
-                ],
-              ),
-            ] else if (q['rating'] != null) ...[
-              const SizedBox(height: Tokens.sp3),
-              Text(
-                s.sqFamilyRated(q['rating'] as Object),
-                style: TextStyle(color: muted, fontSize: 14),
-              ),
-            ],
           ],
         );
       },

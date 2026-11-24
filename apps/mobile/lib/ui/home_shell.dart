@@ -149,12 +149,9 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/bus-attendance' => BusAttendanceScreen(profile: p),
       // gate passes as on the staff website: those waiting on me to approve, my own RGP / NRGP, apply, the card
       '/gate-passes' => StaffGatePassesScreen(profile: p),
-      // queries and helpdesk as on the staff website: to answer, the families' leave requests, my own (a staff
-      // query, a ticket to the ERP provider), each in full with replies, files, hand over, close, reopen, rate
-      '/queries' => StaffQueriesScreen(
-        profile: p,
-        initialTab: href.contains('tab=leave') ? 1 : (href.contains('tab=mine') ? 2 : 0),
-      ),
+      // queries and helpdesk as on the staff website: to answer and my own (a staff query, a ticket to the ERP
+      // provider), each in full with replies, files, hand over, close, reopen, rate (student leave: /leaves)
+      '/queries' => StaffQueriesScreen(profile: p, initialTab: href.contains('tab=mine') ? 1 : 0),
       // appointments with me as on the staff website: today, still to come, past, and the week calendar
       '/appointments' => StaffAppointmentsScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)

@@ -23,18 +23,6 @@ interface Ticket {
   assignedRoleName: string | null;
   openedAt: string;
 }
-interface Leave {
-  id: string;
-  number: string;
-  studentName: string;
-  section: string | null;
-  raisedBy: string | null;
-  subject: string;
-  status: Status;
-  leaveFrom: string | null;
-  leaveTo: string | null;
-  openedAt: string;
-}
 const LABEL: Record<Status, string> = {
   open: 'Open',
   in_progress: 'In progress',
@@ -55,8 +43,9 @@ const DESK: Record<Ticket['desk'], string> = {
 };
 
 /**
- * The teacher's helpdesk: queries to answer (families of their sections and anything handed to them),
- * leave requests to decide, and their own staff queries and tickets to the ERP provider.
+ * The teacher's helpdesk: queries to answer (families of their sections and anything handed to them) and their own
+ * staff queries and tickets to the ERP provider. Student leave is decided under Student leave (`/leaves`), not here:
+ * families apply for leave under Attendance.
  */
 export default async function QueriesPage({
   searchParams,
@@ -65,37 +54,22 @@ export default async function QueriesPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
-  const tab = sp.tab === 'leave' || sp.tab === 'mine' ? sp.tab : 'answer';
+  const tab = sp.tab === 'mine' ? 'mine' : 'answer';
   const closed = sp.closed === '1';
   let tickets: Ticket[] = [];
-  let leaves: Leave[] = [];
   try {
-    if (tab === 'leave')
-      leaves = (
-        await bff.api
-          .fetch<{ data: Leave[] }>(
-            `/engagement/queries?kind=leave&size=100${closed ? '' : '&status=open'}`,
-          )
-          .catch((error: unknown) => {
-            if (error instanceof ApiError && error.status === 403) return { data: [] as Leave[] };
-            throw error;
-          })
-      ).data;
-    else {
-      const me = await bff.api.me();
-      tickets = (
-        await bff.api.fetch<{ data: Ticket[] }>(
-          `/helpdesk/tickets?size=100&view=${tab === 'mine' ? 'mine' : 'all'}&status=${closed ? 'closed' : 'active'}`,
-        )
-      ).data.filter((x) => tab === 'mine' || x.raisedByUserId !== me.user.id);
-    }
+    const me = await bff.api.me();
+    tickets = (
+      await bff.api.fetch<{ data: Ticket[] }>(
+        `/helpdesk/tickets?size=100&view=${tab === 'mine' ? 'mine' : 'all'}&status=${closed ? 'closed' : 'active'}`,
+      )
+    ).data.filter((x) => tab === 'mine' || x.raisedByUserId !== me.user.id);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     throw error;
   }
   const tabs: Array<[string, string]> = [
     ['answer', t(lang, 'To answer')],
-    ['leave', t(lang, 'Leave requests')],
     ['mine', t(lang, 'My requests')],
   ];
   return (
@@ -143,35 +117,7 @@ export default async function QueriesPage({
           {closed ? t(lang, 'Show open') : t(lang, 'Show closed')}
         </a>
       </nav>
-      {tab === 'leave' ? (
-        leaves.length === 0 ? (
-          <Card>{t(lang, 'No leave requests.')}</Card>
-        ) : (
-          leaves.map((q) => (
-            <a key={q.id} href={`/queries/${q.id}`} style={{ textDecoration: 'none' }}>
-              <Card elevated style={{ marginBottom: 'var(--sp-3)' }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 'var(--sp-2)',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div>
-                    <div className="ep-hdt__title">{q.subject}</div>
-                    <div className="ep-kicker">
-                      {q.number} · {q.studentName}
-                      {q.section ? ` (${q.section})` : ''} · {q.leaveFrom} → {q.leaveTo}
-                    </div>
-                  </div>
-                  <Badge tone={TONE[q.status]}>{t(lang, LABEL[q.status])}</Badge>
-                </div>
-              </Card>
-            </a>
-          ))
-        )
-      ) : tickets.length === 0 ? (
+      {tickets.length === 0 ? (
         <Card>
           {tab === 'mine'
             ? t(lang, 'You have not raised anything yet.')
