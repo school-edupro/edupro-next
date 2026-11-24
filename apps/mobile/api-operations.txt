@@ -273,6 +273,10 @@ LibraryController_portalReserve
 LibraryController_portalCancel
 LibraryController_mine
 LibraryController_myDigital
+# My day (the daily activity log) as on the staff website: the day, save or submit, my log as Excel or PDF
+ActivityLogController_mine
+ActivityLogController_save
+ActivityLogController_myReport !file
 GatePassController_mine
 GatePassController_mineApply
 GatePassController_mineOptions

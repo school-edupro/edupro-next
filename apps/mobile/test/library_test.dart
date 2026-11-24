@@ -39,6 +39,17 @@ const unlinked = Profile(
 
 const base = '/library/portal/borrowers/student/41';
 
+/// A staff member: their own library, found through the library summary (as the staff website).
+const staffer = Profile(
+  id: 'staff:7',
+  kind: 'staff',
+  schoolId: '7',
+  schoolName: 'Sample School',
+  name: 'Asha Teacher',
+  app: 'teacher',
+);
+const staffBase = '/library/portal/borrowers/employee/36';
+
 /// What the fake library answers; [empty]: a child who never borrowed; [missing]: not this family's child.
 class Lib {
   Lib({this.empty = false, this.missing = false});
@@ -266,8 +277,20 @@ class Lib {
     };
   }
 
+  /// a staff sign-in with no staff record
+  bool noStaff = false;
+
   dynamic answer(Call c) {
-    final key = '${c.method} ${c.path}';
+    if (c.method == 'GET' && c.path == '/library/portal/summary') {
+      return {
+        'people': [
+          if (!noStaff) {'kind': 'employee', 'id': '36', 'name': 'Asha Teacher'},
+        ],
+      };
+    }
+    // the staff member's own borrower answers as the child's does
+    final path = c.path.startsWith(staffBase) ? c.path.replaceFirst(staffBase, base) : c.path;
+    final key = '${c.method} $path';
     switch (key) {
       case 'GET $base':
         if (missing) throw const ApiException(404, 'not-found', 'Borrower not found');
@@ -712,6 +735,34 @@ void main() {
     await pumpLibrary(tester, Lib(missing: true));
     expect(
       find.text('Your account is not linked to a student yet. Please contact the school office.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('staff: my own books (the staff borrower from the summary); reserving as staff', (
+    tester,
+  ) async {
+    await tall(tester);
+    final t = await pumpLibrary(tester, Lib(), profile: staffer);
+    expect(t.calls.where((c) => c.path == '/library/portal/summary'), hasLength(1));
+    expect(t.calls.where((c) => c.path == staffBase), isNotEmpty);
+    expect(t.calls.where((c) => c.path.startsWith('/library/portal/borrowers/student')), isEmpty);
+    await tab(tester, 'find');
+    // the staff member's own words (not "your child")
+    expect(find.text('You have this book'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('libReserve-t9')));
+    await tester.pumpAndSettle();
+    expect(last(t, '/library/portal/reservations').body, {
+      'borrowerKind': 'employee',
+      'borrowerId': '36',
+      'titleId': 't9',
+    });
+  });
+
+  testWidgets('staff with no staff record: the staff website\'s line', (tester) async {
+    await pumpLibrary(tester, Lib()..noStaff = true, profile: staffer);
+    expect(
+      find.text('Your sign-in is not linked to a staff record. Please contact the school office.'),
       findsOneWidget,
     );
   });

@@ -30,6 +30,7 @@ import '../family/data.dart' show unreadProvider;
 import '../family/today.dart';
 import '../staff/appointments.dart' show StaffAppointmentsScreen;
 import '../staff/bus_attendance.dart' show BusAttendanceScreen;
+import '../staff/activity_log.dart' show ActivityLogScreen;
 import '../staff/queries.dart' show StaffQueriesScreen;
 import '../staff/student_leave.dart' show StudentLeaveScreen;
 import '../staff/gate_passes.dart' show StaffGatePassesScreen;
@@ -154,6 +155,10 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/queries' => StaffQueriesScreen(profile: p, initialTab: href.contains('tab=mine') ? 1 : 0),
       // appointments with me as on the staff website: today, still to come, past, and the week calendar
       '/appointments' => StaffAppointmentsScreen(profile: p),
+      // my library books as on the staff website: books now, read before, find a book, reservations, digital
+      '/library' => LibraryScreen(profile: p),
+      // My day (the daily activity log) as on the staff website: the day's slots, leave, draft or submit, my log
+      '/activity-log' => ActivityLogScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
       '/assistant' => AssistantScreen(profile: p),
       // Help for staff kept on Helpdesk set-up, as on the staff website: headings, search, the screen, helpful?

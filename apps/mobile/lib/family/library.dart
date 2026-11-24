@@ -25,6 +25,10 @@ extension LibraryWords on S {
     'Books on loan, when they are due, books read before, and reservations. Find a book and see if it is on the shelf.',
     'उधार ली गई किताबें, वे कब लौटानी हैं, पहले पढ़ी गई किताबें और आरक्षण। कोई किताब खोजें और देखें कि वह शेल्फ़ पर है या नहीं।',
   );
+  String get libNotLinkedStaff => _lw(
+    'Your sign-in is not linked to a staff record. Please contact the school office.',
+    'आपका साइन-इन किसी कर्मचारी रिकॉर्ड से नहीं जुड़ा है। कृपया विद्यालय कार्यालय से संपर्क करें।',
+  );
   String get libNotLinked => _lw(
     'Your account is not linked to a student yet. Please contact the school office.',
     'आपका खाता अभी किसी विद्यार्थी से नहीं जुड़ा है। कृपया विद्यालय कार्यालय से संपर्क करें।',
@@ -197,18 +201,42 @@ Future<List<Json>> _digital(EduProApi api) async {
   }
 }
 
-/// The child's library, as the website's Library page reads it: the borrower (books now, reservations, dues), the
-/// figures from the first page of the history, and the digital library: `{mine, history, digital}`. Null when the
-/// account is not linked to the child (no student, or the API says the borrower is not theirs).
+/// Whose library: the child's (`student`, the profile's pupil) or, on a staff profile, the staff member's own
+/// (`employee`, the one borrower the library summary names), as the staff website finds it. Null: not linked.
+final libraryBorrowerProvider = FutureProvider.autoDispose.family<(String, String)?, Profile>((
+  ref,
+  p,
+) async {
+  if (!p.isStaff) return p.studentId == null ? null : ('student', p.studentId!);
+  try {
+    final r = await cached(
+      'library-borrower:${p.id}',
+      () => ref.read(apiProvider).libraryPortalSummary(),
+    );
+    for (final x in asList(asJson(r.data)['people'])) {
+      if (x['kind'] == 'employee') return ('employee', '${x['id']}');
+    }
+    return null;
+  } on ApiException catch (e) {
+    if (e.status == 403 || e.status == 404) return null;
+    rethrow;
+  }
+});
+
+/// The library of the child (or, on a staff profile, the staff member's own), as the website's Library page reads
+/// it: the borrower (books now, reservations, dues), the figures from the first page of the history, and the digital
+/// library: `{mine, history, digital}`. Null when the account is not linked (no student or staff record, or the API
+/// says the borrower is not theirs).
 final libraryProvider = FutureProvider.autoDispose.family<Loaded<Json?>, Profile>((ref, p) async {
-  final id = p.studentId;
-  if (id == null) return Loaded<Json?>(null, DateTime.now());
+  final who = await ref.watch(libraryBorrowerProvider(p).future);
+  if (who == null) return Loaded<Json?>(null, DateTime.now());
+  final (kind, id) = who;
   final api = ref.read(apiProvider);
   try {
     final r = await cached('library:${p.id}', () async {
       final got = await Future.wait<dynamic>([
-        api.libraryPortalBorrower(kind: 'student', id: id),
-        api.libraryPortalHistory(kind: 'student', id: id, status: 'all', page: 1),
+        api.libraryPortalBorrower(kind: kind, id: id),
+        api.libraryPortalHistory(kind: kind, id: id, status: 'all', page: 1),
         _digital(api),
       ]);
       return {'mine': got[0], 'history': got[1], 'digital': got[2]};
@@ -225,13 +253,14 @@ final libraryProvider = FutureProvider.autoDispose.family<Loaded<Json?>, Profile
 final libraryHistoryProvider = FutureProvider.autoDispose
     .family<Loaded<Json>, (Profile, String, String, String, String, int)>((ref, a) async {
       final (p, from, to, status, q, page) = a;
+      final (kind, id) = await ref.watch(libraryBorrowerProvider(p).future) ?? ('student', '');
       final r = await cached(
         'libraryHistory:${p.id}:$from:$to:$status:$q:$page',
         () => ref
             .read(apiProvider)
             .libraryPortalHistory(
-              kind: 'student',
-              id: p.studentId ?? '',
+              kind: kind,
+              id: id,
               from: from.isEmpty ? null : from,
               to: to.isEmpty ? null : to,
               status: status,
@@ -289,7 +318,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   final _search = TextEditingController();
 
   Profile get _p => widget.profile;
-  bool get _self => _p.kind == 'student';
+  bool get _self => _p.kind == 'student' || _p.isStaff;
   bool get _filtered => _from != null || _to != null || _status != 'all' || _q.isNotEmpty;
 
   /// the history as the main page has it (no filter, page 1): no call of its own
@@ -392,17 +421,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
   }
 
-  Future<ApiFile> _export(String format) => ref
-      .read(apiProvider)
-      .libraryPortalHistoryExport(
-        kind: 'student',
-        id: _p.studentId ?? '',
-        from: _from == null ? null : ymd(_from!),
-        to: _to == null ? null : ymd(_to!),
-        status: _status,
-        q: _q.isEmpty ? null : _q,
-        format: format,
-      );
+  Future<ApiFile> _export(String format) async {
+    final (kind, id) = await ref.read(libraryBorrowerProvider(_p).future) ?? ('student', '');
+    return ref
+        .read(apiProvider)
+        .libraryPortalHistoryExport(
+          kind: kind,
+          id: id,
+          from: _from == null ? null : ymd(_from!),
+          to: _to == null ? null : ymd(_to!),
+          status: _status,
+          q: _q.isEmpty ? null : _q,
+          format: format,
+        );
+  }
 
   /// The child, the help line, a message, and the six figures: above every tab.
   List<Widget> _head(S s, Color muted, Json? d) {
@@ -480,7 +512,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         return ref.refresh(libraryProvider(_p).future);
       },
       children: (d) {
-        if (d == null) return [EmptyLine(s.libNotLinked)];
+        if (d == null) return [EmptyLine(_p.isStaff ? s.libNotLinkedStaff : s.libNotLinked)];
         final mine = asJson(d['mine']);
         final first = asJson(d['history']);
         final now = asList(mine['now']);
@@ -1115,7 +1147,7 @@ class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen>
   String? _error;
 
   Profile get _p => widget.profile;
-  bool get _self => _p.kind == 'student';
+  bool get _self => _p.kind == 'student' || _p.isStaff;
   (Profile, String, int) get _key => (_p, _q, _page);
 
   @override
@@ -1133,8 +1165,9 @@ class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen>
 
   Future<void> _reserve(String titleId) async {
     final s = ref.read(stringsProvider);
-    final id = _p.studentId;
-    if (id == null) return;
+    final who = await ref.read(libraryBorrowerProvider(_p).future);
+    if (who == null) return;
+    final (kind, id) = who;
     setState(() {
       _busy.add(titleId);
       _message = null;
@@ -1144,7 +1177,7 @@ class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen>
       await ref
           .read(apiProvider)
           .libraryPortalReserve(
-            body: PortalReserveDto(borrowerKind: 'student', borrowerId: id, titleId: titleId),
+            body: PortalReserveDto(borrowerKind: kind, borrowerId: id, titleId: titleId),
           );
       if (!mounted) return;
       _message = s.libReservedMsg(_self);
@@ -1292,7 +1325,8 @@ class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen>
                       style: const TextStyle(fontWeight: Tokens.fwSemibold),
                     )
                   : StatusChip(s.libReservedTag, Tone.info),
-            ] else if (b['canReserve'] == true && _p.studentId != null)
+            ] else if (b['canReserve'] == true &&
+                ref.watch(libraryBorrowerProvider(_p)).value != null)
               Align(
                 alignment: AlignmentDirectional.centerEnd,
                 child: FilledButton(

@@ -916,6 +916,18 @@ class EduProApi {
   Future<dynamic> libraryMyDigital() =>
       _t.send('GET', '/library/mine/digital');
 
+  /// GET /staff/activity/mine — My activity log of a day, with what the timetable already knows
+  Future<dynamic> activityLogMine({String? date}) =>
+      _t.send('GET', '/staff/activity/mine', query: {if (date != null) 'date': date});
+
+  /// PUT /staff/activity/mine — Save my day as a draft, or submit it
+  Future<dynamic> activityLogSave({required SaveLogDto body}) =>
+      _t.send('PUT', '/staff/activity/mine', body: body.toJson());
+
+  /// GET /staff/activity/mine/report — My own log between two dates, as Excel or PDF
+  Future<ApiFile> activityLogMyReport({String? from, String? to, String? format, String? wrap}) =>
+      _t.file('GET', '/staff/activity/mine/report', query: {if (from != null) 'from': from, if (to != null) 'to': to, if (format != null) 'format': format, if (wrap != null) 'wrap': wrap});
+
   /// GET /gate-passes/mine — My children's gate passes, latest first (or between two days)
   Future<dynamic> gatePassMine({String? state, String? studentId, String? q, String? from, String? to, int? page, int? size}) =>
       _t.send('GET', '/gate-passes/mine', query: {if (state != null) 'state': state, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
@@ -2303,6 +2315,55 @@ class PortalReserveDto {
         'borrowerKind': borrowerKind,
         'borrowerId': borrowerId,
         'titleId': titleId,
+      };
+}
+
+/** The SaveLogDto the API takes. */
+class SaveLogDto {
+  const SaveLogDto({required this.date, required this.entries, this.tomorrowPlan, this.pendingNote, this.leave, this.submit});
+  final String date;
+  final List<SaveLogDtoEntriesItem> entries;
+  final String? tomorrowPlan;
+  final String? pendingNote;
+  final SaveLogDtoLeave? leave;
+  final bool? submit;
+  Map<String, Object?> toJson() => {
+        'date': date,
+        'entries': entries.map((x) => x.toJson()).toList(),
+        if (tomorrowPlan != null) 'tomorrowPlan': tomorrowPlan,
+        if (pendingNote != null) 'pendingNote': pendingNote,
+        if (leave != null) 'leave': leave?.toJson(),
+        if (submit != null) 'submit': submit,
+      };
+}
+
+/** The SaveLogDtoEntriesItem the API takes. */
+class SaveLogDtoEntriesItem {
+  const SaveLogDtoEntriesItem({required this.from, required this.to, required this.categoryId, required this.description, this.source});
+  final String from;
+  final String to;
+  final String categoryId;
+  final String description;
+  final String? source;
+  Map<String, Object?> toJson() => {
+        'from': from,
+        'to': to,
+        'categoryId': categoryId,
+        'description': description,
+        if (source != null) 'source': source,
+      };
+}
+
+/** The SaveLogDtoLeave the API takes. */
+class SaveLogDtoLeave {
+  const SaveLogDtoLeave({required this.kind, required this.type, this.reason});
+  final String kind;
+  final String type;
+  final String? reason;
+  Map<String, Object?> toJson() => {
+        'kind': kind,
+        'type': type,
+        if (reason != null) 'reason': reason,
       };
 }
 
