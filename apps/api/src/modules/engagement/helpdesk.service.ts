@@ -727,7 +727,9 @@ export class HelpdeskService {
       await this.assertCanAnswer(c, dto.userId, dto.roleCode);
       await c.query(
         `UPDATE parent_queries SET assigned_user_id = $2, assigned_role = $3,
-                status = CASE WHEN status = 'open' THEN 'in_progress'::query_status ELSE status END, updated_at = now()
+                -- with a new person it waits on them: an answered one is in progress again
+                status = CASE WHEN status IN ('open', 'answered') THEN 'in_progress'::query_status ELSE status END,
+                updated_at = now()
           WHERE id = $1`,
         [id, dto.userId ?? null, dto.roleCode ?? null],
       );
@@ -861,7 +863,9 @@ export class HelpdeskService {
         throw new DomainError('forbidden', 'You cannot take this ticket over', { status: 403 });
       await c.query(
         `UPDATE parent_queries SET assigned_user_id = app.current_user_id(), assigned_role = CASE WHEN desk = 'provider' THEN assigned_role ELSE NULL END,
-                status = CASE WHEN status = 'open' THEN 'in_progress'::query_status ELSE status END, updated_at = now()
+                -- with a new person it waits on them: an answered one is in progress again
+                status = CASE WHEN status IN ('open', 'answered') THEN 'in_progress'::query_status ELSE status END,
+                updated_at = now()
           WHERE id = $1`,
         [id],
       );

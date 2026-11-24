@@ -543,6 +543,8 @@ class _StaffTicketDetailState extends ConsumerState<StaffTicketDetail> {
       await f();
       ref.invalidate(staffTicketProvider(widget.id));
       ref.invalidate(staffTicketsProvider);
+      // the header's Approvals lists the queries with me: read it again
+      ref.invalidate(approvalsProvider);
       if (mounted) {
         setState(() {
           _busy = false;

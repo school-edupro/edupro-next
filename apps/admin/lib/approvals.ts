@@ -156,6 +156,10 @@ const KINDS: Record<
     help: 'Leave the families applied for, waiting for your approval',
     href: '/attendance/leaves',
   },
+  query: {
+    help: 'Queries from families and staff that are with you, until you close them',
+    href: '/engagement/helpdesk',
+  },
   staff_leave: { help: 'Leave of staff waiting at your level', href: '/leave/approvals' },
   staff_leave_cancel: {
     help: 'Cancellations of approved leave waiting at your level',

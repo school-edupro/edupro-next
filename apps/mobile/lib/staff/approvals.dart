@@ -11,6 +11,7 @@ import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
 import '../ui/widgets.dart';
 import 'approval_forms.dart';
+import 'queries.dart' show StaffTicketDetail;
 import 'data.dart';
 
 /// The Approvals icon in a staff member's bar (docs/design/89 §5.4), with how many things wait for them.
@@ -139,6 +140,19 @@ class _ApprovalsScreenState extends ConsumerState<ApprovalsScreen> {
   }
 
   Future<void> _open(Json item) async {
+    if (item['kind'] == 'query') {
+      // a query with me: its own screen in the app (reply, hand over, close), as Queries opens it
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => FamilyPage(
+            title: '${item['title']}'.split(' · ').first,
+            child: StaffTicketDetail(id: '${item['id']}'),
+          ),
+        ),
+      );
+      if (mounted) ref.invalidate(approvalsProvider(widget.profile));
+      return;
+    }
     final done = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,

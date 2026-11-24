@@ -252,7 +252,10 @@ export class QueriesService {
       await this.find(c, id, false);
       await this.helpdesk.assertCan(c, ctx, id, 'assign');
       await c.query(
-        `UPDATE parent_queries SET assigned_user_id = $2, status = CASE WHEN status = 'open' THEN 'in_progress'::query_status ELSE status END, updated_at = now() WHERE id = $1`,
+        // handed over, it waits on the new person: an answered one is in progress again (as the helpdesk's hand-over)
+        `UPDATE parent_queries SET assigned_user_id = $2,
+                status = CASE WHEN status IN ('open', 'answered') THEN 'in_progress'::query_status ELSE status END,
+                updated_at = now() WHERE id = $1`,
         [id, dto.userId],
       );
       await this.audit.stage(ctx, c, {

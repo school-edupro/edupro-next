@@ -104,3 +104,21 @@ new-request forms send them to Attendance → Leave, decided under **Student lea
 tab only showed old ones and duplicated Student leave. At the user's ask it is gone from both: Queries has **To answer**
 and **My requests**; an old `?tab=leave` link opens To answer. A leftover open leave query is closed by the office under
 Parent engagement → Leave requests (admin). The staff website's `/queries/<id>` page stays (helpdesk alerts link to it).
+
+### Queries in Approvals (24 Nov 2026)
+
+At the user's ask, a query with a person is in their header **Approvals** — the admin website's, the staff website's
+and the staff app's — for every desk (families', staff, hostel, admission, the ERP provider's), replacing the earlier
+rule that queries show only under the admin's header Queries icon (which stays).
+
+- Approvals kind `query`, **Queries to answer** (`apps/api/src/modules/approvals/sources.ts`): the list is
+  `GET /helpdesk/tickets?view=assigned&status=active` as the person — handed to them, to a role of theirs, or a family
+  query of their sections (`ownerSql`) — until it is **closed** (an answered one stays: the person it is with closes
+  it). Not decided in the inbox: the admin website opens `/engagement/helpdesk/<desk>/<id>`, the staff website
+  `/queries/t/<id>`, the staff app its own ticket screen (`StaffTicketDetail`, which refreshes Approvals after an
+  action). The person who raised it does not see it there.
+- **A hand-over (or a take-over) of an answered query makes it in progress again**: it now waits on the new person
+  (their waiting count, past-due checks, the admin's Queries count). Before, an answered query handed over stayed
+  answered and counted nowhere (the case that showed it: a staff query answered by the admin, then handed to a
+  teacher).
+- Tests: `apps/api/test/query-approvals.e2e-spec.ts`; app `test/staff_queries_test.dart`.

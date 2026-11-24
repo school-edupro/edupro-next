@@ -5,7 +5,7 @@ import { count, rows, str } from './approval-source';
 /**
  * Every kind of approval the inbox gathers: the admin app's Approvals page (apps/admin/lib/approvals.ts, 26 kinds)
  * and the approvals the staff web app shows on their own screens (staff profile changes, exits, consent answers,
- * hostel visits). The list and decision routes are those the web apps call. A kind without `decide` (line-by-line
+ * hostel visits), and the queries with the person (answered on their own page). The list and decision routes are those the web apps call. A kind without `decide` (line-by-line
  * inspection, clearances, a form) is listed and opened on its own page.
  */
 
@@ -829,6 +829,42 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
       url: `/attendance/leaves/${id}/decide`,
       body: { outcome: outcome(d), ...note(r) },
     }),
+  },
+  {
+    // docs/design/24 "Queries in Approvals": every query with me (handed to me, to a role of mine, or a family query
+    // of my sections), any desk — families', staff, hostel, admission, the ERP provider's — until it is closed.
+    // Answered, handed over and closed on the query's own page (the staff app opens it natively).
+    kind: 'query',
+    label: 'Queries to answer',
+    permissions: [
+      'helpdesk.ticket.respond',
+      'helpdesk.ticket.viewall',
+      'helpdesk.provider.respond',
+      'engagement.query.respond',
+    ],
+    app: 'teacher',
+    list: { method: 'GET', url: '/helpdesk/tickets?view=assigned&status=active&size=100' },
+    total: (a) => count(a, 'page', 'total'),
+    items: (a) =>
+      rows(a).map((x) =>
+        item({
+          id: String(x.id),
+          title: join(x.number, x.subject) ?? 'Query',
+          detail: join(
+            x.head,
+            x.studentName
+              ? `${String(x.studentName)}${x.section ? ` (${String(x.section)})` : ''}`
+              : null,
+            x.status === 'answered' ? 'answered' : null,
+            x.overdue === true ? 'past due' : null,
+          ),
+          by: str(x.raisedBy),
+          at: str(x.openedAt),
+          amount: null,
+          href: `/queries/t/${String(x.id)}`,
+          adminHref: `/engagement/helpdesk/${String(x.desk)}/${String(x.id)}`,
+        }),
+      ),
   },
   {
     kind: 'staff_leave',

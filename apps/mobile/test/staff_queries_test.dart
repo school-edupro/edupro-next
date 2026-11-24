@@ -6,6 +6,7 @@ import 'package:edupro/family/common.dart';
 import 'package:edupro/family/queries.dart' show QueryWords;
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
+import 'package:edupro/staff/approvals.dart' show ApprovalsScreen;
 import 'package:edupro/staff/queries.dart';
 import 'package:edupro/theme/theme.dart';
 import 'package:edupro/ui/home_shell.dart' show nativeScreen;
@@ -67,6 +68,35 @@ class School {
   Object? answer(Call c) {
     final key = '${c.method} ${c.path}';
     switch (key) {
+      case 'GET /approvals/inbox':
+        return {
+          'total': 1,
+          'kinds': [
+            {'kind': 'query', 'label': 'Queries to answer', 'count': 1},
+          ],
+          'items': [
+            {
+              'kind': 'query',
+              'id': '5',
+              'title': 'HD-5 · Bus late every day',
+              'detail': 'Transport · Kid Sample (VI-A)',
+              'by': 'Mina Sample',
+              'at': '2026-11-20T04:30:00.000Z',
+              'amount': null,
+              'href': '/queries/t/5',
+              'app': 'teacher',
+              'reasonOnReject': false,
+              'reasonOnApprove': false,
+              'decideHere': false,
+              'approveAs': 'approve',
+              'rejectAs': 'reject',
+              'url': null,
+              'adminHref': '/engagement/helpdesk/parent/5',
+              'staffUrl': 'http://localhost:3002/queries/t/5',
+            },
+          ],
+          'unavailable': <Object>[],
+        };
       case 'GET /me':
         return {
           'user': {'id': '11', 'displayName': 'Asha Teacher'},
@@ -408,6 +438,19 @@ void main() {
     await tapIn(tester, find.byKey(const Key('sqRate')));
     expect(school.sent['rate']!.single, {'rating': 4});
   });
+
+  testWidgets(
+    'a query with me in the header’s Approvals opens its own screen in the app (no web page)',
+    (tester) async {
+      final (_, school) = await pump(tester, const ApprovalsScreen(profile: staff));
+      await tapIn(tester, find.text('HD-5 · Bus late every day'));
+      expect(find.byKey(const Key('sqTicketDetail')), findsOneWidget);
+      expect(find.text('The bus comes 20 minutes late.'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('sqReplyText')), 'On it.');
+      await tapIn(tester, find.byKey(const Key('sqReplySend')));
+      expect(school.sent['reply'], isNotEmpty);
+    },
+  );
 
   testWidgets(
     'two tabs, To answer and My requests: no leave requests (they are under Student leave)',

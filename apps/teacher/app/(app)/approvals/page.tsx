@@ -23,6 +23,7 @@ interface Inbox {
 /** Each kind's own list page on this website (where there is one). */
 const LIST: Record<string, string> = {
   leave: '/leaves',
+  query: '/queries',
   staff_leave: '/leave-approvals',
   staff_leave_cancel: '/leave-approvals',
   staff_regularisation: '/attendance-corrections',
