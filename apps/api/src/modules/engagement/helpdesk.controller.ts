@@ -17,7 +17,7 @@ import {
   ListTicketsDto,
   RateTicketDto,
   ReopenTicketDto,
-  ReplyDto,
+  TicketReplyDto,
 } from './helpdesk.dto';
 import { HelpdeskService } from './helpdesk.service';
 
@@ -90,7 +90,7 @@ export class HelpdeskController {
 
   @Post('tickets/:id/replies')
   @AuthenticatedOnly()
-  reply(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ReplyDto) {
+  reply(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: TicketReplyDto) {
     this.helpdesk.assertAny(ctx);
     return this.helpdesk.reply(ctx, id, dto);
   }

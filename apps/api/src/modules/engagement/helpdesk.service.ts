@@ -23,7 +23,7 @@ import {
   type ListTicketsDto,
   type RateTicketDto,
   type ReopenTicketDto,
-  type ReplyDto,
+  type TicketReplyDto,
 } from './helpdesk.dto';
 
 type Row = Record<string, unknown>;
@@ -659,7 +659,7 @@ export class HelpdeskService {
   }
 
   // ---- answering ------------------------------------------------------------------------------------
-  async reply(ctx: RequestContext, id: string, dto: ReplyDto) {
+  async reply(ctx: RequestContext, id: string, dto: TicketReplyDto) {
     const v = await this.viewerOf(ctx);
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const me = await this.me(ctx, c, v);

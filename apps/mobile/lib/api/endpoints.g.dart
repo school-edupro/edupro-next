@@ -1115,6 +1115,66 @@ class EduProApi {
   /// DELETE /me/staff-layout/shortcuts — Back to the school’s staff Home shortcuts
   Future<dynamic> staffLayoutResetMine() =>
       _t.send('DELETE', '/me/staff-layout/shortcuts');
+
+  /// GET /helpdesk/tickets — Tickets I may see (desk, status, mine / assigned, search)
+  Future<dynamic> helpdeskList({String? desk, String? status, String? view, String? head, String? q, String? applicationId, int? page, int? size}) =>
+      _t.send('GET', '/helpdesk/tickets', query: {if (desk != null) 'desk': desk, if (status != null) 'status': status, if (view != null) 'view': view, if (head != null) 'head': head, if (q != null) 'q': q, if (applicationId != null) 'applicationId': applicationId, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// POST /helpdesk/tickets — Raise a staff query or a ticket to the ERP provider
+  Future<dynamic> helpdeskCreate({required CreateTicketDto body}) =>
+      _t.send('POST', '/helpdesk/tickets', body: body.toJson());
+
+  /// GET /helpdesk/tickets/{id}
+  Future<dynamic> helpdeskGet({required String id}) =>
+      _t.send('GET', '/helpdesk/tickets/${Uri.encodeComponent(id)}');
+
+  /// GET /helpdesk/tickets/{id}/files/{fileId}
+  Future<ApiFile> helpdeskFile({required String id, required String fileId}) =>
+      _t.file('GET', '/helpdesk/tickets/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
+  /// POST /helpdesk/tickets/{id}/replies
+  Future<dynamic> helpdeskReply({required TicketReplyDto body, required String id}) =>
+      _t.send('POST', '/helpdesk/tickets/${Uri.encodeComponent(id)}/replies', body: body.toJson());
+
+  /// POST /helpdesk/tickets/{id}/assign
+  Future<dynamic> helpdeskAssign({required AssignTicketDto body, required String id}) =>
+      _t.send('POST', '/helpdesk/tickets/${Uri.encodeComponent(id)}/assign', body: body.toJson());
+
+  /// POST /helpdesk/tickets/{id}/close
+  Future<dynamic> helpdeskClose({required CloseTicketDto body, required String id}) =>
+      _t.send('POST', '/helpdesk/tickets/${Uri.encodeComponent(id)}/close', body: body.toJson());
+
+  /// POST /helpdesk/tickets/{id}/reopen
+  Future<dynamic> helpdeskReopen({required ReopenTicketDto body, required String id}) =>
+      _t.send('POST', '/helpdesk/tickets/${Uri.encodeComponent(id)}/reopen', body: body.toJson());
+
+  /// POST /helpdesk/tickets/{id}/rate
+  Future<dynamic> helpdeskRate({required RateTicketDto body, required String id}) =>
+      _t.send('POST', '/helpdesk/tickets/${Uri.encodeComponent(id)}/rate', body: body.toJson());
+
+  /// GET /helpdesk/heads/{desk} — Active query types of a desk
+  Future<dynamic> helpdeskHeads({required String desk}) =>
+      _t.send('GET', '/helpdesk/heads/${Uri.encodeComponent(desk)}');
+
+  /// GET /helpdesk/assignees
+  Future<dynamic> helpdeskAssignees() =>
+      _t.send('GET', '/helpdesk/assignees');
+
+  /// GET /engagement/queries — Queries, complaints and leave requests visible to the viewer (scoped for teachers)
+  Future<dynamic> engagementList({String? status, String? kind, String? categoryCode, String? studentId, String? q, String? order, int? page, int? size}) =>
+      _t.send('GET', '/engagement/queries', query: {if (status != null) 'status': status, if (kind != null) 'kind': kind, if (categoryCode != null) 'categoryCode': categoryCode, if (studentId != null) 'studentId': studentId, if (q != null) 'q': q, if (order != null) 'order': order, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// GET /engagement/queries/{id}
+  Future<dynamic> engagementGet({required String id}) =>
+      _t.send('GET', '/engagement/queries/${Uri.encodeComponent(id)}');
+
+  /// POST /engagement/queries/{id}/responses — Staff reply (or internal note); a reply marks the query answered and notifies the family
+  Future<dynamic> engagementRespond({required RespondDto body, required String id}) =>
+      _t.send('POST', '/engagement/queries/${Uri.encodeComponent(id)}/responses', body: body.toJson());
+
+  /// POST /engagement/queries/{id}/close
+  Future<dynamic> engagementClose({required QueryCloseDto body, required String id}) =>
+      _t.send('POST', '/engagement/queries/${Uri.encodeComponent(id)}/close', body: body.toJson());
 }
 
 /** The OtpStartDto the API takes. */
@@ -2506,5 +2566,89 @@ class StaffShortcutsDto {
   final List<String> shortcuts;
   Map<String, Object?> toJson() => {
         'shortcuts': shortcuts,
+      };
+}
+
+/** The CreateTicketDto the API takes. */
+class CreateTicketDto {
+  const CreateTicketDto({required this.desk, required this.categoryCode, required this.subject, required this.body, this.priority, this.module, this.fileIds, this.hostelRoomId, this.studentId});
+  final String desk;
+  final String categoryCode;
+  final String subject;
+  final String body;
+  final String? priority;
+  final String? module;
+  final List<String>? fileIds;
+  final String? hostelRoomId;
+  final String? studentId;
+  Map<String, Object?> toJson() => {
+        'desk': desk,
+        'categoryCode': categoryCode,
+        'subject': subject,
+        'body': body,
+        if (priority != null) 'priority': priority,
+        if (module != null) 'module': module,
+        if (fileIds != null) 'fileIds': fileIds,
+        if (hostelRoomId != null) 'hostelRoomId': hostelRoomId,
+        if (studentId != null) 'studentId': studentId,
+      };
+}
+
+/** The TicketReplyDto the API takes. */
+class TicketReplyDto {
+  const TicketReplyDto({required this.body, this.fileIds, this.isInternal});
+  final String body;
+  final List<String>? fileIds;
+  final bool? isInternal;
+  Map<String, Object?> toJson() => {
+        'body': body,
+        if (fileIds != null) 'fileIds': fileIds,
+        if (isInternal != null) 'isInternal': isInternal,
+      };
+}
+
+/** The AssignTicketDto the API takes. */
+class AssignTicketDto {
+  const AssignTicketDto({this.userId, this.roleCode, this.note});
+  final String? userId;
+  final String? roleCode;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        if (userId != null) 'userId': userId,
+        if (roleCode != null) 'roleCode': roleCode,
+        if (note != null) 'note': note,
+      };
+}
+
+/** The CloseTicketDto the API takes. */
+class CloseTicketDto {
+  const CloseTicketDto({required this.resolution, this.fileIds});
+  final String resolution;
+  final List<String>? fileIds;
+  Map<String, Object?> toJson() => {
+        'resolution': resolution,
+        if (fileIds != null) 'fileIds': fileIds,
+      };
+}
+
+/** The RateTicketDto the API takes. */
+class RateTicketDto {
+  const RateTicketDto({required this.rating, this.comment});
+  final int rating;
+  final String? comment;
+  Map<String, Object?> toJson() => {
+        'rating': rating,
+        if (comment != null) 'comment': comment,
+      };
+}
+
+/** The QueryCloseDto the API takes. */
+class QueryCloseDto {
+  const QueryCloseDto({this.decision, this.note});
+  final String? decision;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        if (decision != null) 'decision': decision,
+        if (note != null) 'note': note,
       };
 }

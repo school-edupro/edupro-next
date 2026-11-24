@@ -336,3 +336,21 @@ InsightsController_start
 StaffLayoutController_mine
 StaffLayoutController_saveMine
 StaffLayoutController_resetMine
+
+# queries and helpdesk as on the staff website: tickets to answer and my own (staff query, ticket to the ERP
+# provider), one in full with its files, reply, hand over, close, reopen, rate; the families' leave queries
+HelpdeskController_list
+HelpdeskController_create
+HelpdeskController_get
+HelpdeskController_file !file
+HelpdeskController_reply
+HelpdeskController_assign
+HelpdeskController_close
+HelpdeskController_reopen
+HelpdeskController_rate
+HelpdeskController_heads
+HelpdeskController_assignees
+EngagementController_list
+EngagementController_get
+EngagementController_respond
+EngagementController_close

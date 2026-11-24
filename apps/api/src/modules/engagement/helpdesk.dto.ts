@@ -65,7 +65,7 @@ export const ReplySchema = z.object({
   fileIds: Files,
   isInternal: z.boolean().default(false),
 });
-export class ReplyDto extends createZodDto(ReplySchema) {}
+export class TicketReplyDto extends createZodDto(ReplySchema) {}
 
 export const AssignTicketSchema = z
   .object({

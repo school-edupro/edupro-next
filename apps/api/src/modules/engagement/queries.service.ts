@@ -11,7 +11,7 @@ import { HelpdeskService } from './helpdesk.service';
 import {
   DEFAULT_QUERY_CATEGORIES,
   type AssignDto,
-  type CloseDto,
+  type QueryCloseDto,
   type CreateQueryDto,
   type ListQueriesDto,
   type RateDto,
@@ -265,7 +265,7 @@ export class QueriesService {
     });
   }
 
-  async close(ctx: RequestContext, id: string, dto: CloseDto): Promise<QueryRow> {
+  async close(ctx: RequestContext, id: string, dto: QueryCloseDto): Promise<QueryRow> {
     const v = await this.viewer.resolve(ctx, 'engagement.query.respond');
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.find(c, id, false);

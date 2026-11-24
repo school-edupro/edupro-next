@@ -102,7 +102,8 @@ extension QueryWords on S {
   String qryAttachment(int i, String who) => _q('Attachment $i · $who', 'संलग्नक $i · $who');
 }
 
-Tone _statusTone(String st) => switch (st) {
+/// The tone of a query's status chip.
+Tone queryStatusTone(String st) => switch (st) {
   'in_progress' => Tone.info,
   'answered' => Tone.success,
   'closed' => Tone.neutral,
@@ -156,8 +157,14 @@ void openQuery(BuildContext context, Profile profile, String id, {bool saved = f
 }
 
 /// Five stars to choose from (each labelled for the screen reader).
-class _Stars extends StatelessWidget {
-  const _Stars({required this.value, required this.onChanged, required this.s, required this.name});
+class QueryStars extends StatelessWidget {
+  const QueryStars({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.s,
+    required this.name,
+  });
   final int value;
   final ValueChanged<int> onChanged;
   final S s;
@@ -419,7 +426,10 @@ class _QueriesScreenState extends ConsumerState<QueriesScreen> {
                         runSpacing: Tokens.sp1,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          StatusChip(s.qryStatus('${q['status']}'), _statusTone('${q['status']}')),
+                          StatusChip(
+                            s.qryStatus('${q['status']}'),
+                            queryStatusTone('${q['status']}'),
+                          ),
                           if (q['decision'] != null)
                             StatusChip(
                               s.qryDecision('${q['decision']}'),
@@ -492,7 +502,7 @@ class _QueriesScreenState extends ConsumerState<QueriesScreen> {
                   ),
                   const SizedBox(height: Tokens.sp2),
                   Text(s.qryRating, style: TextStyle(color: muted, fontSize: 13)),
-                  _Stars(
+                  QueryStars(
                     value: _rating,
                     onChanged: (n) => setState(() => _rating = n),
                     s: s,
@@ -526,8 +536,13 @@ class _QueriesScreenState extends ConsumerState<QueriesScreen> {
 }
 
 /// Files to send with a query, a reply or a reopening: PDFs or photos, up to five of 5 MB each.
-class _FilesField extends ConsumerWidget {
-  const _FilesField({required this.files, required this.onChanged, required this.name});
+class QueryFilesField extends ConsumerWidget {
+  const QueryFilesField({
+    super.key,
+    required this.files,
+    required this.onChanged,
+    required this.name,
+  });
   final List<PickedFile> files;
   final ValueChanged<List<PickedFile>> onChanged;
   final String name;
@@ -586,7 +601,7 @@ class _FilesField extends ConsumerWidget {
 }
 
 /// Uploads the files and gives their ids.
-Future<List<String>> _upload(WidgetRef ref, List<PickedFile> files) async => [
+Future<List<String>> uploadQueryFiles(WidgetRef ref, List<PickedFile> files) async => [
   for (final f in files) await uploadFile(ref.read(apiProvider), ref.read(transportProvider), f),
 ];
 
@@ -626,7 +641,7 @@ class _QueryFormState extends ConsumerState<QueryForm> {
       _error = null;
     });
     try {
-      final ids = await _upload(ref, _files);
+      final ids = await uploadQueryFiles(ref, _files);
       final r = asJson(
         await ref
             .read(apiProvider)
@@ -716,7 +731,11 @@ class _QueryFormState extends ConsumerState<QueryForm> {
           decoration: InputDecoration(labelText: s.qryDetails, border: const OutlineInputBorder()),
         ),
         const SizedBox(height: Tokens.sp2),
-        _FilesField(files: _files, onChanged: (f) => setState(() => _files = f), name: 'qryNew'),
+        QueryFilesField(
+          files: _files,
+          onChanged: (f) => setState(() => _files = f),
+          name: 'qryNew',
+        ),
         if (_error != null) ...[const SizedBox(height: Tokens.sp3), ErrorText(_error!)],
         const SizedBox(height: Tokens.sp4),
         FilledButton(
@@ -848,7 +867,7 @@ class _QueryDetailState extends ConsumerState<QueryDetail> {
             Wrap(
               spacing: Tokens.sp1,
               children: [
-                StatusChip(s.qryStatus(status), _statusTone(status)),
+                StatusChip(s.qryStatus(status), queryStatusTone(status)),
                 if (q['decision'] != null)
                   StatusChip(
                     s.qryDecision('${q['decision']}'),
@@ -925,7 +944,7 @@ class _QueryDetailState extends ConsumerState<QueryDetail> {
                   border: const OutlineInputBorder(),
                 ),
               ),
-              _FilesField(
+              QueryFilesField(
                 files: _replyFiles,
                 onChanged: (f) => setState(() => _replyFiles = f),
                 name: 'qryReply',
@@ -944,7 +963,7 @@ class _QueryDetailState extends ConsumerState<QueryDetail> {
                             id: widget.id,
                             body: RespondDto(
                               body: _reply.text.trim(),
-                              fileIds: await _upload(ref, _replyFiles),
+                              fileIds: await uploadQueryFiles(ref, _replyFiles),
                             ),
                           );
                         });
@@ -971,7 +990,7 @@ class _QueryDetailState extends ConsumerState<QueryDetail> {
                   border: const OutlineInputBorder(),
                 ),
               ),
-              _FilesField(
+              QueryFilesField(
                 files: _reopenFiles,
                 onChanged: (f) => setState(() => _reopenFiles = f),
                 name: 'qryReopen',
@@ -995,7 +1014,7 @@ class _QueryDetailState extends ConsumerState<QueryDetail> {
                             id: widget.id,
                             body: ReopenTicketDto(
                               reason: _reason.text.trim(),
-                              fileIds: await _upload(ref, _reopenFiles),
+                              fileIds: await uploadQueryFiles(ref, _reopenFiles),
                             ),
                           );
                         });
@@ -1005,7 +1024,7 @@ class _QueryDetailState extends ConsumerState<QueryDetail> {
             ],
             if ((status == 'answered' || status == 'closed') && !rated) ...[
               SectionTitle(s.qryHowHandled),
-              _Stars(
+              QueryStars(
                 value: _rating,
                 onChanged: (n) => setState(() => _rating = n),
                 s: s,

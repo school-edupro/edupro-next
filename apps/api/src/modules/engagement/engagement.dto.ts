@@ -68,7 +68,7 @@ export const CloseSchema = z.object({
   decision: z.enum(['approved', 'rejected']).optional(),
   note: z.string().trim().max(1000).optional(),
 });
-export class CloseDto extends createZodDto(CloseSchema) {}
+export class QueryCloseDto extends createZodDto(CloseSchema) {}
 export const AssignSchema = z.object({ userId: IdSchema.nullable() });
 export class AssignDto extends createZodDto(AssignSchema) {}
 export const RateSchema = z.object({

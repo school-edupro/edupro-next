@@ -5,7 +5,7 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   AcknowledgeDto,
   AssignDto,
-  CloseDto,
+  QueryCloseDto,
   CreateChangeRequestDto,
   CreateFeedbackDto,
   CreateQueryDto,
@@ -106,7 +106,7 @@ export class EngagementController {
 
   @Post('queries/:id/close')
   @RequirePermission(ENGAGEMENT.queryRespond)
-  close(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CloseDto) {
+  close(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: QueryCloseDto) {
     return this.queries.close(ctx, id, dto);
   }
 
