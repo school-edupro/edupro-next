@@ -9,6 +9,7 @@ import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/staff/data.dart' show PickedFile;
 import 'package:edupro/theme/theme.dart';
+import 'package:edupro/ui/home_shell.dart' show nativeScreen;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -124,6 +125,8 @@ final everyFields = <Map<String, Object?>>[
 
 /// A made-up school's consent forms (no real names).
 class School {
+  /// answers as a staff member (Forms and declarations)
+  bool staff = false;
   List<Map<String, Object?>> gateways = [
     {'id': 'g1', 'label': 'Cards and UPI', 'chargePercent': '0', 'chargeFlat': '0'},
     {'id': 'g2', 'label': 'Net banking', 'chargePercent': '0', 'chargeFlat': '10.00'},
@@ -323,7 +326,22 @@ class School {
     switch ('${c.method} ${c.path}') {
       case 'GET /engagement/mine/consent-forms':
         return {
-          'forms': forms(),
+          // staff: the part asked of the staff member themself (the first person becomes "staff")
+          'forms': staff
+              ? [
+                  for (final f in forms())
+                    {
+                      ...f,
+                      'people': [
+                        {
+                          ...(f['people'] as List).first as Map<String, Object?>,
+                          'kind': 'staff',
+                          'id': 'e7',
+                        },
+                      ],
+                    },
+                ]
+              : forms(),
           'children': [
             {'id': '41', 'name': 'Kid Sample', 'section': 'VI-A'},
           ],
@@ -740,6 +758,45 @@ void main() {
     expect(within('cfResponse-r3', 'No seats left'), findsOneWidget);
     expect(within('cfResponse-r3', 'Fee ₹300'), findsOneWidget);
     expect(find.byKey(const Key('cfPay-r3')), findsNothing);
+  });
+
+  testWidgets(
+    'staff: Forms and declarations, the forms asked of themself, answered as the website',
+    (tester) async {
+      const me = Profile(
+        id: 'staff:7',
+        kind: 'staff',
+        schoolId: '7',
+        schoolName: 'Sample School',
+        name: 'Asha Teacher',
+        app: 'teacher',
+      );
+      expect(nativeScreen(me, '/consents', s), isA<ConsentsScreen>());
+      await tall(tester);
+      await pump(tester, const ConsentsScreen(profile: me), school: School()..staff = true);
+      expect(find.text(s.cfStaffTitle), findsOneWidget);
+      expect(find.text(s.cfStaffLead), findsOneWidget);
+      expect(find.text('Science trip to the planetarium'), findsOneWidget);
+      expect(find.text('Answer now'), findsWidgets);
+    },
+  );
+
+  testWidgets('a student answers their own forms; a fee is the parent’s to pay', (tester) async {
+    const student = Profile(
+      id: 'student:7:41',
+      kind: 'student',
+      schoolId: '7',
+      schoolName: 'Sample School',
+      name: 'Kid Sample',
+      app: 'parent',
+      studentId: '41',
+    );
+    await tall(tester);
+    await pump(tester, const ConsentsScreen(profile: student));
+    expect(find.text('Answer now'), findsOneWidget);
+    await tapIn(tester, find.byKey(const Key('cfTab-answered')));
+    expect(find.byKey(const Key('cfPay-r2')), findsNothing);
+    expect(within('cfResponse-r2', s.cfParentPays), findsOneWidget);
   });
 
   testWidgets('no online payment: pay at the school office', (tester) async {

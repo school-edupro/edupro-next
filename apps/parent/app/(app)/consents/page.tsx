@@ -77,6 +77,8 @@ export default async function ConsentsPage({
   const sp = await searchParams;
   const lang = await currentLang();
   const kid = await chosenChild(sp.student);
+  // Pay follows the right to pay, as on Fees: a student answers their own forms, the parent pays the fee
+  const canPay = (await bff.api.me()).permissions.includes('payments.family.pay');
   // the gateways the school takes misc fees through (Fees > Payment gateways > Routes)
   const gateways = await bff.api
     .fetch<{ data: PayGateway[] }>('/payments/gateways/options?ledger=misc')
@@ -166,7 +168,11 @@ export default async function ConsentsPage({
               ) : null}
               <span className="fp-cf-actions" style={{ marginLeft: 'auto' }}>
                 {r.lineId && d > 0 ? (
-                  gateways.length ? (
+                  !canPay ? (
+                    <span className="ep-field__help">
+                      {t(lang, 'Your parent pays it (the parent app or the school office)')}
+                    </span>
+                  ) : gateways.length ? (
                     <form method="post" action="/fees/pay-misc" className="fp-cf-actions">
                       <input type="hidden" name="lineId" value={r.lineId} />
                       <input type="hidden" name="studentId" value={p.id} />

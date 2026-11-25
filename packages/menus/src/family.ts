@@ -72,7 +72,8 @@ export const FAMILY_MENU: FamilyGroup[] = [
       { href: '/queries', label: 'Queries', parentOnly: true },
       { href: '/appointments', label: 'Appointments', parentOnly: true },
       { href: '/gate-passes', label: 'Gate passes', parentOnly: true },
-      { href: '/consents', label: 'Consent forms', parentOnly: true },
+      // students answer their own too (24 Nov 2026); a fee stays the parent's to pay
+      { href: '/consents', label: 'Consent forms' },
       { href: '/assistant', label: 'Assistant' },
       { href: '/help', label: 'Help' },
     ],

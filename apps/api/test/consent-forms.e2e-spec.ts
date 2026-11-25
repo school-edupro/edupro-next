@@ -65,6 +65,7 @@ describe('consent forms (e2e)', () => {
   let admin: SeededUser;
   let parent: SeededUser;
   let teacher: SeededUser;
+  let pupil: SeededUser;
   const ids: Record<string, string> = {};
   const h = (u: SeededUser = admin) => headersFor(u.sub, school.id);
   const post = (url: string, json: unknown, u: SeededUser = admin) =>
@@ -123,6 +124,7 @@ describe('consent forms (e2e)', () => {
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
       parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
       teacher = await seedUser(c, school, `${s}-teacher`);
+      pupil = await seedUser(c, school, `${s}-pupil`, 'student', 'student');
       const e = await c.query<{ id: string }>(
         `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id, department) VALUES ($1, 'T1', 'Tara', 'Teacher', $2, 'Science') RETURNING id::text`,
         [school.id, teacher.id],
@@ -161,12 +163,14 @@ describe('consent forms (e2e)', () => {
       expect(st.statusCode).toBe(201);
       ids[key] = st.json().id;
     }
-    await withMigrator((c) =>
-      c.query(
+    await withMigrator(async (c) => {
+      await c.query(
         `UPDATE guardians SET user_id = $1 WHERE id = (SELECT guardian_id FROM student_guardians WHERE student_id = $2 LIMIT 1)`,
         [parent.id, ids.ana],
-      ),
-    );
+      );
+      // the pupil Ana signs in herself (the student app and website)
+      await c.query(`UPDATE students SET user_id = $1 WHERE id = $2`, [pupil.id, ids.ana]);
+    });
   });
   afterAll(async () => app.close());
 
@@ -436,6 +440,34 @@ describe('consent forms (e2e)', () => {
         await inject({ method: 'DELETE', url: `/engagement/consent-forms/${id}`, headers: h() })
       ).json().type,
     ).toContain('consent.not_draft');
+  });
+
+  it('a student answers their own form (student app and website, 24 Nov 2026)', async () => {
+    const f = await post('/engagement/consent-forms', {
+      title: 'Club choice',
+      respondents: 'family',
+      fields: [{ key: 'club', label: 'Club', type: 'text', required: true }],
+      audience: { pupils: 'pupils', studentIds: [ids.ana] },
+      settings: { repeat: 'once' },
+    });
+    const id = f.json().id;
+    await put(`/engagement/consent-forms/${id}/status`, { status: 'published', push: false });
+    // the pupil sees it, as herself, to answer
+    const mine = (await get('/engagement/mine/consent-forms', pupil)).json() as {
+      forms: Array<{ id: string; people: Array<{ kind: string; id: string; canAnswer: boolean }> }>;
+    };
+    expect(mine.forms.find((x) => x.id === id)?.people).toEqual([
+      expect.objectContaining({ kind: 'student', id: ids.ana, canAnswer: true }),
+    ]);
+    const url = `/engagement/mine/consent-forms/${id}/responses`;
+    // not for another pupil
+    expect(
+      (await post(url, { studentId: ids.bo, answers: { club: 'Chess' } }, pupil)).statusCode,
+    ).toBe(404);
+    const ok = await post(url, { studentId: ids.ana, answers: { club: 'Chess' } }, pupil);
+    expect(ok.statusCode).toBe(201);
+    const pdf = await get(`/engagement/mine/consent-forms/responses/${ok.json().id}/pdf`, pupil);
+    expect(pdf.statusCode).toBe(200);
   });
 
   // ---- part 2: fee, approval, edit ----------------------------------------------------------------

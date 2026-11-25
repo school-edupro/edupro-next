@@ -24,6 +24,15 @@ extension ConsentWords on S {
 
   // ---- the list
   String get cfTitle => _cf('Consent forms', 'सहमति फ़ॉर्म');
+  String get cfStaffTitle => _cf('Forms and declarations', 'फ़ॉर्म और घोषणाएँ');
+  String get cfStaffLead => _cf(
+    'Consent forms, surveys and declarations the school asks you to answer.',
+    'सहमति फ़ॉर्म, सर्वेक्षण और घोषणाएँ, जिनका उत्तर विद्यालय आपसे माँगता है।',
+  );
+  String get cfParentPays => _cf(
+    'Your parent pays it (the parent app or the school office)',
+    'आपके अभिभावक इसका भुगतान करते हैं (अभिभावक ऐप या विद्यालय कार्यालय)',
+  );
   String get cfLead => _cf(
     'Trips, events and permissions the school asks you to answer.',
     'यात्राएँ, कार्यक्रम और अनुमतियाँ, जिनका उत्तर विद्यालय आपसे माँगता है।',
@@ -469,9 +478,11 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
           for (final f in asList(d['forms']))
             if (asList(f['people'])
                     .where(
-                      (x) =>
-                          x['kind'] == 'student' &&
-                          (_p.studentId == null || '${x['id']}' == _p.studentId),
+                      (x) => _p.isStaff
+                          // staff: the part asked of themself (docs/design/28)
+                          ? x['kind'] == 'staff'
+                          : x['kind'] == 'student' &&
+                                (_p.studentId == null || '${x['id']}' == _p.studentId),
                     )
                     .firstOrNull
                 case final person?)
@@ -505,10 +516,10 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
         void go(String tab) => setState(() => _tab = tab);
         return [
           Text(
-            s.cfTitle,
+            _p.isStaff ? s.cfStaffTitle : s.cfTitle,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
           ),
-          Text(s.cfLead, style: TextStyle(color: muted, fontSize: 14)),
+          Text(_p.isStaff ? s.cfStaffLead : s.cfLead, style: TextStyle(color: muted, fontSize: 14)),
           const SizedBox(height: Tokens.sp3),
           if (_message != null) ...[
             _Alert(key: const Key('cfMessage'), text: _message!),
@@ -776,6 +787,13 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
                     icon: const Icon(Icons.lock_outline, size: 18),
                     label: Text(s.cfPay(s.money(d))),
                     onPressed: () => _pay(r, gw),
+                  )
+                else if (_p.kind == 'student')
+                  // a student answers their own forms; the fee is the parent's to pay
+                  Text(
+                    s.cfParentPays,
+                    key: Key('cfParentPays-$rid'),
+                    style: TextStyle(color: muted, fontSize: 13),
                   )
                 else if (!gateways.isLoading || gateways.hasValue)
                   Text(

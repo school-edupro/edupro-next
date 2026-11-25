@@ -227,3 +227,20 @@ up by the school admin only (new permission `engagement.consent_form.integrate`)
 - **Preview** (form page and Change page): the form as a family or a staff member sees it (both tabs when
   both answer), with steps, rules and the fee live; "Check the answers" only runs the checks, nothing is
   saved or sent.
+
+## As built — staff app and students (25 Nov 2026)
+
+Asked by the user ("staff mobile app Forms and declarations opens a web page; check the student app and website have
+this section, if not add"). Decided with the user: **students answer their own forms too**; a fee stays the parent's
+to pay.
+
+- **Staff app**: menu `/consents` opens the app's own Consent forms screen (`ConsentsScreen`), titled **Forms and
+  declarations**, with the part of each form asked of the staff member (`people` kind `staff`): the figures, To
+  answer / Answered / Closed, answer, change, the PDF copy. No web page; staff answers never carry a fee.
+- **Students**: the family menu's **Consent forms** is no longer parent-only (`@edupro/menus` `family.ts`): the
+  student website (Help desk → Consent forms) and the student app (More) show it; the API already gave a signed-in
+  pupil their own forms to answer (`whoAmI` → the family viewer's student). A fee due shows **Your parent pays it
+  (the parent app or the school office)** instead of Pay — the website follows `payments.family.pay`, as Fees; the
+  app the profile kind.
+- Tests: `consent-forms.e2e-spec.ts` (a pupil signed in sees and answers her own form, not another pupil's, and opens
+  the PDF), `consents_test.dart` (staff: Forms and declarations natively; a student answers, the parent pays).

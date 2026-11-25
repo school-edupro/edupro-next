@@ -13,6 +13,8 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'Your parent pays it (the parent app or the school office)':
+    'आपके अभिभावक इसका भुगतान करते हैं (अभिभावक ऐप या विद्यालय कार्यालय)',
   'Ask for a certificate': 'प्रमाणपत्र के लिए अनुरोध करें',
   'Issued by the school': 'विद्यालय द्वारा जारी',
   'Awards and achievements': 'पुरस्कार और उपलब्धियाँ',

@@ -182,6 +182,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/my-certificates' => StaffCertificatesScreen(profile: p),
       // my tax as on the staff website: the year's tax, declarations with proofs, earlier employer, regime, Form 16
       '/my-tax' => MyTaxScreen(profile: p),
+      // forms and declarations as on the staff website: the consent forms asked of me, answer, change, the PDF
+      '/consents' => ConsentsScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
       '/assistant' => AssistantScreen(profile: p),
       // Help for staff kept on Helpdesk set-up, as on the staff website: headings, search, the screen, helpful?
