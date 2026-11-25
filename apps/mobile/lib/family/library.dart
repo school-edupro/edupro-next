@@ -11,6 +11,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
+import '../ui/paged_feed.dart';
 import 'common.dart';
 import 'data.dart';
 
@@ -248,47 +249,6 @@ final libraryProvider = FutureProvider.autoDispose.family<Loaded<Json?>, Profile
   }
 });
 
-/// A page of the child's library history with the website's filters: `(profile, from, to, status, search, page)`
-/// (empty: no filter; status `all` … `fined`).
-final libraryHistoryProvider = FutureProvider.autoDispose
-    .family<Loaded<Json>, (Profile, String, String, String, String, int)>((ref, a) async {
-      final (p, from, to, status, q, page) = a;
-      final (kind, id) = await ref.watch(libraryBorrowerProvider(p).future) ?? ('student', '');
-      final r = await cached(
-        'libraryHistory:${p.id}:$from:$to:$status:$q:$page',
-        () => ref
-            .read(apiProvider)
-            .libraryPortalHistory(
-              kind: kind,
-              id: id,
-              from: from.isEmpty ? null : from,
-              to: to.isEmpty ? null : to,
-              status: status,
-              q: q.isEmpty ? null : q,
-              page: page,
-            ),
-      );
-      return Loaded(asJson(r.data), r.at, stale: r.stale);
-    });
-
-/// A page (20) of the school's catalogue, by title, author, subject or ISBN: `(profile, search, page)`. The generated
-/// client has no query for this call, so it goes through the transport.
-final libraryCatalogueProvider = FutureProvider.autoDispose
-    .family<Loaded<Json>, (Profile, String, int)>((ref, a) async {
-      final (p, q, page) = a;
-      final r = await cached(
-        'libraryCatalogue:${p.id}:$q:$page',
-        () => ref
-            .read(transportProvider)
-            .send(
-              'GET',
-              '/library/portal/catalogue',
-              query: {if (q.isNotEmpty) 'q': q, 'page': page},
-            ),
-      );
-      return Loaded(asJson(r.data), r.at, stale: r.stale);
-    });
-
 /// The library as the website shows it (apps/parent/app/(app)/library): the figures (books out, overdue, read this
 /// session and month, returned on time, late fines), a book kept to collect, the books on loan with the due day and
 /// the fine so far, what is due at the fees counter, the reservations (cancelled after a yes), Find a book (the
@@ -314,18 +274,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   DateTime? _to;
   String _status = 'all';
   String _q = '';
-  int _page = 1;
   final _search = TextEditingController();
 
   Profile get _p => widget.profile;
   bool get _self => _p.kind == 'student' || _p.isStaff;
   bool get _filtered => _from != null || _to != null || _status != 'all' || _q.isNotEmpty;
-
-  /// the history as the main page has it (no filter, page 1): no call of its own
-  bool get _plain => !_filtered && _page == 1;
-
-  (Profile, String, String, String, String, int) get _key =>
-      (_p, _from == null ? '' : ymd(_from!), _to == null ? '' : ymd(_to!), _status, _q, _page);
 
   @override
   void dispose() {
@@ -387,14 +340,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       } else {
         _to = d;
       }
-      _page = 1;
     });
   }
 
-  void _apply(String v) => setState(() {
-    _q = v.trim();
-    _page = 1;
-  });
+  void _apply(String v) => setState(() => _q = v.trim());
 
   void _clear() => setState(() {
     _from = null;
@@ -402,7 +351,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     _status = 'all';
     _q = '';
     _search.clear();
-    _page = 1;
   });
 
   /// "Read this session": the History tab.
@@ -503,18 +451,58 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         header: [..._head(s, muted, d), _tabs(s, d)],
       );
     }
-    final history = _plain ? null : ref.watch(libraryHistoryProvider(_key));
+    // Read before: the books 10 at a time, then 10 more as the person scrolls (as the website)
+    if (_tab == 'history') {
+      final d = ref.watch(libraryProvider(_p)).value?.data;
+      final who = ref.watch(libraryBorrowerProvider(_p));
+      if (who.hasValue && who.value == null) {
+        return ListView(
+          padding: const EdgeInsets.all(Tokens.sp4),
+          children: [EmptyLine(_p.isStaff ? s.libNotLinkedStaff : s.libNotLinked)],
+        );
+      }
+      final from = _from == null ? null : ymd(_from!);
+      final to = _to == null ? null : ymd(_to!);
+      return PagedFeed(
+        key: ValueKey('libHistFeed-$from-$to-$_status-$_q'),
+        load: (page) async {
+          final (kind, id) = await ref.read(libraryBorrowerProvider(_p).future) ?? ('student', '');
+          return ref
+              .read(apiProvider)
+              .libraryPortalHistory(
+                kind: kind,
+                id: id,
+                from: from,
+                to: to,
+                status: _status,
+                q: _q.isEmpty ? null : _q,
+                page: page,
+                size: 10,
+              );
+        },
+        parse: (a, page) {
+          final pages = math.max(1, _int(a['pages']));
+          return (items: asList(a['rows']), more: page < pages, total: _int(a['total']));
+        },
+        header: (total, _) => [
+          ..._head(s, muted, d),
+          _tabs(s, d),
+          _historyTop(s, muted, _int(asJson(d?['history'])['total']), total),
+        ],
+        empty: s.libNoHistory,
+        // the count line above says there is none
+        emptyCard: const SizedBox.shrink(),
+        item: (context, b, _) => Card(child: _historyRow(s, muted, b)),
+        footer: _monthsCard(s, muted, d),
+      );
+    }
     return LoadedList<Json?>(
       key: ValueKey('lib-$_tab'),
       value: ref.watch(libraryProvider(_p)),
-      refresh: () {
-        if (!_plain) ref.invalidate(libraryHistoryProvider(_key));
-        return ref.refresh(libraryProvider(_p).future);
-      },
+      refresh: () => ref.refresh(libraryProvider(_p).future),
       children: (d) {
         if (d == null) return [EmptyLine(_p.isStaff ? s.libNotLinkedStaff : s.libNotLinked)];
         final mine = asJson(d['mine']);
-        final first = asJson(d['history']);
         final now = asList(mine['now']);
         final res = asList(mine['reservations']);
         final open = res.where((r) => r['status'] == 'waiting' || r['status'] == 'ready').toList();
@@ -524,9 +512,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         final atCounter = _num(dues['atCounter']);
         final atLibrary = _num(dues['atLibrary']);
         final digital = asList(d['digital']);
-        final st = asJson(first['stats']);
-        final months = asList(st['months']);
-        final subjects = asList(st['subjects']);
         return [
           ..._head(s, muted, d),
           _tabs(s, d),
@@ -553,35 +538,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     children: [for (final r in ended) _reservation(s, muted, r)],
                   ),
                 ),
-            ],
-            'history' => [
-              _historyCard(s, muted, first, history),
-              if (months.isNotEmpty) ...[
-                SectionTitle(s.libSixMonths),
-                Card(
-                  key: const Key('libMonths'),
-                  child: Padding(
-                    padding: const EdgeInsets.all(Tokens.sp4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _MonthBars(months: months, s: s),
-                        if (subjects.isNotEmpty) ...[
-                          const SizedBox(height: Tokens.sp3),
-                          Text(
-                            s.libReadMost(
-                              subjects
-                                  .map((x) => '${x['subject']} (${_int(x['loans'])})')
-                                  .join(', '),
-                            ),
-                            style: TextStyle(color: muted, fontSize: 14),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ],
             'digital' => [
               if (digital.isEmpty) EmptyLine(s.libNoDigital),
@@ -766,76 +722,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _historyCard(S s, Color muted, Json first, AsyncValue<Loaded<Json>>? other) {
-    List<Widget> rows(Json h) {
-      final list = asList(h['rows']);
-      final total = _int(h['total']);
-      final page = math.max(1, _int(h['page']));
-      final pages = math.max(1, _int(h['pages']));
-      return [
-        Wrap(
-          spacing: Tokens.sp2,
-          runSpacing: Tokens.sp1,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                total > 0 ? s.libBookCount(total) : s.libNoHistory,
-                key: const Key('libHistCount'),
-                style: const TextStyle(fontWeight: Tokens.fwSemibold),
-              ),
-            ),
-            if (total > 0) ...[
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Excel'),
-                  // a spreadsheet does not open in the app: saved or shared
-                  IconButton(
-                    key: const Key('download-libHistXlsx'),
-                    tooltip: '${s.download} ${s.libHistoryExcel}',
-                    icon: const Icon(Icons.download_outlined),
-                    onPressed: () => shareFile(context, s, () => _export('xlsx')),
-                  ),
-                ],
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('PDF'),
-                  FileIcons(name: 'libHistPdf', label: s.libHistoryPdf, load: () => _export('pdf')),
-                ],
-              ),
-            ],
-          ],
-        ),
-        for (final (i, b) in list.indexed) ...[
-          if (i > 0) const Divider(height: 1),
-          _historyRow(s, muted, b),
-        ],
-        if (pages > 1)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                key: const Key('libHistPrev'),
-                tooltip: s.previous,
-                icon: const Icon(Icons.chevron_left),
-                onPressed: page > 1 ? () => setState(() => _page = page - 1) : null,
-              ),
-              Flexible(child: Text(s.pageOf(page, pages))),
-              IconButton(
-                key: const Key('libHistNext'),
-                tooltip: s.next,
-                icon: const Icon(Icons.chevron_right),
-                onPressed: page < pages ? () => setState(() => _page = page + 1) : null,
-              ),
-            ],
-          ),
-      ];
-    }
-
+  /// Read before's top: how many, the dates, the status and a search, then how many found with Excel and PDF; the
+  /// books themselves are the list's (10 at a time).
+  Widget _historyTop(S s, Color muted, int foldTotal, int? total) {
     return Card(
       key: const Key('libHistory'),
       child: Padding(
@@ -844,7 +733,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              s.libHistoryFold(_int(first['total'])),
+              s.libHistoryFold(foldTotal),
               style: const TextStyle(fontWeight: Tokens.fwSemibold),
             ),
             const SizedBox(height: Tokens.sp3),
@@ -877,10 +766,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               enableFilter: true,
               enableSearch: true,
               requestFocusOnTap: true,
-              onSelected: (v) => setState(() {
-                _status = v ?? 'all';
-                _page = 1;
-              }),
+              onSelected: (v) => setState(() => _status = v ?? 'all'),
               dropdownMenuEntries: [
                 for (final v in _statuses) DropdownMenuEntry(value: v, label: s.libStatus(v)),
               ],
@@ -915,32 +801,84 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
               ),
             const SizedBox(height: Tokens.sp2),
-            ...switch (other) {
-              null => rows(first),
-              AsyncValue(:final value?) => rows(value.data),
-              AsyncValue(:final error?) => [
-                ErrorText(errorText(s, error)),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: OutlinedButton(
-                    onPressed: () => ref.invalidate(libraryHistoryProvider(_key)),
-                    child: Text(s.retry),
+            Wrap(
+              spacing: Tokens.sp2,
+              runSpacing: Tokens.sp1,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    (total ?? 0) > 0 ? s.libBookCount(total!) : s.libNoHistory,
+                    key: const Key('libHistCount'),
+                    style: const TextStyle(fontWeight: Tokens.fwSemibold),
                   ),
                 ),
-              ],
-              _ => [
-                Padding(
-                  padding: const EdgeInsets.all(Tokens.sp4),
-                  child: Center(
-                    child: Semantics(label: s.loading, child: const CircularProgressIndicator()),
+                if ((total ?? 0) > 0) ...[
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Excel'),
+                      // a spreadsheet does not open in the app: saved or shared
+                      IconButton(
+                        key: const Key('download-libHistXlsx'),
+                        tooltip: '${s.download} ${s.libHistoryExcel}',
+                        icon: const Icon(Icons.download_outlined),
+                        onPressed: () => shareFile(context, s, () => _export('xlsx')),
+                      ),
+                    ],
                   ),
-                ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('PDF'),
+                      FileIcons(
+                        name: 'libHistPdf',
+                        label: s.libHistoryPdf,
+                        load: () => _export('pdf'),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            },
+            ),
           ],
         ),
       ),
     );
+  }
+
+  /// Six months of borrowing and the subjects read most (after the list).
+  List<Widget> _monthsCard(S s, Color muted, Json? d) {
+    final st = asJson(asJson(d?['history'])['stats']);
+    final months = asList(st['months']);
+    final subjects = asList(st['subjects']);
+    return [
+      if (months.isNotEmpty) ...[
+        SectionTitle(s.libSixMonths),
+        Card(
+          key: const Key('libMonths'),
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.sp4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _MonthBars(months: months, s: s),
+                if (subjects.isNotEmpty) ...[
+                  const SizedBox(height: Tokens.sp3),
+                  Text(
+                    s.libReadMost(
+                      subjects.map((x) => '${x['subject']} (${_int(x['loans'])})').join(', '),
+                    ),
+                    style: TextStyle(color: muted, fontSize: 14),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    ];
   }
 
   Widget _historyRow(S s, Color muted, Json b) {
@@ -1140,15 +1078,16 @@ class LibraryCatalogueScreen extends ConsumerStatefulWidget {
 
 class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen> {
   String _q = '';
-  int _page = 1;
   final _search = TextEditingController();
   final _busy = <String>{};
+
+  /// bumped after a reservation: the list loads again
+  int _round = 0;
   String? _message;
   String? _error;
 
   Profile get _p => widget.profile;
   bool get _self => _p.kind == 'student' || _p.isStaff;
-  (Profile, String, int) get _key => (_p, _q, _page);
 
   @override
   void dispose() {
@@ -1158,7 +1097,6 @@ class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen>
 
   void _apply(String v) => setState(() {
     _q = v.trim();
-    _page = 1;
     _message = null;
     _error = null;
   });
@@ -1182,7 +1120,7 @@ class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen>
       if (!mounted) return;
       _message = s.libReservedMsg(_self);
       ref.invalidate(libraryProvider(_p));
-      ref.invalidate(libraryCatalogueProvider(_key));
+      _round++;
     } catch (e) {
       if (mounted) _error = errorText(s, e);
     } finally {
@@ -1202,81 +1140,72 @@ class _LibraryCatalogueScreenState extends ConsumerState<LibraryCatalogueScreen>
         if (r['status'] == 'waiting' || r['status'] == 'ready') '${r['titleId']}',
     };
     final name = _str(asJson(mine['borrower'])['name']) ?? _p.name;
-    return LoadedList<Json>(
-      value: ref.watch(libraryCatalogueProvider(_key)),
-      refresh: () => ref.refresh(libraryCatalogueProvider(_key).future),
-      children: (c) {
-        final rows = asList(c['rows']);
-        final total = _int(c['total']);
-        final page = math.max(1, _int(c['page']));
-        final pages = math.max(1, _int(c['pages']));
-        return [
-          ...widget.header,
-          Text(s.libFindHelp, style: TextStyle(color: muted, fontSize: 14)),
-          const SizedBox(height: Tokens.sp3),
-          if (_message != null) ...[Notice(text: _message!), const SizedBox(height: Tokens.sp3)],
-          if (_error != null) ...[ErrorText(_error!), const SizedBox(height: Tokens.sp3)],
-          TextField(
-            key: const Key('libCatSearch'),
-            controller: _search,
-            maxLength: 80,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              labelText: s.libSearchLabel,
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: IconButton(
-                key: const Key('libCatGo'),
-                tooltip: s.libSearch,
-                icon: const Icon(Icons.arrow_forward),
-                onPressed: () => _apply(_search.text),
-              ),
-              border: const OutlineInputBorder(),
-              counterText: '',
-            ),
-            onSubmitted: _apply,
+    return PagedFeed(
+      key: ValueKey('libCatFeed-$_q-$_round'),
+      // the generated client has no query for this call: through the transport
+      load: (page) => ref
+          .read(transportProvider)
+          .send(
+            'GET',
+            '/library/portal/catalogue',
+            query: {if (_q.isNotEmpty) 'q': _q, 'page': page, 'size': 10},
           ),
-          const SizedBox(height: Tokens.sp2),
+      parse: (c, page) {
+        final pages = math.max(1, _int(c['pages']));
+        return (items: asList(c['rows']), more: page < pages, total: _int(c['total']));
+      },
+      header: (total, _) => [
+        ...widget.header,
+        Text(s.libFindHelp, style: TextStyle(color: muted, fontSize: 14)),
+        const SizedBox(height: Tokens.sp3),
+        if (_message != null) ...[Notice(text: _message!), const SizedBox(height: Tokens.sp3)],
+        if (_error != null) ...[ErrorText(_error!), const SizedBox(height: Tokens.sp3)],
+        TextField(
+          key: const Key('libCatSearch'),
+          controller: _search,
+          maxLength: 80,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            labelText: s.libSearchLabel,
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: IconButton(
+              key: const Key('libCatGo'),
+              tooltip: s.libSearch,
+              icon: const Icon(Icons.arrow_forward),
+              onPressed: () => _apply(_search.text),
+            ),
+            border: const OutlineInputBorder(),
+            counterText: '',
+          ),
+          onSubmitted: _apply,
+        ),
+        const SizedBox(height: Tokens.sp2),
+        if (total != null)
           Semantics(
             liveRegion: true,
             child: Text(
-              rows.isEmpty ? s.libNoBookFound : s.libBooksFound(total),
+              total == 0 ? s.libNoBookFound : s.libBooksFound(total),
               key: const Key('libCatCount'),
               style: TextStyle(color: muted, fontSize: 14),
             ),
           ),
-          const SizedBox(height: Tokens.sp2),
-          for (final b in rows)
-            _titleCard(
-              s,
-              muted,
-              b,
-              name,
-              holding.contains('${b['titleId']}'),
-              reserved.contains('${b['titleId']}'),
-            ),
-          if (pages > 1)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  key: const Key('libCatPrev'),
-                  tooltip: s.previous,
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: page > 1 ? () => setState(() => _page = page - 1) : null,
-                ),
-                Flexible(child: Text(s.pageOf(page, pages))),
-                IconButton(
-                  key: const Key('libCatNext'),
-                  tooltip: s.next,
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: page < pages ? () => setState(() => _page = page + 1) : null,
-                ),
-              ],
-            ),
-          const SizedBox(height: Tokens.sp3),
-          Text(s.libReserveHelp(_self), style: TextStyle(color: muted, fontSize: 13)),
-        ];
-      },
+        const SizedBox(height: Tokens.sp2),
+      ],
+      empty: s.libNoBookFound,
+      // the count line above says there is none
+      emptyCard: const SizedBox.shrink(),
+      item: (context, b, _) => _titleCard(
+        s,
+        muted,
+        b,
+        name,
+        holding.contains('${b['titleId']}'),
+        reserved.contains('${b['titleId']}'),
+      ),
+      footer: [
+        const SizedBox(height: Tokens.sp3),
+        Text(s.libReserveHelp(_self), style: TextStyle(color: muted, fontSize: 13)),
+      ],
     );
   }
 

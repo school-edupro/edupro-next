@@ -60,8 +60,11 @@ class School {
     switch ('${c.method} ${c.path}') {
       case 'GET /gate-passes/mine':
         final page = (c.query ?? const {})['page'];
+        // the two on page 1 (the rest of the 12 are not in the fake; a month asks without a page)
         return {
-          'data': [pass('501', 'approved'), pass('502', 'pending', kind: 'late_arrival')],
+          'data': (page ?? 1) != 1
+              ? <Object>[]
+              : [pass('501', 'approved'), pass('502', 'pending', kind: 'late_arrival')],
           'page': {'number': page ?? 1, 'size': 10, 'total': 12},
         };
       case 'GET /gate-passes/mine/options':
@@ -202,7 +205,11 @@ void main() {
       final t = await pump(tester, const GatePassesScreen(profile: kid));
       expect(find.text('Early leave and late arrival'), findsOneWidget);
       expect(find.text('12 in all · latest first'), findsOneWidget);
-      expect(t.calls.last.query, {'studentId': '41', 'page': 1, 'size': 10});
+      expect(t.calls.firstWhere((c) => c.path == '/gate-passes/mine').query, {
+        'studentId': '41',
+        'page': 1,
+        'size': 10,
+      });
       expect(find.text('Leaving early'), findsOneWidget);
       expect(find.text('Approved: collect at the front desk'), findsOneWidget);
       expect(find.text('Arriving late'), findsOneWidget);
@@ -221,9 +228,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(t.calls.last.query!['q'], 'dentist');
       expect(find.text('12 found · latest first'), findsOneWidget);
-      // ten a page
-      await tapIn(tester, find.byKey(const Key('gateNext')));
-      expect(t.calls.last.query!['page'], 2);
+      // ten a page; the next comes by itself (here the first page does not fill the screen)
+      expect(t.calls.any((c) => c.path == '/gate-passes/mine' && c.query!['page'] == 2), isTrue);
       // a month
       await tapIn(tester, find.byKey(const Key('gateView-calendar')));
       final now = DateTime.now();

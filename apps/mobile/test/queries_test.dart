@@ -46,8 +46,12 @@ class Desk {
   Object? answer(Call c) {
     switch ('${c.method} ${c.path}') {
       case 'GET /engagement/mine/queries':
+        // the three on page 1 (the rest of the 14 are not in the fake)
+        final more = ((c.query ?? const {})['page'] ?? 1) != 1;
         return {
-          'data': [row('71', 'open'), row('72', 'closed'), row('73', 'answered', kind: 'leave')],
+          'data': more
+              ? <Object>[]
+              : [row('71', 'open'), row('72', 'closed'), row('73', 'answered', kind: 'leave')],
           'page': {'total': 14},
         };
       case 'GET /engagement/mine/categories':
@@ -178,7 +182,12 @@ void main() {
     final t = await pump(tester, const QueriesScreen(profile: kid));
     expect(find.text('Queries, complaints and leave'), findsOneWidget);
     expect(find.text('14 in all · latest first'), findsOneWidget);
-    expect(t.calls.last.query, {'studentId': '41', 'order': 'latest', 'page': 1, 'size': 10});
+    expect(t.calls.firstWhere((c) => c.path == '/engagement/mine/queries').query, {
+      'studentId': '41',
+      'order': 'latest',
+      'page': 1,
+      'size': 10,
+    });
     expect(find.text('Q-71 · Query · Transport · Kid Sample · 10 Nov 2026'), findsOneWidget);
     expect(find.text('Open'), findsWidgets);
     expect(find.text('Approved'), findsOneWidget);
@@ -193,8 +202,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(t.calls.last.query!['q'], 'Q-71');
     expect(find.text('14 found · latest first'), findsOneWidget);
-    await tapIn(tester, find.byKey(const Key('qryNext')));
-    expect(t.calls.last.query!['page'], 2);
+    // ten a page; the next comes by itself (here the first page does not fill the screen)
+    expect(
+      t.calls.any((c) => c.path == '/engagement/mine/queries' && c.query!['page'] == 2),
+      isTrue,
+    );
     // quick feedback: a rating is needed
     await tapIn(tester, find.byKey(const Key('qryFbSend')));
     expect(find.text('Choose a rating.'), findsOneWidget);

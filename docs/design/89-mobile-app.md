@@ -1069,3 +1069,17 @@ more as the user scrolls down").
     12 papers for the child: 10, then 12, desktop and phone, axe) and on Alpha read-only (each list ends). Alpha's
     papers page shows one teacher's remark with links that are not underlined (axe link-in-text-block): it was so
     before; not changed here.
+- **Families and students (25 Nov 2026): Queries, Gate passes, Library**, app and the family website: the latest 10,
+  then 10 more as the person scrolls (the Previous / Next pages are gone).
+  - API: the library's history (`/library/portal/borrowers/:kind/:id/history`) and catalogue
+    (`/library/portal/catalogue`) take `size` (20 unless asked, at most 50); queries and gate passes were paged.
+  - App: `QueriesScreen` (the feedback card after the list, `footer`), `GatePassesScreen` (the list; the month stays
+    whole), the Library's Read before (its filters and count above, the books as the list's items, six months after)
+    and `LibraryCatalogueScreen` on `PagedFeed`; `feedRoundProvider('family-queries' | 'family-gate')` reloads after a
+    new request, a reply or a cancellation.
+  - Family website: `QueryItems`, `PassItems` (the list; a month shows whole), the history's `HistoryRows` and Find a
+    book's `BookItems` drawn on the server for the next pages (`queriesPage`, `passesPage`, `libraryHistoryPage`,
+    `catalogueSearchPage`); `MoreFeed` takes `wrap` to put the pages in a table's body or a list.
+  - Tests: API `library-reservations` (a page of 1 for the history and the catalogue); app `queries_test`,
+    `gate_pass_test`, `library_test` (the first page of 10, the next by itself); a browser check on a throwaway test
+    school (12 queries, 12 passes, 12 loans, 12 books: 10, then 12, desktop and phone, axe) and on Alpha read-only.

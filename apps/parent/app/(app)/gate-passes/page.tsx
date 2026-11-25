@@ -1,13 +1,15 @@
-import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
 import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { DAYS, dayOf, studentLabel, timeOf } from '../appointments/shared';
-import { cancelGatePass } from './actions';
-import { KIND, dateParts, stateOf, type Pass } from './shared';
+import { DAYS, dayOf } from '../appointments/shared';
+import { MoreFeed } from '@/components/MoreFeed';
+import { passesPage } from '@/lib/feed-actions';
+import { PassItems } from './PassItems';
+import { KIND, stateOf, type Pass } from './shared';
 
 const PAGE_SIZE = 10;
 
@@ -22,7 +24,6 @@ export default async function GatePassesPage({
     st?: string;
     child?: string;
     q?: string;
-    page?: string;
     view?: string;
     month?: string;
     ok?: string;
@@ -41,13 +42,6 @@ export default async function GatePassesPage({
     }).filter(([, v]) => v),
   ) as Record<string, string>;
   const filtered = Object.keys(filters).length > 0;
-  const page = Math.max(1, Number(sp.page) || 1);
-  const pageHref = (n: number) =>
-    `/gate-passes?${new URLSearchParams({
-      ...(filters.state ? { st: filters.state } : {}),
-      ...(filters.q ? { q: filters.q } : {}),
-      page: String(n),
-    }).toString()}`;
   // the calendar: one month, every pass of the family dated in it
   const calendar = sp.view === 'calendar';
   const nowDay = dayOf(new Date().toISOString());
@@ -60,11 +54,13 @@ export default async function GatePassesPage({
     lang === 'hi' ? 'hi-IN' : 'en-IN',
     { timeZone: 'UTC', month: 'long', year: 'numeric' },
   );
+  // the child and the filters, as the list's next pages ask for them too
+  const listFilters: Record<string, string> = { ...(kid ? { studentId: kid.id } : {}), ...filters };
   const query: Record<string, string> = {
     ...(kid ? { studentId: kid.id } : {}),
     ...(calendar
       ? { from: `${month}-01`, to: `${month}-${String(monthDays).padStart(2, '0')}`, size: '100' }
-      : { ...filters, size: String(PAGE_SIZE), page: String(page) }),
+      : { ...filters, size: String(PAGE_SIZE), page: '1' }),
   };
   let passes: Pass[];
   let total: number;
@@ -262,92 +258,21 @@ export default async function GatePassesPage({
                 )}
         </Card>
       ) : null}
-      {passes.map((p) => {
-        const d = dateParts(p.onDate);
-        const [label, tone] = stateOf(p);
-        return (
-          <Card key={p.id} elevated style={{ marginBottom: 'var(--sp-3)' }}>
-            <div className="ep-apt">
-              <div className="ep-apt__date">
-                <span className="ep-apt__day">{d.day}</span>
-                <span className="ep-apt__month">{d.month}</span>
-                {p.atTime ? <span className="ep-apt__time">{p.atTime}</span> : null}
-              </div>
-              <div className="ep-apt__body">
-                <div className="ep-apt__top">
-                  <a className="ep-apt__title" href={`/gate-passes/${p.id}`}>
-                    {t(lang, KIND[p.kind])}
-                  </a>
-                  <Badge tone={tone}>{t(lang, label)}</Badge>
-                </div>
-                <div>{p.reason}</div>
-                <div className="ep-kicker">
-                  {[
-                    p.number,
-                    studentLabel(p, t(lang, 'Adm. no.')),
-                    p.escortName
-                      ? `${t(lang, 'With')} ${p.escortName}${p.escortRelation ? ` (${p.escortRelation})` : ''}`
-                      : null,
-                    p.state === 'pending' && p.waitingOn
-                      ? `${t(lang, 'Waiting on')} ${p.waitingOn}`
-                      : null,
-                    p.outAt ? `${t(lang, 'Gate out')} ${timeOf(p.outAt)}` : null,
-                    p.inAt ? `${t(lang, 'Gate in')} ${timeOf(p.inAt)}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </div>
-                <div className="ep-apt__actions">
-                  <a
-                    className="ep-btn ep-btn--secondary ep-btn--sm"
-                    href={`/gate-passes/${p.id}`}
-                    aria-label={`${t(lang, p.passNo ? 'Details and gate pass' : 'Details')} ${p.number}`}
-                  >
-                    {t(lang, p.passNo ? 'Details and gate pass' : 'Details')}
-                  </a>
-                  {['pending', 'approved'].includes(p.state) ? (
-                    <form action={cancelGatePass}>
-                      <input type="hidden" name="id" value={p.id} />
-                      <Button
-                        type="submit"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`${t(lang, 'Cancel')} ${p.number}`}
-                      >
-                        {t(lang, 'Cancel')}
-                      </Button>
-                    </form>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </Card>
-        );
-      })}
-      {!calendar && total > PAGE_SIZE ? (
-        <nav
-          aria-label={t(lang, 'Pages')}
-          style={{
-            display: 'flex',
-            gap: 'var(--sp-3)',
-            alignItems: 'center',
-            justifyContent: 'center',
+      {calendar ? (
+        <PassItems items={passes} lang={lang} />
+      ) : passes.length ? (
+        <MoreFeed
+          key={JSON.stringify(listFilters)}
+          first={<PassItems items={passes} lang={lang} />}
+          more={PAGE_SIZE < total}
+          load={passesPage.bind(null, listFilters)}
+          labels={{
+            more: t(lang, 'Show more'),
+            loading: t(lang, 'Loading…'),
+            failed: t(lang, 'Could not load more.'),
+            end: t(lang, 'That is everything.'),
           }}
-        >
-          {page > 1 ? (
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={pageHref(page - 1)}>
-              ← {t(lang, 'Previous')}
-            </a>
-          ) : null}
-          <span className="ep-field__help">
-            {t(lang, 'Page')} {page} / {Math.ceil(total / PAGE_SIZE)}
-          </span>
-          {page * PAGE_SIZE < total ? (
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={pageHref(page + 1)}>
-              {t(lang, 'Next')} →
-            </a>
-          ) : null}
-        </nav>
+        />
       ) : null}
     </main>
   );

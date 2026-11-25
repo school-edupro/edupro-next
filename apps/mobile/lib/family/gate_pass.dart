@@ -7,6 +7,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
+import '../ui/paged_feed.dart';
 import 'common.dart';
 import 'data.dart';
 
@@ -228,8 +229,8 @@ final gatePassProvider = FutureProvider.autoDispose.family<Json, String>(
   (ref, id) async => asJson(await ref.read(apiProvider).gatePassMineGet(id: id)),
 );
 
-/// The gate passes as the website's page (apps/parent/app/(app)/gate-passes): a list with the status and a search,
-/// ten a page, or a month; each with its date, kind, state, reason, who takes the child and the gate times;
+/// The gate passes as the website's page (apps/parent/app/(app)/gate-passes): a list with the status and a search —
+/// the latest 10 first and 10 more as the family scrolls — or a month; each with its date, kind, state, reason, who takes the child and the gate times;
 /// Details and Cancel; Request a gate pass.
 class GatePassesScreen extends ConsumerStatefulWidget {
   const GatePassesScreen({super.key, required this.profile});
@@ -243,7 +244,6 @@ class _GatePassesScreenState extends ConsumerState<GatePassesScreen> {
   bool _calendar = false;
   String _state = '';
   String _q = '';
-  int _page = 1;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   final _words = TextEditingController();
 
@@ -253,9 +253,9 @@ class _GatePassesScreenState extends ConsumerState<GatePassesScreen> {
     super.dispose();
   }
 
-  (Profile, String, String, int, String, String) get _key => _calendar
-      ? (widget.profile, '', '', 1, ymd(_month), ymd(DateTime(_month.year, _month.month + 1, 0)))
-      : (widget.profile, _state, _q, _page, '', '');
+  /// the month on the calendar
+  (Profile, String, String, int, String, String) get _key =>
+      (widget.profile, '', '', 1, ymd(_month), ymd(DateTime(_month.year, _month.month + 1, 0)));
 
   Future<void> _request() async {
     final s = ref.read(stringsProvider);
@@ -269,6 +269,7 @@ class _GatePassesScreenState extends ConsumerState<GatePassesScreen> {
     );
     if (!mounted) return;
     ref.invalidate(gatePassesProvider);
+    ref.read(feedRoundProvider('family-gate').notifier).bump();
     if (id != null) openGatePass(context, widget.profile, id, sent: true);
   }
 
@@ -278,171 +279,171 @@ class _GatePassesScreenState extends ConsumerState<GatePassesScreen> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
     final filtered = _state.isNotEmpty || _q.isNotEmpty;
+    if (!_calendar) {
+      // the list: the latest 10, then 10 more as the family scrolls (as the website)
+      final round = ref.watch(feedRoundProvider('family-gate'));
+      return PagedFeed(
+        key: ValueKey('gateFeed-$_state-$_q-$round'),
+        firstCacheKey: filtered ? null : 'gate-feed:${widget.profile.id}',
+        load: (page) => ref
+            .read(apiProvider)
+            .gatePassMine(
+              studentId: widget.profile.studentId,
+              state: _state.isEmpty ? null : _state,
+              q: _q.isEmpty ? null : _q,
+              page: page,
+              size: 10,
+            ),
+        parse: (a, page) {
+          final total = ((asJson(a['page'])['total'] as num?) ?? 0).toInt();
+          return (items: asList(a['data']), more: page * 10 < total, total: total);
+        },
+        header: (total, _) => _top(s, muted, total, filtered),
+        empty: filtered ? s.nothingMatches : s.gateNone,
+        item: (context, x, _) => GatePassCard(profile: widget.profile, pass: x),
+      );
+    }
+    // the month: its passes by day
     return LoadedList<Json>(
       value: ref.watch(gatePassesProvider(_key)),
       refresh: () => ref.refresh(gatePassesProvider(_key).future),
       children: (d) {
         final passes = asList(d['data']);
         final total = ((asJson(d['page'])['total'] as num?) ?? passes.length).toInt();
-        final pages = (total / 10).ceil();
         return [
-          Text(
-            s.gateTitle,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
-          ),
-          Text(
-            _calendar ? '${s.month(_month)} · $total' : s.gateCount(total, filtered),
-            key: const Key('gateCount'),
-            style: TextStyle(color: muted, fontSize: 14),
-          ),
-          const SizedBox(height: Tokens.sp3),
-          FilledButton.icon(
-            key: const Key('requestGatePass'),
-            icon: const Icon(Icons.add),
-            label: Text(s.gateRequest),
-            onPressed: _request,
-          ),
-          const SizedBox(height: Tokens.sp3),
-          Semantics(
-            label: s.gateTitle,
-            container: true,
-            explicitChildNodes: true,
-            child: Wrap(
-              spacing: Tokens.sp2,
-              children: [
-                for (final (v, label) in [(false, s.gateList), (true, s.gateCalendar)])
-                  ChoiceChip(
-                    key: Key('gateView-${v ? 'calendar' : 'list'}'),
-                    label: Text(label),
-                    selected: _calendar == v,
-                    showCheckmark: false,
-                    onSelected: (_) => setState(() => _calendar = v),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Tokens.sp2),
-          if (_calendar)
-            Row(
-              children: [
-                IconButton(
-                  key: const Key('gateMonthBack'),
-                  tooltip: s.previous,
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)),
-                ),
-                Expanded(
-                  child: Text(
-                    s.month(_month),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: Tokens.fwBold),
-                  ),
-                ),
-                IconButton(
-                  key: const Key('gateMonthNext'),
-                  tooltip: s.next,
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () => setState(() => _month = DateTime(_month.year, _month.month + 1)),
-                ),
-              ],
-            )
-          else
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(Tokens.sp3),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Wrap(
-                      spacing: Tokens.sp2,
-                      runSpacing: Tokens.sp2,
-                      children: [
-                        for (final (v, label) in [
-                          ('', s.gateAll),
-                          ('open', s.gateOpenOnes),
-                          ('past', s.gatePastOnes),
-                        ])
-                          ChoiceChip(
-                            key: Key('gateState-${v.isEmpty ? 'all' : v}'),
-                            label: Text(label),
-                            selected: _state == v,
-                            showCheckmark: false,
-                            onSelected: (_) => setState(() {
-                              _state = v;
-                              _page = 1;
-                            }),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: Tokens.sp2),
-                    TextField(
-                      key: const Key('gateSearch'),
-                      controller: _words,
-                      maxLength: 80,
-                      textInputAction: TextInputAction.search,
-                      decoration: InputDecoration(
-                        labelText: s.gateSearch,
-                        prefixIcon: const Icon(Icons.search),
-                        border: const OutlineInputBorder(),
-                        counterText: '',
-                      ),
-                      onSubmitted: (v) => setState(() {
-                        _q = v.trim();
-                        _page = 1;
-                      }),
-                    ),
-                    if (filtered)
-                      Align(
-                        alignment: AlignmentDirectional.centerEnd,
-                        child: TextButton(
-                          key: const Key('gateClear'),
-                          onPressed: () => setState(() {
-                            _state = '';
-                            _q = '';
-                            _words.clear();
-                            _page = 1;
-                          }),
-                          child: Text(s.clearDates),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          const SizedBox(height: Tokens.sp2),
-          if (passes.isEmpty)
-            EmptyLine(_calendar ? s.gateNoneMonth : (filtered ? s.nothingMatches : s.gateNone)),
-          if (_calendar)
-            for (final day in {for (final x in passes) '${x['onDate']}'}.toList()..sort()) ...[
-              SectionTitle(s.dayShort(day)),
-              for (final x in passes.where((x) => '${x['onDate']}' == day))
-                GatePassCard(profile: widget.profile, pass: x),
-            ]
-          else
-            for (final x in passes) GatePassCard(profile: widget.profile, pass: x),
-          if (!_calendar && total > 10)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  key: const Key('gatePrev'),
-                  tooltip: s.previous,
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: _page > 1 ? () => setState(() => _page -= 1) : null,
-                ),
-                Flexible(child: Text(s.pageOf(_page, pages), textAlign: TextAlign.center)),
-                IconButton(
-                  key: const Key('gateNext'),
-                  tooltip: s.next,
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: _page < pages ? () => setState(() => _page += 1) : null,
-                ),
-              ],
-            ),
+          ..._top(s, muted, total, filtered),
+          if (passes.isEmpty) EmptyLine(s.gateNoneMonth),
+          for (final day in {for (final x in passes) '${x['onDate']}'}.toList()..sort()) ...[
+            SectionTitle(s.dayShort(day)),
+            for (final x in passes.where((x) => '${x['onDate']}' == day))
+              GatePassCard(profile: widget.profile, pass: x),
+          ],
         ];
       },
     );
   }
+
+  /// The title and how many, Request a gate pass, List or Calendar, then the month or the filters.
+  List<Widget> _top(S s, Color muted, int? total, bool filtered) => [
+    Text(
+      s.gateTitle,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+    ),
+    if (total != null)
+      Text(
+        _calendar ? '${s.month(_month)} · $total' : s.gateCount(total, filtered),
+        key: const Key('gateCount'),
+        style: TextStyle(color: muted, fontSize: 14),
+      ),
+    const SizedBox(height: Tokens.sp3),
+    FilledButton.icon(
+      key: const Key('requestGatePass'),
+      icon: const Icon(Icons.add),
+      label: Text(s.gateRequest),
+      onPressed: _request,
+    ),
+    const SizedBox(height: Tokens.sp3),
+    Semantics(
+      label: s.gateTitle,
+      container: true,
+      explicitChildNodes: true,
+      child: Wrap(
+        spacing: Tokens.sp2,
+        children: [
+          for (final (v, label) in [(false, s.gateList), (true, s.gateCalendar)])
+            ChoiceChip(
+              key: Key('gateView-${v ? 'calendar' : 'list'}'),
+              label: Text(label),
+              selected: _calendar == v,
+              showCheckmark: false,
+              onSelected: (_) => setState(() => _calendar = v),
+            ),
+        ],
+      ),
+    ),
+    const SizedBox(height: Tokens.sp2),
+    if (_calendar)
+      Row(
+        children: [
+          IconButton(
+            key: const Key('gateMonthBack'),
+            tooltip: s.previous,
+            icon: const Icon(Icons.chevron_left),
+            onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)),
+          ),
+          Expanded(
+            child: Text(
+              s.month(_month),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: Tokens.fwBold),
+            ),
+          ),
+          IconButton(
+            key: const Key('gateMonthNext'),
+            tooltip: s.next,
+            icon: const Icon(Icons.chevron_right),
+            onPressed: () => setState(() => _month = DateTime(_month.year, _month.month + 1)),
+          ),
+        ],
+      )
+    else
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(Tokens.sp3),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Wrap(
+                spacing: Tokens.sp2,
+                runSpacing: Tokens.sp2,
+                children: [
+                  for (final (v, label) in [
+                    ('', s.gateAll),
+                    ('open', s.gateOpenOnes),
+                    ('past', s.gatePastOnes),
+                  ])
+                    ChoiceChip(
+                      key: Key('gateState-${v.isEmpty ? 'all' : v}'),
+                      label: Text(label),
+                      selected: _state == v,
+                      showCheckmark: false,
+                      onSelected: (_) => setState(() => _state = v),
+                    ),
+                ],
+              ),
+              const SizedBox(height: Tokens.sp2),
+              TextField(
+                key: const Key('gateSearch'),
+                controller: _words,
+                maxLength: 80,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  labelText: s.gateSearch,
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  counterText: '',
+                ),
+                onSubmitted: (v) => setState(() => _q = v.trim()),
+              ),
+              if (filtered)
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton(
+                    key: const Key('gateClear'),
+                    onPressed: () => setState(() {
+                      _state = '';
+                      _q = '';
+                      _words.clear();
+                    }),
+                    child: Text(s.clearDates),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    const SizedBox(height: Tokens.sp2),
+  ];
 }
 
 /// Opens a gate pass in full in the app; `sent`: just requested.
@@ -472,6 +473,7 @@ Future<bool> cancelGatePass(BuildContext context, WidgetRef ref, String id) asyn
   try {
     await ref.read(apiProvider).gatePassMineCancel(id: id, body: const PassCancelDto());
     ref.invalidate(gatePassesProvider);
+    ref.read(feedRoundProvider('family-gate').notifier).bump();
     ref.invalidate(gatePassProvider(id));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.gateCancelled)));

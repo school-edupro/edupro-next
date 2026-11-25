@@ -15,6 +15,8 @@ export interface PortalHistoryQuery {
   status?: 'all' | 'out' | 'returned' | 'late' | 'renewed' | 'fined';
   q?: string;
   page?: number;
+  /** a page of this many (20 unless asked; the family app and website: 10) */
+  size?: number;
 }
 const STATUS_WORDS: Record<string, string> = {
   out: 'not returned yet',
@@ -316,7 +318,7 @@ export class LibraryPortalService {
   /** My library: the figures and one page of the history, filtered. */
   async history(ctx: RequestContext, kind: string, id: string, q: PortalHistoryQuery) {
     const p = await this.one(ctx, kind, id);
-    const size = 20;
+    const size = q.size ?? 20;
     const page = Math.max(1, q.page ?? 1);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const h = await this.historyRows(c, p, q, size, (page - 1) * size);
@@ -413,10 +415,9 @@ export class LibraryPortalService {
   }
 
   /** The catalogue: books by title, author, subject or ISBN, each with whether a copy is on the shelf. */
-  async catalogue(ctx: RequestContext, q: string, page: number) {
+  async catalogue(ctx: RequestContext, q: string, page: number, size = 20) {
     await this.people(ctx);
     const text = q.trim().slice(0, 80);
-    const size = 20;
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.reservations.tidyIn(c);
       const r = await c.query<Record<string, unknown>>(

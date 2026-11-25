@@ -1,33 +1,15 @@
-import {
-  Badge,
-  Button,
-  Card,
-  InputField,
-  PageHeader,
-  SelectField,
-  StarInput,
-  Stars,
-} from '@edupro/ui';
+import { Button, Card, InputField, PageHeader, SelectField, StarInput } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { MoreFeed } from '@/components/MoreFeed';
+import { queriesPage } from '@/lib/feed-actions';
 import { giveFeedback } from './actions';
+import { LABEL, KIND, QueryItems, type Query } from './QueryItems';
 
-interface Query {
-  id: string;
-  number: string;
-  kind: 'query' | 'complaint' | 'leave';
-  categoryName: string;
-  studentName: string;
-  subject: string;
-  status: 'open' | 'in_progress' | 'answered' | 'closed';
-  decision: string | null;
-  rating: number | null;
-  openedAt: string;
-}
 interface Viewer {
   students: Array<{
     id: string;
@@ -36,24 +18,6 @@ interface Viewer {
     section: string | null;
   }>;
 }
-const TONE: Record<Query['status'], 'warning' | 'info' | 'success' | 'neutral'> = {
-  open: 'warning',
-  in_progress: 'info',
-  answered: 'success',
-  closed: 'neutral',
-};
-const LABEL: Record<Query['status'], string> = {
-  open: 'Open',
-  in_progress: 'In progress',
-  answered: 'Answered',
-  closed: 'Closed',
-};
-const KIND: Record<Query['kind'], string> = {
-  query: 'Query',
-  complaint: 'Complaint',
-  leave: 'Leave request',
-};
-
 const PAGE_SIZE = 10;
 const STATUSES = ['active', 'open', 'in_progress', 'answered', 'closed'];
 const KINDS = ['query', 'complaint', 'leave'];
@@ -70,7 +34,6 @@ export default async function QueriesPage({
     kind?: string;
     student?: string;
     q?: string;
-    page?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -88,24 +51,14 @@ export default async function QueriesPage({
     }).filter(([, v]) => v),
   ) as Record<string, string>;
   const filtered = Object.keys(filters).length > 0;
-  const page = Math.max(1, Number(sp.page) || 1);
+  // the filters and the child, as the next pages ask for them too
+  const query: Record<string, string> = { ...filters, ...(kid ? { studentId: kid.id } : {}) };
   const api = new URLSearchParams({
-    ...filters,
-    ...(kid ? { studentId: kid.id } : {}),
+    ...query,
     order: 'latest',
     size: String(PAGE_SIZE),
-    page: String(page),
+    page: '1',
   });
-  /** A link to another page that keeps the filters. */
-  const href = (n: number) => {
-    const u = new URLSearchParams({
-      ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.kind ? { kind: filters.kind } : {}),
-      ...(filters.q ? { q: filters.q } : {}),
-      page: String(n),
-    });
-    return `/queries?${u.toString()}`;
-  };
   let queries: Query[];
   let total: number;
   let viewer: Viewer;
@@ -231,69 +184,19 @@ export default async function QueriesPage({
               )}
         </Card>
       ) : null}
-      {queries.map((q) => (
-        <a key={q.id} href={`/queries/${q.id}`} style={{ textDecoration: 'none' }}>
-          <Card elevated style={{ marginBottom: 'var(--sp-3)' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 'var(--sp-2)',
-                flexWrap: 'wrap',
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontFamily: 'var(--font-heading)',
-                    fontWeight: 600,
-                    color: 'var(--text-heading)',
-                  }}
-                >
-                  {q.subject}
-                </div>
-                <div className="ep-kicker">
-                  {q.number} · {t(lang, KIND[q.kind])} · {q.categoryName} · {q.studentName} ·{' '}
-                  {new Date(q.openedAt).toLocaleDateString('en-IN')}
-                </div>
-              </div>
-              <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
-                <Badge tone={TONE[q.status]}>{t(lang, LABEL[q.status])}</Badge>
-                {q.decision ? (
-                  <Badge tone={q.decision === 'approved' ? 'success' : 'danger'}>
-                    {t(lang, q.decision)}
-                  </Badge>
-                ) : null}
-                {q.rating ? <Stars value={q.rating} /> : null}
-              </span>
-            </div>
-          </Card>
-        </a>
-      ))}
-      {total > PAGE_SIZE ? (
-        <nav
-          aria-label={t(lang, 'Pages')}
-          style={{
-            display: 'flex',
-            gap: 'var(--sp-3)',
-            alignItems: 'center',
-            justifyContent: 'center',
+      {queries.length ? (
+        <MoreFeed
+          key={JSON.stringify(query)}
+          first={<QueryItems items={queries} lang={lang} />}
+          more={PAGE_SIZE < total}
+          load={queriesPage.bind(null, query)}
+          labels={{
+            more: t(lang, 'Show more'),
+            loading: t(lang, 'Loading…'),
+            failed: t(lang, 'Could not load more.'),
+            end: t(lang, 'That is everything.'),
           }}
-        >
-          {page > 1 ? (
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={href(page - 1)}>
-              ← {t(lang, 'Previous')}
-            </a>
-          ) : null}
-          <span className="ep-field__help">
-            {t(lang, 'Page')} {page} / {Math.ceil(total / PAGE_SIZE)}
-          </span>
-          {page * PAGE_SIZE < total ? (
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={href(page + 1)}>
-              {t(lang, 'Next')} →
-            </a>
-          ) : null}
-        </nav>
+        />
       ) : null}
       <Card title={t(lang, 'Quick feedback')} style={{ marginTop: 'var(--sp-4)' }}>
         <form action={giveFeedback} style={{ display: 'grid', gap: 'var(--sp-2)' }}>

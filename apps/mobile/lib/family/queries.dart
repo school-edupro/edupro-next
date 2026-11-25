@@ -9,6 +9,7 @@ import '../staff/data.dart' show PickedFile, uploadFile;
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
 import 'attendance.dart' show leaveFilePickerProvider;
+import '../ui/paged_feed.dart';
 import 'common.dart';
 import 'data.dart';
 
@@ -110,27 +111,6 @@ Tone queryStatusTone(String st) => switch (st) {
   _ => Tone.warning,
 };
 
-/// The family's queries: `(profile, status, kind, words, page)`, ten a page, latest first.
-final queriesProvider = FutureProvider.autoDispose
-    .family<Loaded<Json>, (Profile, String, String, String, int)>((ref, a) async {
-      final (p, status, kind, q, page) = a;
-      final r = await cached(
-        'queries:${p.id}:$status:$kind:$q:$page',
-        () => ref
-            .read(apiProvider)
-            .engagementMine(
-              studentId: p.studentId,
-              status: status.isEmpty ? null : status,
-              kind: kind.isEmpty ? null : kind,
-              q: q.isEmpty ? null : q,
-              order: 'latest',
-              page: page,
-              size: 10,
-            ),
-      );
-      return Loaded(asJson(r.data), r.at, stale: r.stale);
-    });
-
 /// One query in full, and (not for leave) the helpdesk's reopen window and resolution.
 final queryProvider = FutureProvider.autoDispose.family<(Json, Json?), String>((ref, id) async {
   final api = ref.read(apiProvider);
@@ -188,7 +168,8 @@ class QueryStars extends StatelessWidget {
   );
 }
 
-/// The queries as the website's page: how many, the status, the type and a search, ten a page; each with its
+/// The queries as the website's page: how many, the status, the type and a search, the latest 10 first and 10
+/// more as the family scrolls; each with its
 /// subject, number, type, about, child, day, status, the leave decision and the rating; New request; and quick
 /// feedback to the school.
 class QueriesScreen extends ConsumerStatefulWidget {
@@ -203,7 +184,6 @@ class _QueriesScreenState extends ConsumerState<QueriesScreen> {
   String _status = '';
   String _kind = '';
   String _q = '';
-  int _page = 1;
   final _words = TextEditingController();
   String _area = 'teaching';
   int _rating = 0;
@@ -221,8 +201,6 @@ class _QueriesScreenState extends ConsumerState<QueriesScreen> {
 
   bool get _filtered => _status.isNotEmpty || _kind.isNotEmpty || _q.isNotEmpty;
 
-  (Profile, String, String, String, int) get _key => (widget.profile, _status, _kind, _q, _page);
-
   Future<void> _new() async {
     final s = ref.read(stringsProvider);
     final id = await Navigator.of(context).push<String>(
@@ -234,7 +212,7 @@ class _QueriesScreenState extends ConsumerState<QueriesScreen> {
       ),
     );
     if (!mounted) return;
-    ref.invalidate(queriesProvider);
+    ref.read(feedRoundProvider('family-queries').notifier).bump();
     if (id != null) openQuery(context, widget.profile, id, saved: true);
   }
 
@@ -295,242 +273,221 @@ class _QueriesScreenState extends ConsumerState<QueriesScreen> {
           ),
       ],
     );
-    return LoadedList<Json>(
-      value: ref.watch(queriesProvider(_key)),
-      refresh: () => ref.refresh(queriesProvider(_key).future),
-      children: (d) {
-        final rows = asList(d['data']);
-        final total = ((asJson(d['page'])['total'] as num?) ?? rows.length).toInt();
-        final pages = (total / 10).ceil();
-        return [
-          Text(
-            s.qryTitle,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+    // a new request, a reply or a rating elsewhere: the list loads again from the newest
+    final round = ref.watch(feedRoundProvider('family-queries'));
+    return PagedFeed(
+      key: ValueKey('qryFeed-$_status-$_kind-$_q-$round'),
+      firstCacheKey: _filtered ? null : 'queries-feed:${widget.profile.id}',
+      load: (page) => ref
+          .read(apiProvider)
+          .engagementMine(
+            studentId: widget.profile.studentId,
+            status: _status.isEmpty ? null : _status,
+            kind: _kind.isEmpty ? null : _kind,
+            q: _q.isEmpty ? null : _q,
+            order: 'latest',
+            page: page,
+            size: 10,
           ),
+      parse: (a, page) {
+        final total = ((asJson(a['page'])['total'] as num?) ?? 0).toInt();
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      empty: _filtered ? s.nothingMatches : s.qryNone,
+      header: (total, _) => [
+        Text(
+          s.qryTitle,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+        ),
+        if (total != null)
           Text(
             s.qryCount(total, _filtered),
             key: const Key('qryCount'),
             style: TextStyle(color: muted, fontSize: 14),
           ),
-          const SizedBox(height: Tokens.sp3),
-          FilledButton.icon(
-            key: const Key('qryNew'),
-            icon: const Icon(Icons.add),
-            label: Text(s.qryNew),
-            onPressed: _new,
-          ),
-          const SizedBox(height: Tokens.sp3),
-          if (_message != null) ...[Notice(text: _message!), const SizedBox(height: Tokens.sp3)],
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(Tokens.sp3),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(s.qryStatusLabel, style: TextStyle(color: muted, fontSize: 13)),
-                  const SizedBox(height: Tokens.sp1),
-                  chips(
-                    'qryStatus',
-                    [
-                      ('', s.qryAll),
-                      ('active', s.qryNotClosed),
-                      for (final v in const ['open', 'in_progress', 'answered', 'closed'])
-                        (v, s.qryStatus(v)),
-                    ],
-                    _status,
-                    (v) => setState(() {
-                      _status = v;
-                      _page = 1;
-                    }),
-                  ),
-                  const SizedBox(height: Tokens.sp2),
-                  Text(s.qryTypeLabel, style: TextStyle(color: muted, fontSize: 13)),
-                  const SizedBox(height: Tokens.sp1),
-                  chips(
-                    'qryKind',
-                    [
-                      ('', s.qryAll),
-                      for (final v in const ['query', 'complaint', 'leave']) (v, s.qryKind(v)),
-                    ],
-                    _kind,
-                    (v) => setState(() {
-                      _kind = v;
-                      _page = 1;
-                    }),
-                  ),
-                  const SizedBox(height: Tokens.sp2),
-                  TextField(
-                    key: const Key('qrySearch'),
-                    controller: _words,
-                    maxLength: 80,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      labelText: s.qrySearch,
-                      prefixIcon: const Icon(Icons.search),
-                      border: const OutlineInputBorder(),
-                      counterText: '',
-                    ),
-                    onSubmitted: (v) => setState(() {
-                      _q = v.trim();
-                      _page = 1;
-                    }),
-                  ),
-                  if (_filtered)
-                    Align(
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: TextButton(
-                        key: const Key('qryClear'),
-                        onPressed: () => setState(() {
-                          _status = '';
-                          _kind = '';
-                          _q = '';
-                          _words.clear();
-                          _page = 1;
-                        }),
-                        child: Text(s.clearDates),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: Tokens.sp2),
-          if (rows.isEmpty) EmptyLine(_filtered ? s.nothingMatches : s.qryNone),
-          for (final q in rows)
-            Card(
-              key: Key('query-${q['id']}'),
-              child: InkWell(
-                onTap: () => openQuery(context, widget.profile, '${q['id']}'),
-                child: Padding(
-                  padding: const EdgeInsets.all(Tokens.sp4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${q['subject'] ?? ''}',
-                        style: const TextStyle(fontWeight: Tokens.fwBold),
-                      ),
-                      Text(
-                        [
-                          '${q['number'] ?? ''}',
-                          s.qryKind('${q['kind']}'),
-                          if (q['categoryName'] != null) '${q['categoryName']}',
-                          if (q['studentName'] != null) '${q['studentName']}',
-                          if (q['openedAt'] != null) s.date('${q['openedAt']}'.split('T').first),
-                        ].join(' · '),
-                        style: TextStyle(color: muted, fontSize: 13),
-                      ),
-                      const SizedBox(height: Tokens.sp1),
-                      Wrap(
-                        spacing: Tokens.sp1,
-                        runSpacing: Tokens.sp1,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          StatusChip(
-                            s.qryStatus('${q['status']}'),
-                            queryStatusTone('${q['status']}'),
-                          ),
-                          if (q['decision'] != null)
-                            StatusChip(
-                              s.qryDecision('${q['decision']}'),
-                              q['decision'] == 'approved' ? Tone.success : Tone.danger,
-                            ),
-                          if (q['rating'] != null)
-                            Semantics(
-                              label: s.qryYouRated((q['rating'] as num).toInt()),
-                              excludeSemantics: true,
-                              child: Text(
-                                '★' * (q['rating'] as num).toInt(),
-                                style: const TextStyle(color: Tokens.statusWarning),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          if (total > 10)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+        const SizedBox(height: Tokens.sp3),
+        FilledButton.icon(
+          key: const Key('qryNew'),
+          icon: const Icon(Icons.add),
+          label: Text(s.qryNew),
+          onPressed: _new,
+        ),
+        const SizedBox(height: Tokens.sp3),
+        if (_message != null) ...[Notice(text: _message!), const SizedBox(height: Tokens.sp3)],
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.sp3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                IconButton(
-                  key: const Key('qryPrev'),
-                  tooltip: s.previous,
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: _page > 1 ? () => setState(() => _page -= 1) : null,
+                Text(s.qryStatusLabel, style: TextStyle(color: muted, fontSize: 13)),
+                const SizedBox(height: Tokens.sp1),
+                chips(
+                  'qryStatus',
+                  [
+                    ('', s.qryAll),
+                    ('active', s.qryNotClosed),
+                    for (final v in const ['open', 'in_progress', 'answered', 'closed'])
+                      (v, s.qryStatus(v)),
+                  ],
+                  _status,
+                  (v) => setState(() => _status = v),
                 ),
-                Flexible(child: Text(s.pageOf(_page, pages), textAlign: TextAlign.center)),
-                IconButton(
-                  key: const Key('qryNext'),
-                  tooltip: s.next,
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: _page < pages ? () => setState(() => _page += 1) : null,
+                const SizedBox(height: Tokens.sp2),
+                Text(s.qryTypeLabel, style: TextStyle(color: muted, fontSize: 13)),
+                const SizedBox(height: Tokens.sp1),
+                chips(
+                  'qryKind',
+                  [
+                    ('', s.qryAll),
+                    for (final v in const ['query', 'complaint', 'leave']) (v, s.qryKind(v)),
+                  ],
+                  _kind,
+                  (v) => setState(() => _kind = v),
+                ),
+                const SizedBox(height: Tokens.sp2),
+                TextField(
+                  key: const Key('qrySearch'),
+                  controller: _words,
+                  maxLength: 80,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    labelText: s.qrySearch,
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    counterText: '',
+                  ),
+                  onSubmitted: (v) => setState(() => _q = v.trim()),
+                ),
+                if (_filtered)
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton(
+                      key: const Key('qryClear'),
+                      onPressed: () => setState(() {
+                        _status = '';
+                        _kind = '';
+                        _q = '';
+                        _words.clear();
+                      }),
+                      child: Text(s.clearDates),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: Tokens.sp2),
+      ],
+      item: (context, q, _) => Card(
+        key: Key('query-${q['id']}'),
+        child: InkWell(
+          onTap: () => openQuery(context, widget.profile, '${q['id']}'),
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.sp4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${q['subject'] ?? ''}', style: const TextStyle(fontWeight: Tokens.fwBold)),
+                Text(
+                  [
+                    '${q['number'] ?? ''}',
+                    s.qryKind('${q['kind']}'),
+                    if (q['categoryName'] != null) '${q['categoryName']}',
+                    if (q['studentName'] != null) '${q['studentName']}',
+                    if (q['openedAt'] != null) s.date('${q['openedAt']}'.split('T').first),
+                  ].join(' · '),
+                  style: TextStyle(color: muted, fontSize: 13),
+                ),
+                const SizedBox(height: Tokens.sp1),
+                Wrap(
+                  spacing: Tokens.sp1,
+                  runSpacing: Tokens.sp1,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    StatusChip(s.qryStatus('${q['status']}'), queryStatusTone('${q['status']}')),
+                    if (q['decision'] != null)
+                      StatusChip(
+                        s.qryDecision('${q['decision']}'),
+                        q['decision'] == 'approved' ? Tone.success : Tone.danger,
+                      ),
+                    if (q['rating'] != null)
+                      Semantics(
+                        label: s.qryYouRated((q['rating'] as num).toInt()),
+                        excludeSemantics: true,
+                        child: Text(
+                          '★' * (q['rating'] as num).toInt(),
+                          style: const TextStyle(color: Tokens.statusWarning),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
-          SectionTitle(s.qryFeedback),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(Tokens.sp4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  DropdownMenu<String>(
-                    key: const Key('qryArea'),
-                    label: Text(s.qryArea),
-                    initialSelection: _area,
-                    trailingIcon: dropArrow(s.qryArea),
-                    selectedTrailingIcon: dropArrow(s.qryArea, open: true),
-                    expandedInsets: EdgeInsets.zero,
-                    enableFilter: true,
-                    enableSearch: true,
-                    requestFocusOnTap: true,
-                    onSelected: (v) => setState(() => _area = v ?? 'teaching'),
-                    dropdownMenuEntries: [
-                      for (final a in const [
-                        'teaching',
-                        'transport',
-                        'fees',
-                        'facilities',
-                        'communication',
-                        'app',
-                      ])
-                        DropdownMenuEntry(value: a, label: s.qryAreaName(a)),
-                    ],
+          ),
+        ),
+      ),
+      footer: [
+        SectionTitle(s.qryFeedback),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.sp4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownMenu<String>(
+                  key: const Key('qryArea'),
+                  label: Text(s.qryArea),
+                  initialSelection: _area,
+                  trailingIcon: dropArrow(s.qryArea),
+                  selectedTrailingIcon: dropArrow(s.qryArea, open: true),
+                  expandedInsets: EdgeInsets.zero,
+                  enableFilter: true,
+                  enableSearch: true,
+                  requestFocusOnTap: true,
+                  onSelected: (v) => setState(() => _area = v ?? 'teaching'),
+                  dropdownMenuEntries: [
+                    for (final a in const [
+                      'teaching',
+                      'transport',
+                      'fees',
+                      'facilities',
+                      'communication',
+                      'app',
+                    ])
+                      DropdownMenuEntry(value: a, label: s.qryAreaName(a)),
+                  ],
+                ),
+                const SizedBox(height: Tokens.sp2),
+                Text(s.qryRating, style: TextStyle(color: muted, fontSize: 13)),
+                QueryStars(
+                  value: _rating,
+                  onChanged: (n) => setState(() => _rating = n),
+                  s: s,
+                  name: 'qryFbStar',
+                ),
+                TextField(
+                  key: const Key('qryFbComment'),
+                  controller: _comment,
+                  maxLength: 1000,
+                  decoration: InputDecoration(
+                    labelText: s.qryComment,
+                    border: const OutlineInputBorder(),
+                    counterText: '',
                   ),
-                  const SizedBox(height: Tokens.sp2),
-                  Text(s.qryRating, style: TextStyle(color: muted, fontSize: 13)),
-                  QueryStars(
-                    value: _rating,
-                    onChanged: (n) => setState(() => _rating = n),
-                    s: s,
-                    name: 'qryFbStar',
-                  ),
-                  TextField(
-                    key: const Key('qryFbComment'),
-                    controller: _comment,
-                    maxLength: 1000,
-                    decoration: InputDecoration(
-                      labelText: s.qryComment,
-                      border: const OutlineInputBorder(),
-                      counterText: '',
-                    ),
-                  ),
-                  if (_error != null) ...[const SizedBox(height: Tokens.sp2), ErrorText(_error!)],
-                  const SizedBox(height: Tokens.sp3),
-                  OutlinedButton(
-                    key: const Key('qryFbSend'),
-                    onPressed: _busy ? null : _feedback,
-                    child: Text(s.qrySendFeedback),
-                  ),
-                ],
-              ),
+                ),
+                if (_error != null) ...[const SizedBox(height: Tokens.sp2), ErrorText(_error!)],
+                const SizedBox(height: Tokens.sp3),
+                OutlinedButton(
+                  key: const Key('qryFbSend'),
+                  onPressed: _busy ? null : _feedback,
+                  child: Text(s.qrySendFeedback),
+                ),
+              ],
             ),
           ),
-        ];
-      },
+        ),
+      ],
     );
   }
 }
@@ -790,7 +747,7 @@ class _QueryDetailState extends ConsumerState<QueryDetail> {
     try {
       await f();
       ref.invalidate(queryProvider(widget.id));
-      ref.invalidate(queriesProvider);
+      ref.read(feedRoundProvider('family-queries').notifier).bump();
       if (mounted) {
         setState(() {
           _busy = false;

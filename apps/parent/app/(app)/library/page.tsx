@@ -12,7 +12,13 @@ import {
   historyQuery,
   type LibraryHistory,
 } from '@/components/MyLibrary';
-import { cancelBookReservation, reserveBook } from './actions';
+import { MoreFeed } from '@/components/MoreFeed';
+import { catalogueSearchPage, libraryHistoryPage } from '@/lib/feed-actions';
+import { cancelBookReservation } from './actions';
+import { BookItems, type Title } from './BookItems';
+
+/** The first page of Read before and Find a book: 10; the rest load as the family scrolls. */
+const FEED = 10;
 
 interface Book {
   id: string;
@@ -48,22 +54,6 @@ interface Borrower {
   history: Book[];
   reservations: Reservation[];
   dues: { atCounter: number; atLibrary: number };
-}
-interface Title {
-  titleId: string;
-  title: string;
-  author: string | null;
-  publisher: string | null;
-  year: number | null;
-  subject: string | null;
-  material: string | null;
-  copies: number;
-  onShelf: number;
-  libraries: string | null;
-  nextBack: string | null;
-  queue: number;
-  reference: boolean;
-  canReserve: boolean;
 }
 interface Catalogue {
   rows: Title[];
@@ -110,7 +100,6 @@ export default async function LibraryPage({
   const lang = await currentLang();
   const view: View = sp.view === 'history' || sp.view === 'find' ? sp.view : 'books';
   const q = (sp.q ?? '').trim().slice(0, 80);
-  const page = Math.max(1, Math.min(500, Number(sp.page) || 1));
   const kid = await chosenChild();
   const header = (
     <PageHeader
@@ -146,7 +135,7 @@ export default async function LibraryPage({
       bff.api.fetch<Borrower>(`/library/portal/borrowers/student/${kid.id}`),
       view === 'find'
         ? bff.api.fetch<Catalogue>(
-            `/library/portal/catalogue?${new URLSearchParams({ q, page: String(page) }).toString()}`,
+            `/library/portal/catalogue?${new URLSearchParams({ q, page: '1', size: String(FEED) }).toString()}`,
           )
         : Promise.resolve(null),
       view === 'books'
@@ -158,7 +147,7 @@ export default async function LibraryPage({
       view === 'find'
         ? Promise.resolve(null)
         : bff.api.fetch<LibraryHistory>(
-            `/library/portal/borrowers/student/${kid.id}/history?${historyQuery(filters, view === 'history' ? page : 1)}`,
+            `/library/portal/borrowers/student/${kid.id}/history?${view === 'history' ? historyQuery(filters, 1, FEED) : historyQuery(filters, 1)}`,
           ),
     ]);
   } catch (error) {
@@ -173,7 +162,7 @@ export default async function LibraryPage({
   };
   const back =
     view === 'find'
-      ? here({ view, ...(q ? { q } : {}), ...(page > 1 ? { page: String(page) } : {}) })
+      ? here({ view, ...(q ? { q } : {}) })
       : view === 'history'
         ? here({ view })
         : '/library';
@@ -190,6 +179,12 @@ export default async function LibraryPage({
   const reservedIds = new Set(open.map((r) => r.titleId));
   const holdingIds = new Set(mine.now.map((b) => b.titleId));
   const backField = <input type="hidden" name="back" value={back} />;
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
 
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 760, margin: '0 auto' }}>
@@ -393,6 +388,7 @@ export default async function LibraryPage({
           path="/library"
           extra={{ view: 'history' }}
           download={`/api/library-history?kind=student&id=${kid.id}`}
+          feed={{ load: libraryHistoryPage.bind(null, kid.id, filters), labels: foot }}
         />
       ) : null}
 
@@ -411,88 +407,24 @@ export default async function LibraryPage({
           {catalogue.rows.length === 0 ? (
             <p className="ep-field__help">{t(lang, 'No book found.')}</p>
           ) : (
-            <ul className="fp-books">
-              {catalogue.rows.map((b) => (
-                <li key={b.titleId}>
-                  <span className="fp-books__what">
-                    <strong>{b.title}</strong>
-                    <span className="fp-books__note">
-                      {[b.author, b.subject, b.publisher, b.year ? String(b.year) : null]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                  </span>
-                  <span className="fp-books__state">
-                    {b.onShelf > 0 ? (
-                      <Badge tone="success">
-                        {t(lang, 'On the shelf')}
-                        {b.libraries ? ` · ${b.libraries}` : ''}
-                      </Badge>
-                    ) : b.reference ? (
-                      <Badge tone="neutral">{t(lang, 'Read in the library only')}</Badge>
-                    ) : (
-                      <Badge tone="warning">
-                        {t(lang, 'All copies out')}
-                        {b.nextBack ? ` · ${t(lang, 'due back')} ${day(lang, b.nextBack)}` : ''}
-                      </Badge>
-                    )}
-                    {b.queue > 0 ? ` ${b.queue} ${t(lang, 'waiting')}` : ''}
-                  </span>
-                  {holdingIds.has(b.titleId) ? (
-                    <span className="fp-books__state">{t(lang, 'Your child has it')}</span>
-                  ) : reservedIds.has(b.titleId) ? (
-                    <span className="fp-books__state">{t(lang, 'Reserved')}</span>
-                  ) : b.canReserve ? (
-                    <form action={reserveBook} style={{ display: 'inline' }}>
-                      <input type="hidden" name="borrowerId" value={kid.id} />
-                      <input type="hidden" name="titleId" value={b.titleId} />
-                      {backField}
-                      <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                        {t(lang, 'Reserve')}
-                        <span className="ep-sr-only">
-                          {' '}
-                          {b.title} {t(lang, 'for')} {kid.name}
-                        </span>
-                      </button>
-                    </form>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            <MoreFeed
+              key={q}
+              first={
+                <BookItems
+                  rows={catalogue.rows}
+                  lang={lang}
+                  kid={{ id: kid.id, name: kid.name }}
+                  holding={[...holdingIds]}
+                  reserved={[...reservedIds]}
+                  back={back}
+                />
+              }
+              more={catalogue.page < catalogue.pages}
+              load={catalogueSearchPage.bind(null, kid.id, q)}
+              labels={foot}
+              wrap={{ kind: 'list', className: 'fp-books' }}
+            />
           )}
-          {catalogue.pages > 1 ? (
-            <nav
-              aria-label={t(lang, 'Pages')}
-              className="ep-tabs-links"
-              style={{ marginTop: 'var(--sp-3)' }}
-            >
-              {catalogue.page > 1 ? (
-                <a
-                  href={here({
-                    view: 'find',
-                    ...(q ? { q } : {}),
-                    page: String(catalogue.page - 1),
-                  })}
-                >
-                  {t(lang, 'Previous')}
-                </a>
-              ) : null}
-              <span>
-                {catalogue.page} / {catalogue.pages}
-              </span>
-              {catalogue.page < catalogue.pages ? (
-                <a
-                  href={here({
-                    view: 'find',
-                    ...(q ? { q } : {}),
-                    page: String(catalogue.page + 1),
-                  })}
-                >
-                  {t(lang, 'Next')}
-                </a>
-              ) : null}
-            </nav>
-          ) : null}
           <p className="ep-field__help" style={{ marginBottom: 0 }}>
             {t(
               lang,

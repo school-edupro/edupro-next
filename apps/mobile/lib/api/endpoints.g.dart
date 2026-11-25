@@ -889,12 +889,12 @@ class EduProApi {
       _t.send('GET', '/library/portal/borrowers/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}');
 
   /// GET /library/portal/borrowers/{kind}/{id}/history — My library: figures and the history, filtered and paged
-  Future<dynamic> libraryPortalHistory({required String kind, required String id, String? from, String? to, String? status, String? q, int? page, String? format}) =>
-      _t.send('GET', '/library/portal/borrowers/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/history', query: {if (from != null) 'from': from, if (to != null) 'to': to, if (status != null) 'status': status, if (q != null) 'q': q, if (page != null) 'page': page, if (format != null) 'format': format});
+  Future<dynamic> libraryPortalHistory({required String kind, required String id, String? from, String? to, String? status, String? q, int? page, int? size, String? format}) =>
+      _t.send('GET', '/library/portal/borrowers/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/history', query: {if (from != null) 'from': from, if (to != null) 'to': to, if (status != null) 'status': status, if (q != null) 'q': q, if (page != null) 'page': page, if (size != null) 'size': size, if (format != null) 'format': format});
 
   /// GET /library/portal/borrowers/{kind}/{id}/history/export — My library history, as filtered, as Excel or PDF
-  Future<ApiFile> libraryPortalHistoryExport({required String kind, required String id, String? from, String? to, String? status, String? q, int? page, String? format}) =>
-      _t.file('GET', '/library/portal/borrowers/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/history/export', query: {if (from != null) 'from': from, if (to != null) 'to': to, if (status != null) 'status': status, if (q != null) 'q': q, if (page != null) 'page': page, if (format != null) 'format': format});
+  Future<ApiFile> libraryPortalHistoryExport({required String kind, required String id, String? from, String? to, String? status, String? q, int? page, int? size, String? format}) =>
+      _t.file('GET', '/library/portal/borrowers/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}/history/export', query: {if (from != null) 'from': from, if (to != null) 'to': to, if (status != null) 'status': status, if (q != null) 'q': q, if (page != null) 'page': page, if (size != null) 'size': size, if (format != null) 'format': format});
 
   /// GET /library/portal/catalogue — The catalogue with each book on the shelf or out (never who has it)
   Future<dynamic> libraryPortalCatalogue() =>

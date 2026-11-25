@@ -174,6 +174,11 @@ describe('library in the portals, and reservations (e2e)', () => {
         ),
       ),
     ).not.toContain('Bina');
+    // a page of 1 asked (the family app and website ask for 10, 25 Nov 2026); 20 unless asked
+    const all = (await call('GET', '/library/portal/catalogue', undefined, parent)).json();
+    const one = (await call('GET', '/library/portal/catalogue?size=1', undefined, parent)).json();
+    expect(one.rows).toHaveLength(Math.min(1, all.rows.length));
+    expect(one.pages).toBe(Math.max(1, all.total ?? all.rows.length));
     const a = await reserve(parent, 'student', ids.a!, ids.malgudi!);
     expect(a.statusCode).toBe(201);
     expect(a.json()).toMatchObject({ status: 'waiting', place: 1, title: 'Malgudi Days' });
@@ -346,6 +351,11 @@ describe('library in the portals, and reservations (e2e)', () => {
       expect(out.total + back.total).toBe(all.total);
       expect(all.stats.readEver).toBe(all.total);
       expect(all.stats.holding).toBe(out.total);
+      // a page of 1 (the family app and website ask for 10, 25 Nov 2026): as many pages as books
+      const one = (await get('student', who, 'status=all&size=1', parent)).json();
+      expect(one.rows).toHaveLength(1);
+      expect(one.pages).toBe(all.total);
+      expect((await get('student', who, 'status=all&size=51', parent)).statusCode).toBe(400);
       // a search narrows, a date range in the past finds nothing
       expect((await get('student', who, 'q=malgudi', parent)).json().total).toBeLessThanOrEqual(
         all.total,

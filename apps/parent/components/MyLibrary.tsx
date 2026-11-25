@@ -5,6 +5,7 @@
  * Excel / PDF of the rows as filtered.
  */
 import { Card } from '@edupro/ui';
+import { MoreFeed, type FeedPage } from '@/components/MoreFeed';
 import { t, type Lang } from '@/lib/i18n';
 
 export interface LibraryStats {
@@ -71,8 +72,9 @@ export function historyFilters(sp: Record<string, string | undefined>): HistoryF
 }
 
 /** The API query for the filters (and a page). */
-export function historyQuery(f: HistoryFilters, page = 1): string {
+export function historyQuery(f: HistoryFilters, page = 1, size?: number): string {
   const q = new URLSearchParams({ status: f.status, page: String(page) });
+  if (size) q.set('size', String(size));
   if (f.from) q.set('from', f.from);
   if (f.to) q.set('to', f.to);
   if (f.q) q.set('q', f.q);
@@ -187,6 +189,46 @@ export function MyLibraryFigures({
   );
 }
 
+/** A page of the history: a row for each book. */
+export function HistoryRows({ rows, lang }: { rows: HistoryRow[]; lang: Lang }) {
+  return (
+    <>
+      {rows.map((b) => (
+        <tr key={b.id}>
+          <td>
+            {b.title}
+            <div className="ep-field__help">
+              {[b.author, b.subject, b.accessionNo].filter(Boolean).join(' · ')}
+            </div>
+          </td>
+          <td>
+            {day(lang, b.issuedOn)}
+            <div className="ep-field__help">
+              {t(lang, 'due')} {day(lang, b.dueOn)}
+              {b.renewed ? ` · ${t(lang, 'renewed')} ${String(b.renewed)}` : ''}
+            </div>
+          </td>
+          <td>
+            {b.returnedOn ? day(lang, b.returnedOn) : <strong>{t(lang, 'Not yet')}</strong>}
+            <div className="ep-field__help">
+              {b.daysLate > 0
+                ? `${String(b.daysLate)} ${t(lang, 'days late')}`
+                : t(lang, 'on time')}
+              {` · ${String(b.daysKept)} ${t(lang, 'days')}`}
+            </div>
+          </td>
+          <td>
+            {b.fine > 0 ? rupees(b.fine) : '—'}
+            {b.fineStatus ? (
+              <div className="ep-field__help">{t(lang, FINE[b.fineStatus]!)}</div>
+            ) : null}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 /** The history: filters, the table, pages and the downloads. */
 export function MyLibraryHistory({
   lang,
@@ -195,6 +237,7 @@ export function MyLibraryHistory({
   path,
   extra,
   download,
+  feed,
 }: {
   lang: Lang;
   data: LibraryHistory;
@@ -205,6 +248,11 @@ export function MyLibraryHistory({
   extra: Record<string, string>;
   /** the download route, e.g. /api/library-history?kind=student&id=1 */
   download: string;
+  /** the books 10 at a time, more as the person scrolls: the next page, bound to the child and the filters */
+  feed?: {
+    load: (page: number) => Promise<FeedPage>;
+    labels: { more: string; loading: string; failed: string; end: string };
+  };
 }) {
   const keep = (x: Record<string, string>) => {
     const q = new URLSearchParams({ ...extra });
@@ -280,7 +328,21 @@ export function MyLibraryHistory({
           </span>
         ) : null}
       </div>
-      {data.rows.length ? (
+      {feed && data.rows.length ? (
+        <MoreFeed
+          key={JSON.stringify(filters)}
+          first={<HistoryRows rows={data.rows} lang={lang} />}
+          more={data.page < data.pages}
+          load={feed.load}
+          labels={feed.labels}
+          wrap={{
+            kind: 'table',
+            caption: t(lang, 'Library history'),
+            label: t(lang, 'Library history'),
+            head: [t(lang, 'Book'), t(lang, 'Taken on'), t(lang, 'Returned'), t(lang, 'Fine')],
+          }}
+        />
+      ) : !feed && data.rows.length ? (
         <div
           className="ep-table-wrap"
           tabIndex={0}
@@ -298,43 +360,12 @@ export function MyLibraryHistory({
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((b) => (
-                <tr key={b.id}>
-                  <td>
-                    {b.title}
-                    <div className="ep-field__help">
-                      {[b.author, b.subject, b.accessionNo].filter(Boolean).join(' · ')}
-                    </div>
-                  </td>
-                  <td>
-                    {day(lang, b.issuedOn)}
-                    <div className="ep-field__help">
-                      {t(lang, 'due')} {day(lang, b.dueOn)}
-                      {b.renewed ? ` · ${t(lang, 'renewed')} ${String(b.renewed)}` : ''}
-                    </div>
-                  </td>
-                  <td>
-                    {b.returnedOn ? day(lang, b.returnedOn) : <strong>{t(lang, 'Not yet')}</strong>}
-                    <div className="ep-field__help">
-                      {b.daysLate > 0
-                        ? `${String(b.daysLate)} ${t(lang, 'days late')}`
-                        : t(lang, 'on time')}
-                      {` · ${String(b.daysKept)} ${t(lang, 'days')}`}
-                    </div>
-                  </td>
-                  <td>
-                    {b.fine > 0 ? rupees(b.fine) : '—'}
-                    {b.fineStatus ? (
-                      <div className="ep-field__help">{t(lang, FINE[b.fineStatus]!)}</div>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
+              <HistoryRows rows={data.rows} lang={lang} />
             </tbody>
           </table>
         </div>
       ) : null}
-      {data.pages > 1 ? (
+      {!feed && data.pages > 1 ? (
         <nav className="fp-libpager" aria-label={t(lang, 'Pages')}>
           {data.page > 1 ? (
             <a

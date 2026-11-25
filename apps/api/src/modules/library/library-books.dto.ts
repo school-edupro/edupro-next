@@ -390,6 +390,8 @@ export const PortalHistorySchema = z.object({
   status: z.enum(['all', 'out', 'returned', 'late', 'renewed', 'fined']).default('all'),
   q: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
+  /** a page of this many (20 unless asked; the family app and website: 10, then more as they scroll) */
+  size: z.coerce.number().int().min(1).max(50).optional(),
   format: z.enum(['xlsx', 'pdf']).optional(),
 });
 export class PortalHistoryDto extends createZodDto(PortalHistorySchema) {}

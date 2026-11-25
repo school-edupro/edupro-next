@@ -501,10 +501,9 @@ void main() {
     (tester) async {
       await tall(tester);
       final t = await pumpLibrary(tester, Lib());
-      final calls = t.calls.where((c) => c.path == '$base/history').length;
       await tab(tester, 'history');
-      // the first page is the one the figures came with: no second call
-      expect(t.calls.where((c) => c.path == '$base/history').length, calls);
+      // the books 10 at a time (the figures came with the first page of their own)
+      expect(last(t, '$base/history').query, {'status': 'all', 'page': 1, 'size': 10});
       expect(find.text('3 books'), findsOneWidget);
       final row = find.byKey(const Key('libHist-h2'));
       expect(
@@ -538,14 +537,24 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Late').last);
       await tester.pumpAndSettle();
-      expect(last(t, '$base/history').query, {'status': 'late', 'page': 1});
+      Call firstOf(bool Function(Map<String, Object?> q) f) =>
+          t.calls.firstWhere((c) => c.path == '$base/history' && f(c.query ?? const {}));
+      expect(firstOf((q) => q['status'] == 'late').query, {
+        'status': 'late',
+        'page': 1,
+        'size': 10,
+      });
       expect(find.text('22 books'), findsOneWidget);
-      expect(find.text('Page 1 / 2'), findsOneWidget);
       // a search
       await tester.enterText(find.byKey(const Key('libHistSearch')), 'river');
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
-      expect(last(t, '$base/history').query, {'status': 'late', 'q': 'river', 'page': 1});
+      expect(firstOf((q) => q['q'] == 'river').query, {
+        'status': 'late',
+        'q': 'river',
+        'page': 1,
+        'size': 10,
+      });
       // taken from a day
       await tester.tap(find.byKey(const Key('libHistFrom')));
       await tester.pumpAndSettle();
@@ -553,17 +562,16 @@ void main() {
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
       final first = ymd(DateTime(now.year, now.month, 1));
-      expect(last(t, '$base/history').query, {
+      expect(firstOf((q) => q['from'] == first).query, {
         'from': first,
         'status': 'late',
         'q': 'river',
         'page': 1,
+        'size': 10,
       });
       expect(find.text('Taken from: ${s.date(first)}'), findsOneWidget);
-      // the next page
-      await tester.tap(find.byKey(const Key('libHistNext')));
-      await tester.pumpAndSettle();
-      expect(last(t, '$base/history').query!['page'], 2);
+      // the next 10 come by themselves (here the first page does not fill the screen)
+      expect(firstOf((q) => q['from'] == first && q['page'] == 2).query!['size'], 10);
       expect(find.text('Page Two Book'), findsOneWidget);
 
       // Excel: saved or shared, the rows as filtered
@@ -614,7 +622,10 @@ void main() {
       await tall(tester);
       final t = await pumpLibrary(tester, Lib());
       await tab(tester, 'find');
-      expect(last(t, '/library/portal/catalogue').query, {'page': 1});
+      expect(t.calls.firstWhere((c) => c.path == '/library/portal/catalogue').query, {
+        'page': 1,
+        'size': 10,
+      });
       expect(find.text('21 books'), findsOneWidget);
       // on the shelf, out with the day the first copy is due back, read in the library only
       expect(find.text('On the shelf · Main library'), findsOneWidget);
@@ -648,16 +659,17 @@ void main() {
         find.descendant(of: find.byKey(const Key('libTitle-t9')), matching: find.text('Reserved')),
         findsOneWidget,
       );
-      // the next page
-      await tester.tap(find.byKey(const Key('libCatNext')));
-      await tester.pumpAndSettle();
-      expect(last(t, '/library/portal/catalogue').query, {'page': 2});
+      // the next 10 come by themselves (here the first page does not fill the screen)
+      expect(
+        t.calls.any((c) => c.path == '/library/portal/catalogue' && c.query?['page'] == 2),
+        isTrue,
+      );
       expect(find.text('Second Page Book'), findsOneWidget);
       // a search (from the first page)
       await tester.enterText(find.byKey(const Key('libCatSearch')), 'river');
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
-      expect(last(t, '/library/portal/catalogue').query, {'q': 'river', 'page': 1});
+      expect(last(t, '/library/portal/catalogue').query, {'q': 'river', 'page': 1, 'size': 10});
       expect(find.text('1 book'), findsOneWidget);
       expect(find.text('The Blue River'), findsOneWidget);
       // on the Reservations tab the new reservation is there

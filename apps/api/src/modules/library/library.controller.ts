@@ -166,8 +166,15 @@ export class LibraryController {
     @ReqCtx() ctx: RequestContext,
     @Query('q') q: string | undefined,
     @Query('page') page: string | undefined,
+    @Query('size') size: string | undefined,
   ) {
-    return this.portal.catalogue(ctx, q ?? '', Math.max(1, Math.min(500, Number(page) || 1)));
+    // a page of 20 unless asked (the family app and website: 10, then more as they scroll)
+    return this.portal.catalogue(
+      ctx,
+      q ?? '',
+      Math.max(1, Math.min(500, Number(page) || 1)),
+      Math.max(1, Math.min(50, Number(size) || 20)),
+    );
   }
 
   @Post('portal/reservations')
