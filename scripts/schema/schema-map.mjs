@@ -57,7 +57,7 @@ export const MODULES = [
   ],
   [
     'people_students',
-    /^(students$|guardians$|student_|enrolments$|person_documents$|profile_|school_transfers$|withdrawal|family_app)/,
+    /^(students$|guardians$|student_|enrolments$|person_documents$|profile_|school_transfers$|withdrawal|family_app|family_links$)/,
   ],
   [
     'comms_engagement',

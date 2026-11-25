@@ -30,6 +30,7 @@ import {
   type ClassCorrectionSetup,
 } from '@/components/ClassCorrection';
 import { AdmissionCancel, type CancelItem, type CancelSetup } from '@/components/AdmissionCancel';
+import { ConfirmAction } from '@/components/ConfirmAction';
 import { StaffParentLogin } from '@/components/StaffParentLogin';
 import { StudentMerge, type MergeItem, type MergeSetup } from '@/components/StudentMerge';
 import {
@@ -40,6 +41,7 @@ import {
 import type { ProfileCatalogue, ProfileSnapshot } from '@/lib/profile';
 import {
   enrolStudent,
+  familyLinkUndo,
   linkGuardian,
   generateStudentDemand,
   issueTc,
@@ -493,6 +495,63 @@ export default async function StudentPage({
               rowKey={(x) => x.linkId}
               emptyTitle={t('noGuardians')}
             />
+            {student.family.sibling && !student.family.sharedAny ? (
+              // the Sibling section names a sibling on other parent records (0426): a parent's login sees one child
+              <div
+                className="ep-alert ep-alert--warning"
+                role="status"
+                style={{ marginTop: 'var(--sp-3)' }}
+              >
+                <p style={{ margin: 0 }}>
+                  {student.family.sibling.admissionNo}
+                  {student.family.sibling.section ? ` (${student.family.sibling.section})` : ''} is
+                  entered as this student&apos;s sibling, but the two children have different father
+                  and mother records, so a parent&apos;s login sees only one of them.
+                </p>
+                {can('people.guardian.edit') ? (
+                  <p style={{ margin: 'var(--sp-2) 0 0' }}>
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/people/students/${student.id}/link-family`}
+                    >
+                      Link families
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+            ) : student.family.sibling &&
+              !student.family.sharedAll &&
+              can('people.guardian.edit') ? (
+              <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
+                Some parent records differ from {student.family.sibling.admissionNo}&apos;s.{' '}
+                <a
+                  href={`/people/students/${student.id}/link-family`}
+                  style={{ textDecoration: 'underline' }}
+                >
+                  Link families
+                </a>
+              </p>
+            ) : null}
+            {student.family.lastBatch && can('people.guardian.edit') ? (
+              <div className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
+                Families linked with {student.family.lastBatch.siblingAdmissionNo} on{' '}
+                {student.family.lastBatch.at.slice(8, 10)}-{student.family.lastBatch.at.slice(5, 7)}
+                -{student.family.lastBatch.at.slice(0, 4)}.{' '}
+                <ConfirmAction
+                  action={familyLinkUndo}
+                  fields={{ id: student.id, batchId: student.family.lastBatch.batchId }}
+                  label="Undo"
+                  variant="ghost"
+                  title="Undo the family link?"
+                  confirmLabel="Undo"
+                >
+                  <p style={{ marginTop: 0 }}>
+                    Each child goes back to the father and mother records it had before. A
+                    parent&apos;s login then sees only the children of its own record again.
+                  </p>
+                </ConfirmAction>
+              </div>
+            ) : null}
             {student.siblings.length > 0 ? (
               <p style={{ marginTop: 'var(--sp-3)' }}>
                 <span className="ep-kicker">{t('siblings')}</span>{' '}

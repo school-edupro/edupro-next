@@ -329,6 +329,45 @@ export interface Student360 extends Student {
   enrolments: Enrolment[];
   documents: PersonDocument[];
   siblings: Array<{ id: string; displayName: string; admissionNo: string }>;
+  /** the sibling the Sibling section names and whether the two share father / mother records (0426) */
+  family: FamilyLinkInfo;
+}
+
+export interface FamilyChild {
+  id: string;
+  admissionNo: string;
+  name: string;
+  section: string | null;
+}
+
+/** A student's sibling family (0426): the named sibling, the records shared, the last Link families to undo. */
+export interface FamilyLinkInfo {
+  sibling: FamilyChild | null;
+  sharedAny: boolean;
+  sharedAll: boolean;
+  lastBatch: { batchId: string; at: string; siblingAdmissionNo: string } | null;
+}
+
+export interface FamilyParent {
+  guardianId: string;
+  name: string;
+  mobile: string | null;
+  email: string | null;
+  hasLogin: boolean;
+  children: number;
+}
+
+/** Link families: each child's father / mother record and what to keep. */
+export interface FamilyPreview {
+  student: FamilyChild;
+  sibling: FamilyChild;
+  relations: Array<{
+    relation: 'father' | 'mother';
+    here: FamilyParent | null;
+    sibling: FamilyParent | null;
+    state: 'shared' | 'different' | 'only_here' | 'only_sibling' | 'none';
+    suggested: 'here' | 'sibling' | 'apart';
+  }>;
 }
 
 export interface Posting {

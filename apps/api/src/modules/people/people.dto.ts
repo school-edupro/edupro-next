@@ -517,3 +517,19 @@ export const StaffParentJoinSchema = z.object({
   move: z.boolean().default(false),
 });
 export class StaffParentJoinDto extends createZodDto(StaffParentJoinSchema) {}
+
+// ---- sibling families: one father / mother record for both children (0426) ------------------------------------
+const FamilyKeep = z.enum(['here', 'sibling', 'apart']);
+export const FamilyLinkSchema = z.object({
+  siblingId: IdSchema,
+  /** per relation: keep this child's record, the sibling's, or leave the two apart */
+  keep: z.object({ father: FamilyKeep.default('apart'), mother: FamilyKeep.default('apart') }),
+});
+export class FamilyLinkDto extends createZodDto(FamilyLinkSchema) {}
+export const FamilyLinkUndoSchema = z.object({ batchId: z.string().uuid() });
+export class FamilyLinkUndoDto extends createZodDto(FamilyLinkUndoSchema) {}
+export const FamilyPreviewQuerySchema = z.object({
+  /** a sibling's admission number (else the one the Sibling section names) */
+  sibling: z.string().trim().min(1).max(40).optional(),
+});
+export class FamilyPreviewQueryDto extends createZodDto(FamilyPreviewQuerySchema) {}

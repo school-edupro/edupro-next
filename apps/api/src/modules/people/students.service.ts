@@ -16,6 +16,7 @@ import type {
   ReplaceDocumentDto,
   UpdateStudentDto,
 } from './people.dto';
+import { familyLinkInfo } from './family-links';
 import { staffParentLinks, type StaffParentLink } from './staff-parents.links';
 import { PEOPLE, correctionRequired } from './people.permissions';
 
@@ -329,6 +330,7 @@ export class StudentsService {
       return {
         ...student,
         guardians,
+        family: await familyLinkInfo(c, id),
         enrolments: enrolments.rows.map((e) => ({
           id: e.id,
           academicYearId: e.academic_year_id,

@@ -112,6 +112,19 @@ On the same screen:
 Parents see Aadhaar, PAN and bank numbers of their own child in full; approvers without the
 "Sensitive data viewer" role see them masked.
 
+## Siblings: one family
+
+Entering a **Sibling admission no** in the Sibling section only records it. A parent's login sees the
+children linked to that parent's own record, so if the two children have different father and mother
+records, the parent sees only one of them.
+
+- The **Guardians** card on the Profile tab then warns and offers **Link families**. For the father and
+  the mother, pick the record to keep for both children (the one with a login is suggested), or leave
+  them apart. The other child moves to the kept record; the parent then sees both children in the app
+  and on the family website.
+- **Undo** on the Guardians card (of either child) puts both children back on the records they had.
+- A guardian added with the same mobile number also reuses the existing record, as before.
+
 ## Staff who are parents here
 
 When a father, mother or guardian works in the school, mark **School staff: Yes** in their section of

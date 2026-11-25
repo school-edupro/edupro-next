@@ -54,6 +54,8 @@ import { StudentMergesService } from './student-merges.service';
 import { StudentBulkService } from './student-bulk.service';
 import { StudentGridService } from './student-grid.service';
 import { StudentProfileController } from './student-profile.controller';
+import { FamilyLinksController } from './family-links.controller';
+import { FamilyLinksService } from './family-links.service';
 import { StaffParentsController } from './staff-parents.controller';
 import { StaffParentsService } from './staff-parents.service';
 import { StudentProfileService } from './student-profile.service';
@@ -88,6 +90,7 @@ import { ReportingService } from './reporting.service';
     StudentProfileController,
     StudentsController,
     StaffParentsController,
+    FamilyLinksController,
     EmployeesController,
     SearchController,
     ImportsController,
@@ -125,6 +128,7 @@ import { ReportingService } from './reporting.service';
     StudentProfileService,
     StudentsService,
     StaffParentsService,
+    FamilyLinksService,
     EmployeesService,
     SearchService,
     ImportsService,

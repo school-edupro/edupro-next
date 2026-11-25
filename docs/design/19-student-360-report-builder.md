@@ -96,6 +96,31 @@ S.No-only rows are skipped, separate Class and Section columns are matched, and 
 reported with the reason. Re-saved workbooks whose cell notes break exceljs are retried without the
 notes.
 
+## Sibling families (25 Nov 2026)
+
+The Sibling section (Sibling in school, Sibling admission no, class) is information only: two siblings can hang off
+different father and mother records, and a parent's login (it sees the children of its own parent record, in the app
+and on the family website) then shows only one of them. The student page's **Siblings** line is the same: children
+sharing a parent record.
+
+- **Link families** (migration 0426 `family_links`): when the Sibling section names a sibling on record and the two
+  share no parent record, the Guardians card warns and offers Link families (a quiet link while only some records
+  differ). The page shows, for the father and the mother, each child's record (name, mobile, a login, how many
+  children) and asks: keep this child's record for both, the sibling's, or leave them apart — suggested: the one with
+  a login, else this child's; a relation only one child has: link the other child to it too. The other child's link
+  moves to the kept record with its primary and notification flags; the record not kept stays (its login no longer
+  sees that child, said on the page).
+- **Undo** (the Guardians card of either child: "Families linked with … on …"): each moved child back on the record
+  it had, as it was linked. Each move is a `family_links` row in a batch; recorded in the audit log
+  (`people.family.link`, `people.family.link_undo`).
+- API: `GET /people/students/:id/family-link` (`?sibling=` an admission number, else the Sibling section's),
+  `POST …/family-link` `{siblingId, keep: {father, mother}}` (here | sibling | apart), `POST …/family-link/undo`
+  `{batchId}` — people.guardian.edit, a class teacher's sections only; the student 360 carries `family` (the named
+  sibling, `sharedAny`, `sharedAll`, `lastBatch`).
+- Tests: `family-links.e2e-spec` (the notice, the preview, link and the father's login seeing both, Undo exactly,
+  a relation left apart, keeping the sibling's side, rights, the school boundary); a browser check on a test school
+  (the notice, the page, link, Undo; desktop and phone, axe, no console errors).
+
 ## Tests
 
 - API e2e: `student-profile.e2e-spec.ts` (13), `report-builder.e2e-spec.ts` (6).

@@ -646,6 +646,47 @@ export async function unlinkGuardian(fd: FormData) {
   );
 }
 
+/** Links two sibling families (0426): per relation keep this child's record, the sibling's, or leave them apart. */
+export async function familyLink(fd: FormData) {
+  const id = str(fd, 'id');
+  const keep = (k: string) => {
+    const v = str(fd, k);
+    return v === 'here' || v === 'sibling' ? v : 'apart';
+  };
+  let moved = 0;
+  try {
+    moved = (
+      await apiFetch<{ moved: number }>(`/people/students/${id}/family-link`, {
+        method: 'POST',
+        body: JSON.stringify({
+          siblingId: str(fd, 'siblingId'),
+          keep: { father: keep('father'), mother: keep('mother') },
+        }),
+      })
+    ).moved;
+  } catch (error) {
+    if (error instanceof ApiError)
+      back(`/people/students/${id}/link-family`, error.problem.type, problemDetail(error));
+    throw error;
+  }
+  back(
+    `/people/students/${id}?tab=profile`,
+    'ok',
+    moved ? 'Families linked: each parent login now sees both children.' : 'Nothing to change.',
+  );
+}
+
+/** Undoes a Link families: each moved child back on its own parent record. */
+export async function familyLinkUndo(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/students/${id}?tab=profile`, () =>
+    apiFetch(`/people/students/${id}/family-link/undo`, {
+      method: 'POST',
+      body: JSON.stringify({ batchId: str(fd, 'batchId') }),
+    }),
+  );
+}
+
 /** Where a staff parent action returns: the student's page or the staff parents list (with its filters). */
 const staffParentBack = (fd: FormData) => {
   const b = str(fd, 'back');
