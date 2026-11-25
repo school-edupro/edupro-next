@@ -65,7 +65,6 @@ export function StaffShell({
   const parentHere = me.memberships.some(
     (m) => m.schoolId === school?.schoolId && m.personType === 'guardian',
   );
-  const familySite = (process.env.PARENT_APP_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
   return (
     <div className="ep-shell fp-shell">
       <aside className="ep-sidebar" aria-label={t(lang, 'Sidebar')}>
@@ -169,13 +168,16 @@ export function StaffShell({
         </div>
         <div className="ep-header__context">
           {parentHere ? (
-            <a
-              className="ep-btn ep-btn--ghost ep-btn--sm"
-              href={`${familySite}/`}
-              title={t(lang, 'Your children at this school, on the family website')}
-            >
-              {t(lang, 'My children')}
-            </a>
+            // the family website, signed in with this login (a one-time link, /api/my-children)
+            <form method="post" action="/api/my-children">
+              <button
+                type="submit"
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                title={t(lang, 'Your children at this school, on the family website')}
+              >
+                {t(lang, 'My children')}
+              </button>
+            </form>
           ) : null}
           <a
             className="ep-btn ep-btn--ghost ep-btn--sm"

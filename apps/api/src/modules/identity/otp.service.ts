@@ -134,7 +134,8 @@ export class OtpService {
     });
   }
 
-  private async session(sub: string, displayName: string, purpose: OtpPurpose, app: OtpApp) {
+  /** A website session token (12 hours), as a code sign-in makes; also the staff website's My children (0424). */
+  async session(sub: string, displayName: string, purpose: OtpPurpose, app: OtpApp) {
     const expiresAt = Math.floor(Date.now() / 1000) + SESSION_HOURS * 3600;
     const token = await new SignJWT({
       amr: purpose === 'second_factor' ? ['pwd', 'otp', 'mfa'] : ['otp'],

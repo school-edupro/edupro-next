@@ -234,6 +234,70 @@ describe('staff parents (e2e)', () => {
     ]);
   });
 
+  it('My children on the staff website: a one-time link opens the family website signed in (0424)', async () => {
+    // as the staff website asks: its session, no school chosen
+    const web = (sub: string) => ({ authorization: `Bearer dev:${sub}` });
+    const issued = await inject({
+      method: 'POST',
+      url: '/auth/web-hop',
+      headers: web(staffOne.sub),
+      json: { to: '/' },
+    });
+    expect(issued.statusCode).toBe(200);
+    const url = new URL(issued.json().url as string);
+    expect(url.pathname).toBe('/api/auth/hop');
+    const code = url.searchParams.get('code')!;
+    const redeemed = await inject({
+      method: 'POST',
+      url: '/auth/web-hop/redeem',
+      headers: {},
+      json: { code },
+    });
+    expect(redeemed.statusCode).toBe(200);
+    expect(redeemed.json()).toMatchObject({ schoolId: school.id, to: '/' });
+    const token = redeemed.json().accessToken as string;
+    expect(token.startsWith('otp.')).toBe(true);
+    // the family website's session reads the family view
+    const family = await inject({
+      method: 'GET',
+      url: '/engagement/family',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'x-school-id': school.id,
+        'x-acting-as': 'family',
+      },
+    });
+    expect((family.json().children as Array<{ id: string }>).map((c) => c.id)).toEqual([first]);
+    // once only
+    const again = await inject({
+      method: 'POST',
+      url: '/auth/web-hop/redeem',
+      headers: {},
+      json: { code },
+    });
+    expect(again.statusCode).toBe(401);
+    expect(again.json().type).toBe('auth.hop_invalid');
+    // not a parent here: no link; a page that is not the family website's own: refused
+    const notParent = await inject({
+      method: 'POST',
+      url: '/auth/web-hop',
+      headers: web(teacher.sub),
+      json: { to: '/' },
+    });
+    expect(notParent.statusCode).toBe(403);
+    expect(notParent.json().type).toBe('auth.hop_not_family');
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: '/auth/web-hop',
+          headers: web(staffOne.sub),
+          json: { to: '//elsewhere.example/x' },
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
+
   it('the mother’s section the same: a staff member with no login yet is joined when they get one', async () => {
     await patch(first, { mother_school_staff: 'Yes', mother_staff_employee_id: `${s}E2` });
     const mother = await parentOf(first, 'mother');

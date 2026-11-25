@@ -214,6 +214,9 @@ describe('permission coverage', () => {
       'RecruitmentPublicController.verify (public/careers)',
       'RfidController.ingest (attendance/rfid)',
       'ShadowController.ingest (shadow)',
+      // My children on the staff website (0424): redeem turns a 60-second single-use link (a 256-bit code kept
+      // only as a keyed hash), made for someone who is a parent in that school, into the family website's session
+      'WebHopController.redeem (auth/web-hop)',
     ]);
     if (unprotected.length > 0) {
       throw new Error(`handlers without a permission: ${unprotected.join(', ')}`);

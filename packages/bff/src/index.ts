@@ -389,6 +389,45 @@ export function createBff(options: BffOptions) {
         return NextResponse.redirect(new URL('/login?error=handoff', req.url));
       }
     },
+    /**
+     * GET /api/auth/hop?code=… (the family website): a staff member who is also a parent here opened My children on
+     * the staff website (0424). The one-time code is turned in at the API for this website's own session, in the
+     * school they were working in; any session of this website in this browser is replaced.
+     */
+    async hop(req: NextRequest) {
+      const code = req.nextUrl.searchParams.get('code') ?? '';
+      if (appName !== 'parent' || !/^[A-Za-z0-9_-]{40,100}$/.test(code))
+        return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+      try {
+        const r = await fetch(`${env.apiBaseUrl}/api/v1/auth/web-hop/redeem`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code }),
+          signal: AbortSignal.timeout(5000),
+          cache: 'no-store',
+        });
+        if (!r.ok) return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+        const t = (await r.json()) as {
+          accessToken: string;
+          sub: string;
+          displayName: string;
+          schoolId: string;
+          expiresAt: number;
+          to: string;
+        };
+        await session.write({
+          sub: t.sub,
+          accessToken: t.accessToken,
+          expiresAt: t.expiresAt,
+          displayName: t.displayName,
+          schoolId: t.schoolId,
+        });
+        await recordSignIn(req, t.accessToken, 'otp');
+        return NextResponse.redirect(new URL(safeReturn(t.to), req.url));
+      } catch {
+        return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+      }
+    },
     /** POST /api/auth/end-view: ends the session the school opened (at the API too) and signs out here. */
     async endView(req: NextRequest) {
       const s = await session.read();

@@ -41,6 +41,7 @@ cut-over and hypercare tables are left from the move off the old PHP system.
 | `auth_trusted_devices`    | one browser remembered for 30 days; no `school_id`                                            | `user_id`, `app`, `expires_at`, `last_used_at`, `revoked_at`                                                                                                                                                         | internal (definer-only)                                          |
 | `mobile_sessions`         | one signed-in phone; no `school_id`                                                           | `user_id`, `platform`, `app_version`, `method`, `mfa`, `last_used_at`, `idle_days`, `revoked_at`, `revoked_reason`                                                                                                   | internal (definer-only)                                          |
 | `mobile_web_handoffs`     | one 60-second code handing the phone session to a web page                                    | `session_id`, `user_id`, `app`, `target`, `expires_at`, `used_at`                                                                                                                                                    | internal (definer-only)                                          |
+| `web_hops`                | one 60-second code opening the family website signed in from the staff website (My children)  | `user_id`, `app`, `school_id`, `target`, `expires_at`, `used_at`                                                                                                                                                     | internal (definer-only)                                          |
 | `api_idempotency`         | one idempotency key a phone sent with an offline write (kept 2 days)                          | `user_id`, `key` (PK both), `route`, `status` (HTTP), `done_at`                                                                                                                                                      | internal (definer-only)                                          |
 | `service_keys`            | one machine key for a data feed                                                               | `name`, `scopes`, `status`, `last_used_at`, `revoked_at`                                                                                                                                                             | internal                                                         |
 | `user_preferences`        | one saved screen preference of a user                                                         | `user_id`, `pref_key` (e.g. `push.off`), `value`; unique (school, user, key)                                                                                                                                         | internal                                                         |
@@ -113,6 +114,7 @@ cut-over and hypercare tables are left from the move off the old PHP system.
 - `impersonation_sessions.actor_user_id`, `.target_user_id → users.id`; `.person_ref_id →` students / guardians /
   employees by `person_type`; `portal_handoffs.session_id → impersonation_sessions.id`
 - `mobile_web_handoffs.session_id → mobile_sessions.id`
+- `web_hops.user_id → users.id`, `web_hops.school_id → schools.id`
 - Role codes are also stored as plain text in other tables: `workflow_definitions.creator_roles[]`,
   `report_schedules.recipient_roles[]`, `mis_dashboards.roles[]`, `dashboard_role_defaults.role_code` → `roles.code`.
 
@@ -221,8 +223,8 @@ edupro_migrator USING (true)`. Mart tables get the same through `app.apply_tenan
   - `roles`, `sod_rules`: system templates (`school_id IS NULL`) plus the current school's; `role_permissions`
     through its role; `permissions`: everyone reads everything.
 - **Definer-only tables**: `auth_otp_challenges`, `auth_trusted_devices`, `mobile_sessions`, `mobile_web_handoffs`,
-  `api_idempotency`, `ai_model_settings`. Forced RLS and **only** the `<table>_migrator` policy (0250, 0400, 0402,
-  0415): `edupro_app` sees no rows at all, silently. They are read and written only by `SECURITY DEFINER` functions
+  `web_hops`, `api_idempotency`, `ai_model_settings`. Forced RLS and **only** the `<table>_migrator` policy (0250,
+  0400, 0402, 0415, 0424): `edupro_app` sees no rows at all, silently. They are read and written only by `SECURITY DEFINER` functions
   (`app.login_policy`, `app.mobile_session_start`, `app.idempotency_begin`, `app.ai_model_get` …), which run as the
   owner. Do not report from them.
 - **Audit partitions** (`audit_logs_YYYYMM`, `audit_logs_default`) have no RLS of their own and `REVOKE ALL` from
@@ -632,7 +634,7 @@ reader may see personal data.
   and are wrong. Report SQL runs as `edupro_app` with context.
 - **No context = empty result**, not an error. A report that returns nothing may simply lack `app.school_id`.
 - **Definer-only tables** (`mobile_sessions`, `auth_otp_challenges`, `auth_trusted_devices`, `mobile_web_handoffs`,
-  `api_idempotency`, `ai_model_settings`) return zero rows to the app role. "No phones signed in" is not a finding.
+  `web_hops`, `api_idempotency`, `ai_model_settings`) return zero rows to the app role. "No phones signed in" is not a finding.
 - **Audit partitions**: query `audit_logs`, never `audit_logs_202611`. Without an `occurred_at` range the query scans
   every month. `app.archive_audit_partitions` can move partitions older than 84 months into the `archive` schema
   (not deleted; no worker schedules it today).
@@ -693,7 +695,7 @@ available_at <= now()`.
 - **Files**: `files.original_name` (often a person's name), and every file whose `classification` is `personal` or
   `sensitive` (photos, Aadhaar, medical, bank proofs). Never pass `bucket`/`object_key` on.
 - **Secrets — never select**: `auth_otp_challenges.code_hash`, `auth_trusted_devices.token_hash`,
-  `mobile_sessions.refresh_hash`, `mobile_sessions.previous_hash`, `mobile_web_handoffs.code_hash`,
+  `mobile_sessions.refresh_hash`, `mobile_sessions.previous_hash`, `mobile_web_handoffs.code_hash`, `web_hops.code_hash`,
   `portal_handoffs.code_hash`, `service_keys.key_hash`, `api_idempotency.body`, `api_idempotency.request_hash`,
   `jobs_outbox.payload` (may carry message bodies and sign-in codes), `jobs_outbox.last_error`, and
   `school_settings.value` of provider or integration keys.

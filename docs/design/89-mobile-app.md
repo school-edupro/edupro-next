@@ -1105,6 +1105,15 @@ more as the user scrolls down").
     tenant guard picks the school when the memberships are all in one school (it counted memberships, so such a login
     got no school, no rights, and the family website said "Portal access has ended"); the family home's and the admin
     header's school pickers list each school once.
+  - **My children opens the family website signed in** (each website has its own sign-in, so it used to ask again):
+    the staff website posts to `/api/my-children`, which asks `POST /auth/web-hop` for a one-time link (migration
+    0424 `web_hops`: 60 seconds, used once, a keyed hash; made only for someone who is a parent or student in the
+    school the staff website works in; not from a portal the school opened as someone); the family website's
+    `/api/auth/hop` turns it in (`POST /auth/web-hop/redeem`, public) for its own 12-hour session in that school, as a
+    code sign-in makes, recorded as a sign-in. A link that cannot be made falls back to the family website's sign-in.
+    Tests: `staff-parents` (issue, redeem once, not a parent, a page off the family website), permission-coverage (the
+    redeem route listed public); a browser check on a test school (My children → the family home with the children,
+    no sign-in; desktop and phone, axe).
   - Tests: API `staff-parents` (father and mother, on save and by Excel, a staff member who gets a login later, own
     login with Use staff login and Undo, School staff No / a wrong code, rights, the school boundary); a browser check
     on a throwaway test school (the list, the Guardians card, the dialogs, My children; desktop and phone, axe).

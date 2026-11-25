@@ -69,7 +69,7 @@ export const MODULES = [
   ],
   [
     'platform_core',
-    /^(schools$|school_groups$|school_settings$|campuses$|users$|user_|roles$|role_permissions$|permissions$|sod_rules$|delegations$|files$|jobs_outbox$|audit_|login_events$|impersonation|break_glass|workflow_|banks$|countries$|states$|cities$|cutover_|hypercare_|data_subject|breach_log$|retention_runs$|service_keys$|portal_handoffs$|mobile_|auth_|api_idempotency$)/,
+    /^(schools$|school_groups$|school_settings$|campuses$|users$|user_|roles$|role_permissions$|permissions$|sod_rules$|delegations$|files$|jobs_outbox$|audit_|login_events$|impersonation|break_glass|workflow_|banks$|countries$|states$|cities$|cutover_|hypercare_|data_subject|breach_log$|retention_runs$|service_keys$|portal_handoffs$|web_hops$|mobile_|auth_|api_idempotency$)/,
   ],
 ];
 
