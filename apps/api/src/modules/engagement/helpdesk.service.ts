@@ -370,6 +370,9 @@ export class HelpdeskService {
     if (q.view === 'mine') {
       params.push(me.userId);
       where.push(`q.raised_by_user_id = $${params.length}`);
+    } else if (q.view === 'others') {
+      params.push(me.userId);
+      where.push(`(q.raised_by_user_id IS NULL OR q.raised_by_user_id <> $${params.length})`);
     } else if (q.view === 'assigned') where.push(this.ownerSql(me, params));
     if (q.head) {
       params.push(q.head);

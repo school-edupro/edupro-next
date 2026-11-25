@@ -8,7 +8,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
 import { FilesService } from '../files/files.service';
-import type { FileDecideDto, FileListDto, FileNoteDto } from './file-movement.dto';
+import type { FileDecideDto, FileListDto, FileNoteDto, FilePageDto } from './file-movement.dto';
 import { fileNotePdf, htmlToLines } from './file-note-pdf';
 
 type Row = Record<string, unknown>;
@@ -558,15 +558,22 @@ export class FileMovementService {
     return w.length ? `WHERE ${w.join(' AND ')}` : '';
   }
 
-  async list(ctx: RequestContext, q: FileListDto) {
+  async list(ctx: RequestContext, q: FileListDto & Partial<Pick<FilePageDto, 'page' | 'size'>>) {
     this.assertHolds(ctx, RAISE, REPORT);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const params: unknown[] = [];
       const w = this.where(ctx, q, params);
+      // given a page: that page of the latest first and how many in all; else the latest 500 (the admin's page)
+      const size = q.page ? (q.size ?? 10) : 500;
+      const skip = q.page ? (q.page - 1) * size : 0;
       const r = await c.query<Row>(
-        `${NOTE} ${w} ORDER BY n.submitted_at DESC, n.id DESC LIMIT 500`,
+        `${NOTE} ${w} ORDER BY n.submitted_at DESC, n.id DESC LIMIT ${String(size)} OFFSET ${String(skip)}`,
         params,
       );
+      const total = q.page
+        ? (await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM file_notes n ${w}`, params))
+            .rows[0]!.n
+        : null;
       const counts = await c.query<{ inbox: number; returned: number }>(
         `SELECT (SELECT count(*) FROM file_note_levels l JOIN file_notes n ON n.id = l.note_id AND n.round = l.round AND n.status = 'pending'
                   WHERE l.status = 'pending' AND l.user_id = app.current_user_id())::int AS inbox,
@@ -577,6 +584,7 @@ export class FileMovementService {
         inbox: counts.rows[0]!.inbox,
         returned: counts.rows[0]!.returned,
         seesAll: this.sees(ctx),
+        page: q.page ? { number: q.page, size, total } : null,
       };
     });
   }

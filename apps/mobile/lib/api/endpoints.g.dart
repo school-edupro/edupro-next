@@ -1381,8 +1381,8 @@ class EduProApi {
       _t.file('GET', '/file-movement/export', query: {if (box != null) 'box': box, if (status != null) 'status': status, if (from != null) 'from': from, if (to != null) 'to': to, if (creatorId != null) 'creatorId': creatorId, if (approverId != null) 'approverId': approverId, if (q != null) 'q': q, if (format != null) 'format': format});
 
   /// GET /file-movement — Files: waiting for me, raised by me, decided by me, or all I may see
-  Future<dynamic> fileMovementList({String? box, String? status, String? from, String? to, String? creatorId, String? approverId, String? q}) =>
-      _t.send('GET', '/file-movement', query: {if (box != null) 'box': box, if (status != null) 'status': status, if (from != null) 'from': from, if (to != null) 'to': to, if (creatorId != null) 'creatorId': creatorId, if (approverId != null) 'approverId': approverId, if (q != null) 'q': q});
+  Future<dynamic> fileMovementList({String? box, String? status, String? from, String? to, String? creatorId, String? approverId, String? q, int? page, int? size}) =>
+      _t.send('GET', '/file-movement', query: {if (box != null) 'box': box, if (status != null) 'status': status, if (from != null) 'from': from, if (to != null) 'to': to, if (creatorId != null) 'creatorId': creatorId, if (approverId != null) 'approverId': approverId, if (q != null) 'q': q, if (page != null) 'page': page, if (size != null) 'size': size});
 
   /// POST /file-movement — Raise a file for approval
   Future<dynamic> fileMovementCreate({required FileNoteDto body}) =>

@@ -1,46 +1,12 @@
-import { Badge, Card, PageHeader } from '@edupro/ui';
+import { Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { TicketFeed, type Ticket, type TicketWords } from './TicketFeed';
 
-type Status = 'open' | 'in_progress' | 'answered' | 'closed';
-interface Ticket {
-  id: string;
-  raisedByUserId: string;
-  number: string;
-  desk: 'parent' | 'staff' | 'provider' | 'hostel';
-  head: string;
-  studentName: string | null;
-  section: string | null;
-  raisedBy: string | null;
-  subject: string;
-  status: Status;
-  level: number;
-  dueAt: string | null;
-  overdue: boolean;
-  assignedTo: string | null;
-  assignedRoleName: string | null;
-  openedAt: string;
-}
-const LABEL: Record<Status, string> = {
-  open: 'Open',
-  in_progress: 'In progress',
-  answered: 'Answered',
-  closed: 'Closed',
-};
-const TONE: Record<Status, 'warning' | 'info' | 'success' | 'neutral'> = {
-  open: 'warning',
-  in_progress: 'info',
-  answered: 'success',
-  closed: 'neutral',
-};
-const DESK: Record<Ticket['desk'], string> = {
-  parent: 'Family query',
-  staff: 'Staff query',
-  provider: 'ERP ticket',
-  hostel: 'Hostel complaint',
-};
+/** The first page: the latest 10; the rest load as the person scrolls. */
+const PAGE = 10;
 
 /**
  * The teacher's helpdesk: queries to answer (families of their sections and anything handed to them) and their own
@@ -57,17 +23,41 @@ export default async function QueriesPage({
   const tab = sp.tab === 'mine' ? 'mine' : 'answer';
   const closed = sp.closed === '1';
   let tickets: Ticket[] = [];
+  let total = 0;
   try {
-    const me = await bff.api.me();
-    tickets = (
-      await bff.api.fetch<{ data: Ticket[] }>(
-        `/helpdesk/tickets?size=100&view=${tab === 'mine' ? 'mine' : 'all'}&status=${closed ? 'closed' : 'active'}`,
-      )
-    ).data.filter((x) => tab === 'mine' || x.raisedByUserId !== me.user.id);
+    // to answer: all I may see but what I raised (that is under My requests)
+    const r = await bff.api.fetch<{ data: Ticket[]; page: { total: number } }>(
+      `/helpdesk/tickets?view=${tab === 'mine' ? 'mine' : 'others'}&status=${closed ? 'closed' : 'active'}&page=1&size=${String(PAGE)}`,
+    );
+    tickets = r.data;
+    total = r.page.total;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     throw error;
   }
+  const words: TicketWords = {
+    desk: {
+      parent: t(lang, 'Family query'),
+      staff: t(lang, 'Staff query'),
+      provider: t(lang, 'ERP ticket'),
+      hostel: t(lang, 'Hostel complaint'),
+    },
+    status: {
+      open: t(lang, 'Open'),
+      in_progress: t(lang, 'In progress'),
+      answered: t(lang, 'Answered'),
+      closed: t(lang, 'Closed'),
+    },
+    level: t(lang, 'Level'),
+    pastDue: t(lang, 'Past due'),
+    with: t(lang, 'with'),
+  };
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   const tabs: Array<[string, string]> = [
     ['answer', t(lang, 'To answer')],
     ['mine', t(lang, 'My requests')],
@@ -124,50 +114,15 @@ export default async function QueriesPage({
             : t(lang, 'Nothing waiting for you.')}
         </Card>
       ) : (
-        tickets.map((q) => (
-          <a key={q.id} href={`/queries/t/${q.id}`} style={{ textDecoration: 'none' }}>
-            <Card elevated style={{ marginBottom: 'var(--sp-3)' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 'var(--sp-2)',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div>
-                  <div className="ep-hdt__title">{q.subject}</div>
-                  <div className="ep-kicker">
-                    {q.number} · {t(lang, DESK[q.desk])} · {q.head}
-                    {q.studentName
-                      ? ` · ${q.studentName}${q.section ? ` (${q.section})` : ''}`
-                      : ''}
-                    {tab === 'answer' && q.raisedBy ? ` · ${q.raisedBy}` : ''}
-                    {tab === 'mine'
-                      ? ` · ${t(lang, 'with')} ${q.assignedTo ?? q.assignedRoleName ?? '—'}`
-                      : ''}
-                  </div>
-                </div>
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    gap: 'var(--sp-1)',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  {q.level > 1 ? (
-                    <Badge tone="danger">
-                      {t(lang, 'Level')} {q.level}
-                    </Badge>
-                  ) : null}
-                  {q.overdue ? <Badge tone="danger">{t(lang, 'Past due')}</Badge> : null}
-                  <Badge tone={TONE[q.status]}>{t(lang, LABEL[q.status])}</Badge>
-                </span>
-              </div>
-            </Card>
-          </a>
-        ))
+        <TicketFeed
+          key={`${tab}-${String(closed)}`}
+          first={tickets}
+          more={PAGE < total}
+          tab={tab}
+          closed={closed}
+          words={words}
+          foot={foot}
+        />
       )}
     </main>
   );

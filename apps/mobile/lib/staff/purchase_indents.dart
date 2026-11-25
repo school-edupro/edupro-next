@@ -11,6 +11,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
+import '../ui/paged_feed.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'sheet_excel.dart' show xlsxPickerProvider;
@@ -75,9 +76,6 @@ extension PurchaseIndentWords on S {
   String piWith(String who) => _pi('With $who', 'प्रतीक्षा में: $who');
   String get piPartClosed => _pi('part closed', 'आंशिक रूप से बंद');
   String piStarted(String d) => _pi('Started $d', '$d को शुरू किया');
-  String piPage(int p, int of) => _pi('Page $p of $of', 'पृष्ठ $p / $of');
-  String get piPrev => _pi('Previous', 'पिछला');
-  String get piNext => _pi('Next', 'अगला');
   String get piHandOverLink =>
       _pi('Away? Hand over your purchase approvals', 'बाहर हैं? अपनी क्रय स्वीकृतियाँ सौंपें');
 
@@ -362,7 +360,7 @@ final purchaseRightsProvider = FutureProvider.autoDispose<Set<String>>((ref) asy
   return {for (final p in (me['permissions'] as List? ?? const [])) '$p'};
 });
 
-/// What the list shows: the tab (view and, for the purchase office, the route), the filters and the page.
+/// What the list shows: the tab (view and, for the purchase office, the route) and the filters.
 typedef IndentQuery = ({
   String who,
   String view,
@@ -372,31 +370,6 @@ typedef IndentQuery = ({
   String? from,
   String? to,
   String? q,
-  int page,
-});
-
-/// The indents as the list asks for them (50 a page), with how many wait for me.
-final indentListProvider = FutureProvider.autoDispose.family<Loaded<Json>, IndentQuery>((
-  ref,
-  f,
-) async {
-  final r = await cached(
-    'indents:${f.who}:${f.view}:${f.status}:${f.route}:${f.departmentId}:${f.from}:${f.to}:${f.q}:${f.page}',
-    () => ref
-        .read(apiProvider)
-        .purchaseListIndents(
-          view: f.view,
-          status: f.status,
-          route: f.route,
-          departmentId: f.departmentId,
-          from: f.from,
-          to: f.to,
-          q: f.q,
-          page: f.page,
-          size: 50,
-        ),
-  );
-  return Loaded(asJson(r.data), r.at, stale: r.stale);
 });
 
 /// The departments the list filters by.
@@ -480,7 +453,10 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
   String? _to;
   final _q = TextEditingController();
   String? _search;
-  int _page = 1;
+  bool _filtersOpen = false;
+
+  /// how many wait for me, from the latest page
+  int _waiting = 0;
   final _messenger = GlobalKey<ScaffoldMessengerState>();
 
   @override
@@ -498,7 +474,6 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
     from: _from,
     to: _to,
     q: _search,
-    page: _page,
   );
 
   int get _filtersOn =>
@@ -516,7 +491,7 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
       ),
     );
     if (r == null || !mounted) return;
-    ref.invalidate(indentListProvider);
+    ref.read(feedRoundProvider('indents').notifier).bump();
     openIndent(context, widget.profile, r.id, r.number ?? s.piDraftIndent, said: r.said);
   }
 
@@ -561,8 +536,9 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
     final rights = ref.watch(purchaseRightsProvider).value ?? const <String>{};
     final canRaise = rights.contains('purchase.indent.raise');
     final seeAll = rights.contains('purchase.indent.view');
-    final list = ref.watch(indentListProvider(_query));
-    final waiting = (list.value?.data['waitingForMe'] as num?)?.toInt() ?? 0;
+    final round = ref.watch(feedRoundProvider('indents'));
+    final q = _query;
+    final waiting = _waiting;
     final tabs = <(String, String, String?)>[
       (s.piWaitingTab(waiting), 'waiting', null),
       (s.piMineTab, 'mine', null),
@@ -600,20 +576,61 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
                       _view = tabs[i].$2;
                       _route = tabs[i].$3;
                       _status = _route != null ? 'approved' : null;
-                      _page = 1;
                     }),
                     tabs: [for (final t in tabs) Tab(text: t.$1)],
                   ),
                 ),
               ),
+              // the tab's latest 10 first (urgent ones on top), 10 more as the person scrolls (as the staff website)
               Expanded(
-                child: LoadedList<Json>(
-                  value: list,
-                  refresh: () => ref.refresh(indentListProvider(_query).future),
-                  children: (d) {
-                    final rows = asList(d['data']);
-                    final total = (d['total'] as num?)?.toInt() ?? rows.length;
-                    final pages = (total / 50).ceil();
+                child: PagedFeed(
+                  key: ValueKey(
+                    'piFeed-${q.view}-${q.route}-${q.status}-${q.departmentId}-${q.from}-${q.to}-${q.q}-$round',
+                  ),
+                  firstCacheKey:
+                      'indents-feed:${q.who}:${q.view}:${q.status}:${q.route}:${q.departmentId}:${q.from}:${q.to}:${q.q}',
+                  load: (page) => ref
+                      .read(apiProvider)
+                      .purchaseListIndents(
+                        view: q.view,
+                        status: q.status,
+                        route: q.route,
+                        departmentId: q.departmentId,
+                        from: q.from,
+                        to: q.to,
+                        q: q.q,
+                        page: page,
+                        size: 10,
+                      ),
+                  parse: (a, page) {
+                    final total = (a['total'] as num?)?.toInt() ?? 0;
+                    return (items: asList(a['data']), more: page * 10 < total, total: total);
+                  },
+                  onAnswer: (a) {
+                    final w = (a['waitingForMe'] as num?)?.toInt() ?? 0;
+                    if (mounted && w != _waiting) setState(() => _waiting = w);
+                  },
+                  empty: _view == 'waiting' ? s.piNothingWaits : s.piNone,
+                  emptyCard: Notice(text: _view == 'waiting' ? s.piNothingWaits : s.piNone),
+                  item: (context, x, _) => _IndentCard(profile: widget.profile, row: x),
+                  footer: [
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton.icon(
+                        key: const Key('piHandOver'),
+                        icon: const Icon(Icons.swap_horiz),
+                        label: Text(s.piHandOverLink),
+                        onPressed: () => pushPage(
+                          context,
+                          s.piHandOver,
+                          PurchaseHandOverScreen(profile: widget.profile),
+                        ),
+                      ),
+                    ),
+                  ],
+                  // room for the floating Raise button
+                  endGap: 88,
+                  header: (_, _) {
                     return [
                       Text(s.piIntro, style: TextStyle(color: _muted(context), fontSize: 14)),
                       const SizedBox(height: Tokens.sp3),
@@ -640,6 +657,8 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
                         margin: EdgeInsets.zero,
                         child: ExpansionTile(
                           key: const Key('piFilters'),
+                          initiallyExpanded: _filtersOpen,
+                          onExpansionChanged: (open) => _filtersOpen = open,
                           title: Text(s.piFilters(_filtersOn)),
                           leading: const Icon(Icons.filter_list),
                           childrenPadding: const EdgeInsets.fromLTRB(
@@ -731,7 +750,6 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
                               textInputAction: TextInputAction.search,
                               onSubmitted: (_) => setState(() {
                                 _search = _q.text.trim().isEmpty ? null : _q.text.trim();
-                                _page = 1;
                               }),
                               decoration: InputDecoration(
                                 labelText: s.piSearch,
@@ -749,7 +767,6 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
                                   key: const Key('piShow'),
                                   onPressed: () => setState(() {
                                     _search = _q.text.trim().isEmpty ? null : _q.text.trim();
-                                    _page = 1;
                                   }),
                                   child: Text(s.piShow),
                                 ),
@@ -762,7 +779,6 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
                                     if (_route == null) _status = null;
                                     _q.clear();
                                     _search = null;
-                                    _page = 1;
                                   }),
                                   child: Text(s.piClear),
                                 ),
@@ -772,41 +788,6 @@ class _PurchaseIndentsScreenState extends ConsumerState<PurchaseIndentsScreen> {
                         ),
                       ),
                       const SizedBox(height: Tokens.sp3),
-                      if (rows.isEmpty)
-                        Notice(text: _view == 'waiting' ? s.piNothingWaits : s.piNone),
-                      for (final x in rows) _IndentCard(profile: widget.profile, row: x),
-                      if (pages > 1)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            TextButton(
-                              key: const Key('piPrev'),
-                              onPressed: _page > 1 ? () => setState(() => _page -= 1) : null,
-                              child: Text(s.piPrev),
-                            ),
-                            Flexible(child: Text(s.piPage(_page, pages))),
-                            TextButton(
-                              key: const Key('piNext'),
-                              onPressed: _page < pages ? () => setState(() => _page += 1) : null,
-                              child: Text(s.piNext),
-                            ),
-                          ],
-                        ),
-                      Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: TextButton.icon(
-                          key: const Key('piHandOver'),
-                          icon: const Icon(Icons.swap_horiz),
-                          label: Text(s.piHandOverLink),
-                          onPressed: () => pushPage(
-                            context,
-                            s.piHandOver,
-                            PurchaseHandOverScreen(profile: widget.profile),
-                          ),
-                        ),
-                      ),
-                      // room for the floating Raise button
-                      const SizedBox(height: 88),
                     ];
                   },
                 ),
@@ -936,7 +917,7 @@ class _IndentDetailScreenState extends ConsumerState<IndentDetailScreen> {
 
   void _reload() {
     ref.invalidate(indentProvider(widget.id));
-    ref.invalidate(indentListProvider);
+    ref.read(feedRoundProvider('indents').notifier).bump();
     // the header's Approvals count reads again
     ref.invalidate(approvalsProvider);
   }

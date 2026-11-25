@@ -58,9 +58,12 @@ Map<String, Object?> ticket(
 };
 
 class School {
-  School({this.handler = true, this.mineClosed = false});
+  School({this.handler = true, this.mineClosed = false, this.many = 0});
   final bool handler;
   final bool mineClosed;
+
+  /// a long list (pages of 10)
+  final int many;
   final sent = <String, List<Map<String, Object?>>>{};
 
   void _keep(String what, Map<String, Object?>? body) => (sent[what] ??= []).add(body ?? const {});
@@ -101,6 +104,15 @@ class School {
         return {
           'user': {'id': '11', 'displayName': 'Asha Teacher'},
         };
+      case 'GET /helpdesk/tickets' when many > 0:
+        final page = int.tryParse('${c.query?['page'] ?? 1}') ?? 1;
+        final size = int.tryParse('${c.query?['size'] ?? 10}') ?? 10;
+        final from = (page - 1) * size;
+        final upto = (from + size).clamp(0, many);
+        return {
+          'data': [for (var i = from; i < upto; i++) ticket('x$i')],
+          'page': {'number': page, 'size': size, 'total': many},
+        };
       case 'GET /helpdesk/tickets':
         if (c.query?['view'] == 'mine') {
           return {
@@ -125,8 +137,9 @@ class School {
         return {
           'data': [
             ticket('5', more: {'level': 2, 'overdue': true}),
-            // raised by me: shown under My requests only
-            ticket('8', raisedBy: '11', more: {'subject': 'Payslip missing'}),
+            // raised by me: shown under My requests only (the API leaves it out of view=others)
+            if (c.query?['view'] != 'others')
+              ticket('8', raisedBy: '11', more: {'subject': 'Payslip missing'}),
           ],
         };
       case 'GET /helpdesk/tickets/5':
@@ -265,12 +278,13 @@ Future<(FakeTransport, School)> pump(
   bool dark = false,
   double text = 1,
   Size size = const Size(420, 2400),
+  int many = 0,
 }) async {
   tester.view.devicePixelRatio = 3;
   tester.view.physicalSize = size * 3;
   addTearDown(tester.view.reset);
   SharedPreferences.setMockInitialValues({'hindi': hindi});
-  final sc = school ?? School();
+  final sc = school ?? School(many: many);
   final t = FakeTransport(sc.answer);
   await tester.pumpWidget(
     ProviderScope(
@@ -308,6 +322,32 @@ Future<void> choose(WidgetTester tester, Key menu, String label) async {
 void main() {
   final s = S(false);
 
+  testWidgets(
+    'queries to answer: the latest 10 first, 10 more as it scrolls, then the end (as the staff website)',
+    (tester) async {
+      final (t, _) = await pump(
+        tester,
+        const StaffQueriesScreen(profile: staff),
+        many: 23,
+        size: const Size(420, 900),
+      );
+      List<Call> pages() => t.calls.where((c) => c.path == '/helpdesk/tickets').toList();
+      expect(pages().first.query, allOf(containsPair('page', 1), containsPair('size', 10)));
+      expect(find.byKey(const Key('sqTicket-x0')), findsOneWidget);
+      expect(find.byKey(const Key('sqTicket-x10')), findsNothing);
+      final list = find
+          .descendant(of: find.byType(RefreshIndicator), matching: find.byType(Scrollable))
+          .first;
+      await tester.scrollUntilVisible(find.byKey(const Key('sqTicket-x15')), 400, scrollable: list);
+      await tester.pumpAndSettle();
+      expect(pages().map((c) => c.query?['page']).take(2), [1, 2]);
+      await tester.scrollUntilVisible(find.byKey(const Key('feedEnd')), 400, scrollable: list);
+      await tester.pumpAndSettle();
+      expect(pages().map((c) => c.query?['page']), [1, 2, 3]);
+      expect(find.byKey(const Key('sqTicket-x22')), findsOneWidget);
+    },
+  );
+
   test(
     'the staff menu opens Queries and helpdesk natively, on the tab asked for; no leave tab',
     () {
@@ -327,7 +367,15 @@ void main() {
     expect(find.text(s.sqLevel(2)), findsOneWidget);
     expect(find.text(s.sqPastDue), findsOneWidget);
     expect(find.textContaining('Family query'), findsOneWidget);
-    expect(t.calls.firstWhere((c) => c.path == '/helpdesk/tickets').query?['status'], 'active');
+    expect(
+      t.calls.firstWhere((c) => c.path == '/helpdesk/tickets').query,
+      allOf(
+        containsPair('status', 'active'),
+        containsPair('view', 'others'),
+        containsPair('page', 1),
+        containsPair('size', 10),
+      ),
+    );
     await tapIn(tester, find.byKey(const Key('sqTicket-5')));
     expect(find.byKey(const Key('sqTicketDetail')), findsOneWidget);
     expect(find.text('The bus comes 20 minutes late.'), findsOneWidget);

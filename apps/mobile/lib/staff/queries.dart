@@ -10,6 +10,7 @@ import '../family/queries.dart'
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
+import '../ui/paged_feed.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 
@@ -100,33 +101,6 @@ extension StaffQueryWords on S {
   };
 }
 
-/// A list of tickets: `(profile, view, closed)` — view `answer` (handed to me, not raised by me) or `mine`.
-final staffTicketsProvider = FutureProvider.autoDispose
-    .family<Loaded<Json>, (Profile, String, bool)>((ref, k) async {
-      final (p, view, closed) = k;
-      final api = ref.read(apiProvider);
-      final r = await cached('staff-tickets:${p.id}:$view:$closed', () async {
-        final list = asJson(
-          await api.helpdeskList(
-            size: 100,
-            view: view == 'mine' ? 'mine' : 'all',
-            status: closed ? 'closed' : 'active',
-          ),
-        );
-        if (view == 'mine') return list;
-        // as on the staff website: what I raised myself is under My requests, not To answer
-        final me = '${asJson(asJson(await api.meMe())['user'])['id'] ?? ''}';
-        return {
-          ...list,
-          'data': [
-            for (final t in asList(list['data']))
-              if ('${t['raisedByUserId']}' != me) t,
-          ],
-        };
-      });
-      return Loaded(asJson(r.data), r.at, stale: r.stale);
-    });
-
 final staffTicketProvider = FutureProvider.autoDispose.family<Json, String>(
   (ref, id) async => asJson(await ref.read(apiProvider).helpdeskGet(id: id)),
 );
@@ -178,7 +152,7 @@ class _StaffQueriesScreenState extends ConsumerState<StaffQueriesScreen> {
       ),
     );
     if (!mounted) return;
-    ref.invalidate(staffTicketsProvider);
+    ref.read(feedRoundProvider('tickets').notifier).bump();
     if (id != null) {
       pushPage(context, s.qryDetails, StaffTicketDetail(id: id, saved: true));
     }
@@ -249,7 +223,9 @@ class _StaffQueriesScreenState extends ConsumerState<StaffQueriesScreen> {
   }
 }
 
-class _Tickets extends ConsumerWidget {
+/// A tab of tickets — view `answer` (all I may see but what I raised) or `mine` — the latest 10 first and 10 more
+/// as the person scrolls (as the staff website), active or closed.
+class _Tickets extends ConsumerStatefulWidget {
   const _Tickets({
     required this.profile,
     required this.view,
@@ -262,30 +238,56 @@ class _Tickets extends ConsumerWidget {
   final Widget Function() head;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Tickets> createState() => _TicketsState();
+}
+
+class _TicketsState extends ConsumerState<_Tickets> {
+  /// the helpdesk is not open to this person (403)
+  bool _notYours = false;
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    final key = (profile, view, closed);
-    final value = ref.watch(staffTicketsProvider(key));
-    if (value.error is ApiException && (value.error as ApiException).status == 403) {
-      return ListView(
-        padding: const EdgeInsets.all(Tokens.sp4),
-        children: [
-          head(),
-          Notice(text: s.sqNotYours),
-        ],
-      );
-    }
-    return LoadedList<Json>(
-      value: value,
-      refresh: () => ref.refresh(staffTicketsProvider(key).future),
-      children: (d) {
-        final rows = asList(d['data']);
-        return [
-          head(),
-          if (rows.isEmpty) Notice(text: view == 'mine' ? s.sqNoneMine : s.sqNoneAnswer),
-          for (final t in rows) _TicketCard(ticket: t, mine: view == 'mine'),
-        ];
+    final round = ref.watch(feedRoundProvider('tickets'));
+    final mine = widget.view == 'mine';
+    return PagedFeed(
+      key: ValueKey('sqFeed-${widget.view}-${widget.closed}-$round'),
+      firstCacheKey: 'staff-tickets-feed:${widget.profile.id}:${widget.view}:${widget.closed}',
+      load: (page) async {
+        try {
+          return await ref
+              .read(apiProvider)
+              .helpdeskList(
+                // others: what I raised myself is under My requests, not To answer
+                view: mine ? 'mine' : 'others',
+                status: widget.closed ? 'closed' : 'active',
+                page: page,
+                size: 10,
+              );
+        } on ApiException catch (e) {
+          if (e.status == 403) {
+            return {
+              'data': <Object>[],
+              'page': {'total': 0},
+              'notYours': true,
+            };
+          }
+          rethrow;
+        }
       },
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      onAnswer: (a) {
+        if (mounted && _notYours != (a['notYours'] == true)) {
+          setState(() => _notYours = a['notYours'] == true);
+        }
+      },
+      header: (_, _) => [widget.head()],
+      empty: mine ? s.sqNoneMine : s.sqNoneAnswer,
+      emptyCard: Notice(text: _notYours ? s.sqNotYours : (mine ? s.sqNoneMine : s.sqNoneAnswer)),
+      item: (context, t, _) => _TicketCard(ticket: t, mine: mine),
     );
   }
 }
@@ -542,7 +544,7 @@ class _StaffTicketDetailState extends ConsumerState<StaffTicketDetail> {
     try {
       await f();
       ref.invalidate(staffTicketProvider(widget.id));
-      ref.invalidate(staffTicketsProvider);
+      ref.read(feedRoundProvider('tickets').notifier).bump();
       // the header's Approvals lists the queries with me: read it again
       ref.invalidate(approvalsProvider);
       if (mounted) {

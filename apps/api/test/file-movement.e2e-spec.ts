@@ -197,4 +197,19 @@ describe('file movement (e2e)', () => {
       expect(f.headers['content-disposition']).toContain(`.${format}`);
     }
   });
+
+  it('a page at a time for the staff app and website: the latest first, how many in all (25 Nov 2026)', async () => {
+    const all = (await get('/file-movement?box=all', admin)).json();
+    expect(all.page).toBeNull();
+    const ids = (r: { data: Array<{ id: string }> }) => r.data.map((f) => f.id);
+    const p1 = (await get('/file-movement?box=all&page=1&size=2', admin)).json();
+    expect(p1.page).toEqual({ number: 1, size: 2, total: all.data.length });
+    expect(ids(p1)).toEqual(ids(all).slice(0, 2));
+    const p2 = (await get('/file-movement?box=all&page=2&size=2', admin)).json();
+    expect(ids(p2)).toEqual(ids(all).slice(2, 4));
+    // the filters count too: only the approved one
+    const approved = (await get('/file-movement?box=all&status=approved&page=1', admin)).json();
+    expect(approved.page).toEqual({ number: 1, size: 10, total: 1 });
+    expect((await get('/file-movement?box=all&page=1&size=101', admin)).statusCode).toBe(400);
+  });
 });

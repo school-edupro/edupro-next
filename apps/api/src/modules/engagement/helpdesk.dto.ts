@@ -24,7 +24,8 @@ const Email = z.string().trim().toLowerCase().email().max(200);
 export const ListTicketsSchema = z.object({
   desk: DeskSchema.optional(),
   status: z.enum(['open', 'in_progress', 'answered', 'closed', 'active', 'overdue']).optional(),
-  view: z.enum(['all', 'mine', 'assigned']).default('all'),
+  /** others: all I may see but those I raised (the staff app's and website's "to answer") */
+  view: z.enum(['all', 'mine', 'assigned', 'others']).default('all'),
   head: z.string().trim().max(40).optional(),
   q: z.string().trim().max(80).optional(),
   /** the admission desk: the questions about one registration (docs/design/43, part 4) */

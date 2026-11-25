@@ -16,6 +16,22 @@ extension PagedFeedWords on S {
   String get pfFailed => _pf('Could not load more.', 'और लोड नहीं हो सका।');
 }
 
+/// Bumped when a paged list's items change elsewhere (a decision on a detail screen, a new one raised): the list
+/// keyed by it loads again from the newest. One counter per list name ('files', 'indents', 'tickets').
+final feedRoundProvider = NotifierProvider.family<FeedRound, int, String>(FeedRound.new);
+
+class FeedRound extends Notifier<int> {
+  FeedRound(this.list);
+
+  /// the list's name
+  final String list;
+
+  @override
+  int build() => 0;
+
+  void bump() => state++;
+}
+
 /// One page of a list the API hands out in pages: its items, whether more come, and how many in all when known.
 typedef FeedPage = ({List<Json> items, bool more, int? total});
 
@@ -32,6 +48,9 @@ class PagedFeed extends ConsumerStatefulWidget {
     this.header,
     this.firstCacheKey,
     this.emptyCard,
+    this.onAnswer,
+    this.footer = const [],
+    this.endGap = 0,
   });
 
   /// the API's answer for a page (1, 2, …)
@@ -51,6 +70,15 @@ class PagedFeed extends ConsumerStatefulWidget {
 
   /// shown instead of [empty] when there is nothing at all (a card with a title and a line)
   final Widget? emptyCard;
+
+  /// each page's whole answer, for what stands outside the list (tab counts)
+  final void Function(Json answer)? onAnswer;
+
+  /// what stands after the foot (a link)
+  final List<Widget> footer;
+
+  /// room after the foot (for a floating button)
+  final double endGap;
   final String? firstCacheKey;
 
   @override
@@ -112,6 +140,7 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
         _total = p.total ?? _total;
         _answer = json;
       });
+      widget.onAnswer?.call(json);
       // a short first page that does not fill the screen: bring the next one too
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _scroll.hasClients && _scroll.position.maxScrollExtent <= 0) _next();
@@ -194,6 +223,8 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
                 ),
               ),
             ),
+          ...widget.footer,
+          if (widget.endGap > 0) SizedBox(height: widget.endGap),
         ],
       ),
     );

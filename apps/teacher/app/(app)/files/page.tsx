@@ -1,10 +1,14 @@
-import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { notFound, redirect } from 'next/navigation';
 import { FilesNav } from '@/components/FilesNav';
 import { bff } from '@/lib/bff';
-import { FILE_TONE, fileWhen, type FileNote } from '@/lib/file-movement';
+import type { FileNote } from '@/lib/file-movement';
 import { currentLang, t } from '@/lib/i18n';
+import { FileFeed, type FileWords } from './FileFeed';
+
+/** The first page: the latest 10 files of the box; the rest load as the person scrolls. */
+const PAGE = 10;
 
 const BOXES: Array<[string, string]> = [
   ['inbox', 'To approve'],
@@ -38,14 +42,42 @@ export default async function StaffFilesPage({
     if (/^\d{4}-\d{2}-\d{2}$/.test(sp[k] ?? '')) filters[k] = sp[k]!;
   if (sp.q?.trim()) filters.q = sp.q.trim().slice(0, 80);
   const qs = new URLSearchParams(filters).toString();
-  let list: { data: FileNote[]; inbox: number; returned: number; seesAll: boolean };
+  let list: {
+    data: FileNote[];
+    inbox: number;
+    returned: number;
+    seesAll: boolean;
+    page: { total: number } | null;
+  };
   try {
-    list = await bff.api.fetch(`/file-movement?${qs}`);
+    list = await bff.api.fetch(`/file-movement?${qs}&page=1&size=${String(PAGE)}`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403) notFound();
     throw error;
   }
+  const words: FileWords = {
+    region: t(lang, 'Files'),
+    caption: t(lang, 'Files for approval'),
+    head: [
+      t(lang, 'S.no'),
+      t(lang, 'File no.'),
+      t(lang, 'Subject'),
+      t(lang, 'Raised by'),
+      t(lang, 'Raised on'),
+      t(lang, 'Levels'),
+      t(lang, 'With'),
+      t(lang, 'Status'),
+    ],
+    round: t(lang, 'Round'),
+    status: Object.fromEntries(STATUSES.map(([, label]) => [label, t(lang, label)])),
+  };
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: '72rem', margin: '0 auto' }}>
       <p style={{ margin: '0 0 var(--sp-2)' }}>
@@ -157,57 +189,14 @@ export default async function StaffFilesPage({
               : t(lang, 'Nothing here.')}
           </p>
         ) : (
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={t(lang, 'Files')}>
-            <table className="ep-table ep-table--dense">
-              <caption className="ep-sr-only">{t(lang, 'Files for approval')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t(lang, 'S.no')}</th>
-                  <th scope="col">{t(lang, 'File no.')}</th>
-                  <th scope="col">{t(lang, 'Subject')}</th>
-                  <th scope="col">{t(lang, 'Raised by')}</th>
-                  <th scope="col">{t(lang, 'Raised on')}</th>
-                  <th scope="col">{t(lang, 'Levels')}</th>
-                  <th scope="col">{t(lang, 'With')}</th>
-                  <th scope="col">{t(lang, 'Status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.map((n, i) => (
-                  <tr key={n.id}>
-                    <td>{i + 1}</td>
-                    <th scope="row">
-                      <a href={`/files/${n.id}`} style={{ textDecoration: 'underline' }}>
-                        {n.number}
-                      </a>
-                    </th>
-                    <td>
-                      {n.subject}
-                      {n.round > 1 ? (
-                        <div className="ep-field__help">
-                          {t(lang, 'Round')} {n.round}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td>
-                      {n.createdBy}
-                      <div className="ep-field__help">{n.designation}</div>
-                    </td>
-                    <td>{fileWhen(n.createdAt)}</td>
-                    <td>
-                      {n.approvedLevels} / {n.levels}
-                    </td>
-                    <td>{n.waitingOn ?? (n.status === 'returned' ? n.createdBy : '–')}</td>
-                    <td>
-                      <Badge tone={FILE_TONE[n.status] ?? 'neutral'}>
-                        {t(lang, n.statusLabel)}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FileFeed
+            key={qs}
+            first={list.data}
+            more={PAGE < (list.page?.total ?? 0)}
+            filters={filters}
+            words={words}
+            foot={foot}
+          />
         )}
       </Card>
     </main>

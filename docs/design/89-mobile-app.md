@@ -983,3 +983,21 @@ more as the user scrolls down").
   answer 10 → 20 → 23; a11y light / dark / Hindi); `consents_test.dart` (the staff list asks `part=staff`, its
   figures from `counts`, a tab from page 1); API `consent-forms.e2e-spec` (pages, tabs, figures; the family list
   unchanged); `teacher-a11y` gets `/messages`, `/messages?tab=notices`, `/office-orders?tab=all` and `/consents`.
+- **Purchase indents, File movement, Queries and helpdesk** (staff), app and website, the same: each tab shows its
+  latest 10 and loads 10 more as the person scrolls; the filters and the tab start again from the newest.
+  - API: `/purchase/indents` already paged (`page`, `size`, `total`; urgent ones first, then the latest).
+    `/file-movement` takes `page` and `size` (10, at most 100) and answers with `page.total`; without `page` it
+    answers as before (the latest 500, the admin's page and the exports). `/helpdesk/tickets` takes
+    `view=others` (all I may see but what I raised): the staff "To answer" tab now pages on the server instead of
+    leaving my own out after loading 100.
+  - App: `PurchaseIndentsScreen`, `FilesScreen` and the Queries tabs on `PagedFeed` (the Previous / Next pager of
+    indents is gone; the tab counts come from each page's answer through `onAnswer`; `footer` keeps the hand-over
+    link after the list; `endGap` leaves room for the floating button). A decision or a new one raised elsewhere
+    bumps `feedRoundProvider('indents' | 'files' | 'tickets')`, and the list loads again from the newest.
+  - Website: `/purchase` (`IndentFeed`, the page links are gone), `/files` (`FileFeed`) and `/queries`
+    (`TicketFeed`) show the first 10 from the server and load 10 more rows or cards as the foot comes into view
+    (`loadIndents`, `loadFiles`, `loadTickets` in `lib/feed-actions.ts`, which pass on only the known filters).
+  - Tests: API `file-movement` (pages, totals, filters) and `helpdesk` (others + mine = all); app
+    `staff_purchase_test`, `staff_files_test`, `staff_queries_test` (23 rows: 10 → 20 → 23; To answer asks
+    `view=others`); a browser check on a throwaway test school (12 of each: 10, then 12 on scroll, desktop and
+    phone, axe).

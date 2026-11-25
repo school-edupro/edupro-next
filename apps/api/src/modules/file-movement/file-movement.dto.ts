@@ -48,6 +48,13 @@ export const FileListSchema = z.object({
 });
 export class FileListDto extends createZodDto(FileListSchema) {}
 
+/** The list, given `page`, a page at a time (the staff app and website: the latest 10, then more as they scroll). */
+export const FilePageSchema = FileListSchema.extend({
+  page: z.coerce.number().int().min(1).max(500).optional(),
+  size: z.coerce.number().int().min(1).max(100).default(10),
+});
+export class FilePageDto extends createZodDto(FilePageSchema) {}
+
 export const FileExportSchema = FileListSchema.extend({
   format: z.enum(['xlsx', 'pdf']).default('xlsx'),
 });

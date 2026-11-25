@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
-import { FileDecideDto, FileExportDto, FileListDto, FileNoteDto } from './file-movement.dto';
+import { FileDecideDto, FileExportDto, FileNoteDto, FilePageDto } from './file-movement.dto';
 import { FileMovementService } from './file-movement.service';
 
 /**
@@ -49,7 +49,7 @@ export class FileMovementController {
   @Get()
   @ApiOperation({ summary: 'Files: waiting for me, raised by me, decided by me, or all I may see' })
   @AuthenticatedOnly()
-  list(@ReqCtx() ctx: RequestContext, @Query() q: FileListDto) {
+  list(@ReqCtx() ctx: RequestContext, @Query() q: FilePageDto) {
     return this.files.list(ctx, q);
   }
 

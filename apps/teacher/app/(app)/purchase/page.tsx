@@ -1,4 +1,4 @@
-import { Badge, PageHeader } from '@edupro/ui';
+import { PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
 import { bff } from '@/lib/bff';
@@ -6,11 +6,14 @@ import { currentLang, t } from '@/lib/i18n';
 import {
   INDENT_ROUTE,
   INDENT_STATUS,
-  inr,
   type IndentRoute,
   type IndentRow,
   type IndentStatus,
 } from '@/lib/purchase';
+import { IndentFeed, type IndentWords } from './IndentFeed';
+
+/** The first page: the tab's latest 10 (urgent ones on top); the rest load as the person scrolls. */
+const PAGE = 10;
 
 const VIEWS = {
   waiting: 'Waiting for me',
@@ -21,16 +24,6 @@ type View = keyof typeof VIEWS;
 
 const ID = /^\d{1,18}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
-
-const when = (iso: string | null) =>
-  iso
-    ? new Intl.DateTimeFormat('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      }).format(new Date(iso))
-    : '—';
 
 /**
  * Purchase Indents on the staff website, as the admin's page (docs/design/83, part 2): Waiting for me (those at my
@@ -48,7 +41,6 @@ export default async function StaffPurchasePage({
   const view: View = sp.view && sp.view in VIEWS ? (sp.view as View) : 'all';
   const status = sp.status && sp.status in INDENT_STATUS ? (sp.status as IndentStatus) : undefined;
   const route = sp.route && sp.route in INDENT_ROUTE ? (sp.route as IndentRoute) : undefined;
-  const page = Math.max(1, Number(sp.page) || 1);
   const q = sp.q?.trim().slice(0, 80) || undefined;
   // department and dates, as the admin's list filters
   const f = {
@@ -56,11 +48,13 @@ export default async function StaffPurchasePage({
     from: sp.from && DAY.test(sp.from) ? sp.from : undefined,
     to: sp.to && DAY.test(sp.to) ? sp.to : undefined,
   };
-  const qs = new URLSearchParams({ view, page: String(page), size: '50' });
-  if (status) qs.set('status', status);
-  if (route) qs.set('route', route);
-  if (q) qs.set('q', q);
-  for (const [k, v] of Object.entries(f)) if (v) qs.set(k, v);
+  // the tab and the filters, as the next pages ask for them too
+  const filters: Record<string, string> = { view };
+  if (status) filters.status = status;
+  if (route) filters.route = route;
+  if (q) filters.q = q;
+  for (const [k, v] of Object.entries(f)) if (v) filters[k] = v;
+  const qs = new URLSearchParams({ ...filters, page: '1', size: String(PAGE) });
   let data: { data: IndentRow[]; total: number; waitingForMe: number };
   let choices: { departments: Array<{ id: string; name: string }> };
   let me;
@@ -80,6 +74,42 @@ export default async function StaffPurchasePage({
   const seeAll = me.permissions.includes('purchase.indent.view');
   // the estimate shows to those who see rates (not to a raiser without purchase rights)
   const rates = data.data.some((x) => x.estimate !== null);
+  const words: IndentWords = {
+    caption: t(lang, 'Purchase indents'),
+    indent: t(lang, 'Indent'),
+    department: t(lang, 'Department'),
+    raisedBy: t(lang, 'Raised by'),
+    neededBy: t(lang, 'Needed by'),
+    estimate: t(lang, 'Estimate'),
+    status: t(lang, 'Status'),
+    statusLabel: Object.fromEntries(
+      (Object.keys(INDENT_STATUS) as IndentStatus[]).map((k) => [
+        k,
+        t(lang, INDENT_STATUS[k].label),
+      ]),
+    ) as Record<IndentStatus, string>,
+    routeLabel: Object.fromEntries(
+      (Object.keys(INDENT_ROUTE) as IndentRoute[]).map((k) => [k, t(lang, INDENT_ROUTE[k])]),
+    ) as Record<IndentRoute, string>,
+    draft: t(lang, 'Draft'),
+    urgent: t(lang, 'Urgent'),
+    line: t(lang, 'line'),
+    lines: t(lang, 'lines'),
+    for: t(lang, 'for'),
+    with: t(lang, 'With'),
+    partClosed: t(lang, 'part closed'),
+    started: t(lang, 'Started'),
+    empty:
+      view === 'waiting'
+        ? t(lang, 'Nothing is waiting for your approval.')
+        : t(lang, 'No indents here yet.'),
+  };
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   const link = (p: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
     for (const [k, v] of Object.entries({ view, status, route, q, ...f, ...p }))
@@ -156,7 +186,7 @@ export default async function StaffPurchasePage({
             <a
               key={v}
               className="ep-tabs__tab"
-              href={link({ view: v, status: undefined, route: undefined, page: undefined })}
+              href={link({ view: v, status: undefined, route: undefined })}
               aria-current={view === v && !route ? 'page' : undefined}
             >
               {t(lang, VIEWS[v])}
@@ -167,19 +197,14 @@ export default async function StaffPurchasePage({
             <>
               <a
                 className="ep-tabs__tab"
-                href={link({
-                  view: 'all',
-                  status: 'approved',
-                  route: 'to_requisition',
-                  page: undefined,
-                })}
+                href={link({ view: 'all', status: 'approved', route: 'to_requisition' })}
                 aria-current={route === 'to_requisition' ? 'page' : undefined}
               >
                 {t(lang, 'Waiting for the PR')}
               </a>
               <a
                 className="ep-tabs__tab"
-                href={link({ view: 'all', status: 'approved', route: 'to_order', page: undefined })}
+                href={link({ view: 'all', status: 'approved', route: 'to_order' })}
                 aria-current={route === 'to_order' ? 'page' : undefined}
               >
                 {t(lang, 'PR skipped: for the PO')}
@@ -249,99 +274,15 @@ export default async function StaffPurchasePage({
           {t(lang, 'Show')}
         </button>
       </form>
-      <div
-        className="ep-table-wrap"
-        tabIndex={0}
-        role="region"
-        aria-label={t(lang, 'Purchase indents')}
-      >
-        <table className="ep-table">
-          <caption className="ep-sr-only">{t(lang, 'Purchase indents')}</caption>
-          <thead>
-            <tr>
-              <th scope="col">{t(lang, 'Indent')}</th>
-              <th scope="col">{t(lang, 'Department')}</th>
-              <th scope="col">{t(lang, 'Raised by')}</th>
-              <th scope="col">{t(lang, 'Needed by')}</th>
-              {rates ? (
-                <th scope="col" style={{ textAlign: 'right' }}>
-                  {t(lang, 'Estimate')}
-                </th>
-              ) : null}
-              <th scope="col">{t(lang, 'Status')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.data.length ? (
-              data.data.map((x) => (
-                <tr key={x.id}>
-                  <td>
-                    <a href={`/purchase/${x.id}`}>{x.number ?? t(lang, 'Draft')}</a>
-                    {x.priority === 'urgent' ? (
-                      <>
-                        {' '}
-                        <Badge tone="danger">{t(lang, 'Urgent')}</Badge>
-                      </>
-                    ) : null}
-                    <span className="ep-mr-col__desc">
-                      {x.purpose.length > 80 ? `${x.purpose.slice(0, 80)}…` : x.purpose} · {x.lines}{' '}
-                      {x.lines === 1 ? t(lang, 'line') : t(lang, 'lines')}
-                    </span>
-                  </td>
-                  <td>{x.department}</td>
-                  <td>
-                    {x.raisedBy}
-                    {x.onBehalf ? (
-                      <span className="ep-mr-col__desc">
-                        {t(lang, 'for')} {x.onBehalf}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td>{x.requiredBy ? when(`${x.requiredBy}T00:00:00+05:30`) : '—'}</td>
-                  {rates ? (
-                    <td style={{ textAlign: 'right' }}>
-                      {x.estimate === null ? '—' : inr(x.estimate)}
-                    </td>
-                  ) : null}
-                  <td>
-                    <Badge tone={INDENT_STATUS[x.status].tone}>
-                      {t(lang, INDENT_STATUS[x.status].label)}
-                    </Badge>
-                    <span className="ep-mr-col__desc">
-                      {x.status === 'submitted' && x.waitingWith
-                        ? `${t(lang, 'With')} ${x.waitingWith}`
-                        : x.status === 'approved' && x.route
-                          ? `${t(lang, INDENT_ROUTE[x.route])}${x.partClosed ? ` · ${t(lang, 'part closed')}` : ''}`
-                          : x.decidedAt
-                            ? when(x.decidedAt)
-                            : x.submittedAt
-                              ? when(x.submittedAt)
-                              : `${t(lang, 'Started')} ${when(x.createdAt)}`}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={rates ? 6 : 5}>
-                  {view === 'waiting'
-                    ? t(lang, 'Nothing is waiting for your approval.')
-                    : t(lang, 'No indents here yet.')}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      {data.total > 50 ? (
-        <p className="ep-field__help">
-          {t(lang, 'Page')} {page} / {Math.ceil(data.total / 50)} ·{' '}
-          {page > 1 ? <a href={link({ page: String(page - 1) })}>{t(lang, 'Previous')}</a> : null}{' '}
-          {page * 50 < data.total ? (
-            <a href={link({ page: String(page + 1) })}>{t(lang, 'Next')}</a>
-          ) : null}
-        </p>
-      ) : null}
+      <IndentFeed
+        key={qs.toString()}
+        first={data.data}
+        more={PAGE < data.total}
+        filters={filters}
+        rates={rates}
+        words={words}
+        foot={foot}
+      />
       <p style={{ marginTop: 'var(--sp-4)' }}>
         <a href="/purchase/hand-over">{t(lang, 'Away? Hand over your purchase approvals')}</a>
       </p>

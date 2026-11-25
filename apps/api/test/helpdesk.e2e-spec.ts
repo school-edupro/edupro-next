@@ -659,6 +659,19 @@ describe('helpdesk (e2e)', () => {
     ).json();
     expect(p1.data).toHaveLength(5);
     expect(p2.data[0].id).not.toBe(p1.data[4].id);
+    // others (the staff "to answer", 25 Nov 2026): all I may see but what I raised, paged on the server
+    const read = async (view: string) =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/helpdesk/tickets?view=${view}&size=100`,
+          headers: h(),
+        })
+      ).json() as { data: Array<{ raisedByUserId: string | null }>; page: { total: number } };
+    const [every, mineOnly, others] = [await read('all'), await read('mine'), await read('others')];
+    expect(others.page.total + mineOnly.page.total).toBe(every.page.total);
+    const myId = mineOnly.data[0]?.raisedByUserId;
+    if (myId) expect(others.data.some((t) => t.raisedByUserId === myId)).toBe(false);
     // Excel: one row per ticket of the filter, in the same order
     const x = await inject({
       method: 'GET',

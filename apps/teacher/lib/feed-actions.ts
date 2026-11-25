@@ -1,7 +1,7 @@
 'use server';
 /**
  * The staff website's lists that load as they scroll (Messages: messages and notices; Office orders; Forms and
- * declarations): the next page of 10, and acknowledging a notice in place.
+ * declarations; Queries; File movement; Purchase indents): the next page of 10, and acknowledging a notice in place.
  */
 import { bff } from './bff';
 
@@ -50,6 +50,72 @@ export async function loadConsents(
       `/engagement/mine/consent-forms?part=staff&page=${String(page)}&size=${String(PAGE)}`,
     );
     return { ok: true, data: r.forms, more: page * PAGE < r.page.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of queries: `answer` (all I may see but what I raised) or `mine`, active or closed. */
+export async function loadTickets(
+  page: number,
+  tab: 'answer' | 'mine',
+  closed: boolean,
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  if (tab !== 'answer' && tab !== 'mine') return { ok: false };
+  try {
+    const view = tab === 'mine' ? 'mine' : 'others';
+    const r = await bff.api.fetch<{ data: unknown[]; page: { total: number } }>(
+      `/helpdesk/tickets?view=${view}&status=${closed ? 'closed' : 'active'}&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.data, more: page * PAGE < r.page.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The list's filters as the API takes them (only known keys, plain values). */
+function filterQuery(filters: Record<string, string>, keys: readonly string[]): string | null {
+  const out = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) {
+    if (!keys.includes(k)) return null;
+    if (typeof v !== 'string' || v.length > 80) return null;
+    if (v) out.set(k, v);
+  }
+  return out.toString();
+}
+
+/** The next page of files (the box and the filters as on the page). */
+export async function loadFiles(
+  page: number,
+  filters: Record<string, string>,
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  const qs = filterQuery(filters, ['box', 'status', 'from', 'to', 'q']);
+  if (qs === null) return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ data: unknown[]; page: { total: number } }>(
+      `/file-movement?${qs}&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.data, more: page * PAGE < r.page.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of purchase indents (the tab and the filters as on the page). */
+export async function loadIndents(
+  page: number,
+  filters: Record<string, string>,
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  const qs = filterQuery(filters, ['view', 'status', 'route', 'departmentId', 'from', 'to', 'q']);
+  if (qs === null) return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ data: unknown[]; total: number }>(
+      `/purchase/indents?${qs}&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.data, more: page * PAGE < r.total };
   } catch {
     return { ok: false };
   }

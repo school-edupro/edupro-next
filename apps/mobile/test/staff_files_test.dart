@@ -52,10 +52,25 @@ class School {
   final created = <Map<String, Object?>>[];
   final resubmitted = <Map<String, Object?>>[];
 
+  /// a long list (pages of 10)
+  int many = 0;
+
   Object? answer(Call c) {
     if (c.path.startsWith('https://')) return null;
     final key = '${c.method} ${c.path}';
     switch (key) {
+      case 'GET /file-movement' when many > 0:
+        final page = int.tryParse('${c.query?['page'] ?? 1}') ?? 1;
+        final size = int.tryParse('${c.query?['size'] ?? 10}') ?? 10;
+        final from = (page - 1) * size;
+        final upto = (from + size).clamp(0, many);
+        return {
+          'data': [for (var i = from; i < upto; i++) _row('x$i', 'pending')],
+          'inbox': many,
+          'returned': 0,
+          'seesAll': false,
+          'page': {'number': page, 'size': size, 'total': many},
+        };
       case 'GET /file-movement':
         final box = c.query?['box'];
         return {
@@ -222,12 +237,13 @@ Future<(FakeTransport, School)> pump(
   bool dark = false,
   double text = 1,
   Size size = const Size(420, 2600),
+  int many = 0,
 }) async {
   tester.view.devicePixelRatio = 3;
   tester.view.physicalSize = size * 3;
   addTearDown(tester.view.reset);
   SharedPreferences.setMockInitialValues({'hindi': hindi});
-  final school = School();
+  final school = School()..many = many;
   final t = FakeTransport(school.answer);
   await tester.pumpWidget(
     ProviderScope(
@@ -265,6 +281,32 @@ Future<void> tapIn(WidgetTester tester, Finder f) async {
 
 void main() {
   final s = S(false);
+
+  testWidgets(
+    'files: the latest 10 first, 10 more as it scrolls, then the end (as the staff website)',
+    (tester) async {
+      final (t, _) = await pump(
+        tester,
+        const FilesScreen(profile: staff),
+        many: 23,
+        size: const Size(420, 900),
+      );
+      List<Call> pages() => t.calls.where((c) => c.path == '/file-movement').toList();
+      expect(pages().first.query, allOf(containsPair('page', 1), containsPair('size', 10)));
+      expect(find.byKey(const Key('fmFile-x0')), findsOneWidget);
+      expect(find.byKey(const Key('fmFile-x10')), findsNothing);
+      final list = find
+          .descendant(of: find.byType(RefreshIndicator), matching: find.byType(Scrollable))
+          .first;
+      await tester.scrollUntilVisible(find.byKey(const Key('fmFile-x15')), 400, scrollable: list);
+      await tester.pumpAndSettle();
+      expect(pages().map((c) => c.query?['page']).take(2), [1, 2]);
+      await tester.scrollUntilVisible(find.byKey(const Key('feedEnd')), 400, scrollable: list);
+      await tester.pumpAndSettle();
+      expect(pages().map((c) => c.query?['page']), [1, 2, 3]);
+      expect(find.byKey(const Key('fmFile-x22')), findsOneWidget);
+    },
+  );
 
   test('the staff menu opens File movement natively (no web page)', () {
     expect(nativeScreen(staff, '/files', s), isA<FilesScreen>());

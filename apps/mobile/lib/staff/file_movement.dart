@@ -9,6 +9,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
+import '../ui/paged_feed.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'office_parts.dart';
@@ -219,16 +220,6 @@ String _when(S s, Object? iso) {
 /// The list's filters: the box, the status, the dates and the words.
 typedef FileQuery = ({String who, String box, String? status, String? from, String? to, String? q});
 
-final fileListProvider = FutureProvider.autoDispose.family<Loaded<Json>, FileQuery>((ref, f) async {
-  final r = await cached(
-    'files:${f.who}:${f.box}:${f.status}:${f.from}:${f.to}:${f.q}',
-    () => ref
-        .read(apiProvider)
-        .fileMovementList(box: f.box, status: f.status, from: f.from, to: f.to, q: f.q),
-  );
-  return Loaded(asJson(r.data), r.at, stale: r.stale);
-});
-
 final fileProvider = FutureProvider.autoDispose.family<Json, String>(
   (ref, id) async => asJson(await ref.read(apiProvider).fileMovementGet(id: id)),
 );
@@ -263,6 +254,10 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   String? _to;
   final _q = TextEditingController();
   String? _search;
+  bool _filtersOpen = false;
+
+  /// the counts from the latest page (To approve, sent back, whether I see every file)
+  Json _meta = const {};
 
   @override
   void dispose() {
@@ -286,7 +281,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       ),
     );
     if (r == null || !mounted) return;
-    ref.invalidate(fileListProvider);
+    ref.read(feedRoundProvider('files').notifier).bump();
     openFile(context, widget.profile, r.id, s.fmTitle, said: r.said);
   }
 
@@ -326,12 +321,13 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    final list = ref.watch(fileListProvider(_query));
-    final d = list.value?.data ?? const <String, dynamic>{};
-    final inbox = (d['inbox'] as num?)?.toInt() ?? 0;
-    final returned = (d['returned'] as num?)?.toInt() ?? 0;
-    final seesAll = d['seesAll'] == true;
+    final round = ref.watch(feedRoundProvider('files'));
+    final q = _query;
+    final inbox = (_meta['inbox'] as num?)?.toInt() ?? 0;
+    final returned = (_meta['returned'] as num?)?.toInt() ?? 0;
+    final seesAll = _meta['seesAll'] == true;
     final at = _boxes.indexOf(_box);
+    final muted = officeMuted(context);
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
@@ -356,13 +352,35 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
               ),
             ),
           ),
+          // the latest 10 of the box first, 10 more as the person scrolls (as the staff website)
           Expanded(
-            child: LoadedList<Json>(
-              value: list,
-              refresh: () => ref.refresh(fileListProvider(_query).future),
-              children: (d) {
-                final rows = asList(d['data']);
-                final muted = officeMuted(context);
+            child: PagedFeed(
+              key: ValueKey('fmFeed-${q.box}-${q.status}-${q.from}-${q.to}-${q.q}-$round'),
+              firstCacheKey: 'files-feed:${q.who}:${q.box}:${q.status}:${q.from}:${q.to}:${q.q}',
+              load: (page) => ref
+                  .read(apiProvider)
+                  .fileMovementList(
+                    box: q.box,
+                    status: q.status,
+                    from: q.from,
+                    to: q.to,
+                    q: q.q,
+                    page: page,
+                    size: 10,
+                  ),
+              parse: (a, page) {
+                final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+                return (items: asList(a['data']), more: page * 10 < total, total: total);
+              },
+              onAnswer: (a) {
+                if (mounted) setState(() => _meta = a);
+              },
+              empty: _box == 'inbox' ? s.fmNoneToApprove : s.fmNothing,
+              emptyCard: Notice(text: _box == 'inbox' ? s.fmNoneToApprove : s.fmNothing),
+              // room for the floating Add button
+              endGap: 88,
+              item: (context, n, _) => _FileCard(profile: widget.profile, note: n),
+              header: (_, _) {
                 return [
                   Text(s.fmIntro, style: TextStyle(color: muted, fontSize: 14)),
                   const SizedBox(height: Tokens.sp3),
@@ -399,6 +417,8 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                     margin: EdgeInsets.zero,
                     child: ExpansionTile(
                       key: const Key('fmFilters'),
+                      initiallyExpanded: _filtersOpen,
+                      onExpansionChanged: (open) => _filtersOpen = open,
                       leading: const Icon(Icons.filter_list),
                       title: Text(s.fmFilters(_filtersOn)),
                       childrenPadding: const EdgeInsets.fromLTRB(
@@ -485,10 +505,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                     ),
                   ),
                   const SizedBox(height: Tokens.sp3),
-                  if (rows.isEmpty) Notice(text: _box == 'inbox' ? s.fmNoneToApprove : s.fmNothing),
-                  for (final n in rows) _FileCard(profile: widget.profile, note: n),
-                  // room for the floating Add button
-                  const SizedBox(height: 88),
                 ];
               },
             ),
@@ -607,7 +623,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
 
   void _reload() {
     ref.invalidate(fileProvider(widget.id));
-    ref.invalidate(fileListProvider);
+    ref.read(feedRoundProvider('files').notifier).bump();
     ref.invalidate(approvalsProvider);
   }
 

@@ -68,6 +68,9 @@ class School {
   final handed = <Map<String, Object?>>[];
   final ended = <String>[];
 
+  /// a long list (pages of 10)
+  int many = 0;
+
   Object? answer(Call c) {
     final key = '${c.method} ${c.path}';
     switch (key) {
@@ -83,6 +86,18 @@ class School {
             {'id': '2', 'name': 'Sports'},
           ],
           'vendors': [],
+        };
+      case 'GET /purchase/indents' when many > 0:
+        final page = int.tryParse('${c.query?['page'] ?? 1}') ?? 1;
+        final size = int.tryParse('${c.query?['size'] ?? 10}') ?? 10;
+        final from = (page - 1) * size;
+        final upto = (from + size).clamp(0, many);
+        return {
+          'data': [
+            for (var i = from; i < upto; i++) _row('x$i', 'PI/2026-27/${1000 + i}', 'submitted'),
+          ],
+          'total': many,
+          'waitingForMe': 0,
         };
       case 'GET /purchase/indents':
         final view = c.query?['view'];
@@ -383,12 +398,13 @@ Future<(FakeTransport, School)> pump(
   bool dark = false,
   double text = 1,
   Size size = const Size(420, 2400),
+  int many = 0,
 }) async {
   tester.view.devicePixelRatio = 3;
   tester.view.physicalSize = size * 3;
   addTearDown(tester.view.reset);
   SharedPreferences.setMockInitialValues({'hindi': hindi});
-  final school = School();
+  final school = School()..many = many;
   final t = FakeTransport(school.answer);
   await tester.pumpWidget(
     ProviderScope(
@@ -424,6 +440,32 @@ Future<void> tapIn(WidgetTester tester, Finder f) async {
 
 void main() {
   final s = S(false);
+
+  testWidgets(
+    'indents: the latest 10 first, 10 more as it scrolls, then the end (as the staff website)',
+    (tester) async {
+      final (t, _) = await pump(
+        tester,
+        const PurchaseIndentsScreen(profile: staff),
+        many: 23,
+        size: const Size(420, 900),
+      );
+      List<Call> pages() => t.calls.where((c) => c.path == '/purchase/indents').toList();
+      expect(pages().first.query, allOf(containsPair('page', 1), containsPair('size', 10)));
+      expect(find.byKey(const Key('piRow-x0')), findsOneWidget);
+      expect(find.byKey(const Key('piRow-x10')), findsNothing);
+      final list = find
+          .descendant(of: find.byType(RefreshIndicator), matching: find.byType(Scrollable))
+          .first;
+      await tester.scrollUntilVisible(find.byKey(const Key('piRow-x15')), 400, scrollable: list);
+      await tester.pumpAndSettle();
+      expect(pages().map((c) => c.query?['page']).take(2), [1, 2]);
+      await tester.scrollUntilVisible(find.byKey(const Key('feedEnd')), 400, scrollable: list);
+      await tester.pumpAndSettle();
+      expect(pages().map((c) => c.query?['page']), [1, 2, 3]);
+      expect(find.byKey(const Key('piRow-x22')), findsOneWidget);
+    },
+  );
 
   test('the staff menu opens Purchase indents and the hand-over natively (no web page)', () {
     expect(nativeScreen(staff, '/purchase', s), isA<PurchaseIndentsScreen>());
