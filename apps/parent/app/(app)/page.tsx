@@ -180,6 +180,8 @@ export default async function HomePage({
   const chosen = await chosenChild(sp.child);
   const child = kids.find((c) => c.id === chosen?.id) ?? kids[0];
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
+  // each school once (a staff member who is also a parent has two memberships in one school)
+  const schools = [...new Map(me.memberships.map((m) => [m.schoolId, m])).values()];
   return (
     <main className="fp-home">
       <PageHeader
@@ -221,7 +223,7 @@ export default async function HomePage({
           </div>
         </section>
       ) : null}
-      {me.memberships.length > 1 ? (
+      {schools.length > 1 ? (
         <form method="post" action="/api/context" className="fp-school-switch">
           <select
             name="schoolId"
@@ -229,7 +231,7 @@ export default async function HomePage({
             defaultValue={me.school?.id ?? ''}
             aria-label={t(lang, 'School')}
           >
-            {me.memberships.map((m) => (
+            {schools.map((m) => (
               <option key={m.schoolId} value={m.schoolId}>
                 {m.schoolName}
               </option>

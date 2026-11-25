@@ -22,7 +22,9 @@ export function ContextMenu({ me, t }: { me: Me; t: T }) {
     me.memberships[0]?.schoolName ??
     'EduPro Next';
   const year = years.find((y) => y.id === me.academicYear?.id) ?? null;
-  const several = me.memberships.length > 1;
+  // each school once (someone who is staff and a parent in one school has two memberships there)
+  const schools = [...new Map(me.memberships.map((m) => [m.schoolId, m])).values()];
+  const several = schools.length > 1;
   if (!several && years.length <= 1)
     return (
       <span className="ep-hchip ep-hchip--static" title={school}>
@@ -55,7 +57,7 @@ export function ContextMenu({ me, t }: { me: Me; t: T }) {
           <>
             <p className="ep-hmenu__heading">{t('schoolHeading')}</p>
             <ul className="ep-hmenu__list">
-              {me.memberships.map((m) => (
+              {schools.map((m) => (
                 <li key={m.schoolId}>
                   <form method="post" action="/api/context">
                     <input type="hidden" name="schoolId" value={m.schoolId} />

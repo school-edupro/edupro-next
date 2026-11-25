@@ -36,7 +36,9 @@ export class TenantGuard implements CanActivate {
     const allowedSchoolIds = memberships.map((m) => m.schoolId);
 
     let schoolId = (req.headers['x-school-id'] as string | undefined)?.trim();
-    if (!schoolId && memberships.length === 1) schoolId = memberships[0]!.schoolId;
+    // one school, even with several memberships there (a staff member who is also a parent here): that school
+    const schools = [...new Set(allowedSchoolIds)];
+    if (!schoolId && schools.length === 1) schoolId = schools[0];
 
     if (!schoolId) {
       if (optional) return true;

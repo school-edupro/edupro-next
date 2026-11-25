@@ -1101,6 +1101,10 @@ more as the user scrolls down").
   - Admin: **Students → Staff parents** (from the Students list) and a **Staff login** column on the student's
     Guardians card (`StaffParentLogin`: Join, Use staff login with a dialog, Undo). Staff website: **My children** in
     the header when the login is also a parent in the school (the family website). The app needed no change.
+  - A login with two memberships in one school (staff and parent) works on the websites with no school chosen: the
+    tenant guard picks the school when the memberships are all in one school (it counted memberships, so such a login
+    got no school, no rights, and the family website said "Portal access has ended"); the family home's and the admin
+    header's school pickers list each school once.
   - Tests: API `staff-parents` (father and mother, on save and by Excel, a staff member who gets a login later, own
     login with Use staff login and Undo, School staff No / a wrong code, rights, the school boundary); a browser check
     on a throwaway test school (the list, the Guardians card, the dialogs, My children; desktop and phone, axe).

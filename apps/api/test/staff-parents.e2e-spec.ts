@@ -204,6 +204,21 @@ describe('staff parents (e2e)', () => {
       expect.objectContaining({ kind: 'parent', studentId: first, actingAs: 'family' }),
     );
     expect(await kidsOf(staffOne.sub)).toEqual([first]);
+    // a website session with no school chosen yet: two memberships in one school still mean that school
+    const me = await inject({
+      method: 'GET',
+      url: '/me',
+      headers: { authorization: `Bearer dev:${staffOne.sub}`, 'x-acting-as': 'family' },
+    });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().school).toMatchObject({ id: school.id });
+    expect(me.json().permissions).toEqual(expect.arrayContaining(['engagement.family.view']));
+    const family = await inject({
+      method: 'GET',
+      url: '/engagement/family',
+      headers: { authorization: `Bearer dev:${staffOne.sub}`, 'x-acting-as': 'family' },
+    });
+    expect((family.json().children as Array<{ id: string }>).map((c) => c.id)).toEqual([first]);
     // saved again unchanged: still one join, nothing new
     await patch(first, { father_school_staff: 'Yes', father_staff_employee_id: `${s}E1` });
     expect((await parentOf(first, 'father')).staff?.state).toBe('joined');
