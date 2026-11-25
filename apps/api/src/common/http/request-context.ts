@@ -25,6 +25,11 @@ export interface AuthenticatedUser {
   /** The mobile app's session the token belongs to (docs/design/89): signed out phones are refused. */
   mobileSessionId?: string;
   /**
+   * A family website session opened from the staff or admin website (My children, 0424/0425): the website it came
+   * from. Only such a session may ask for the way back (a code for that website).
+   */
+  hopFrom?: 'teacher' | 'admin';
+  /**
    * The profile the request acts as (header `X-Acting-As`, docs/design/89): a teacher who is also a parent in
    * the school reads as the parent with `family`. Honoured only when the person has that membership.
    */

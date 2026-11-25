@@ -305,6 +305,8 @@
     "payrollApprovals": "Payroll drafts to approve"
   },
   "shell": {
+    "myChildren": "My children",
+    "myChildrenHint": "Your children at this school, on the family website",
     "primaryNavigation": "Primary",
     "school": "School",
     "year": "Year",

@@ -31,6 +31,11 @@ export interface Session {
   viewAs?: boolean;
   /** Opened inside the mobile app (docs/design/89): the page shows without the app's own header and menu. */
   mobile?: boolean;
+  /**
+   * The family website opened from the staff or admin website (My children, 0424/0425): its header offers the way
+   * back there, signed in.
+   */
+  cameFrom?: 'teacher' | 'admin';
 }
 
 export interface Me {
@@ -390,19 +395,20 @@ export function createBff(options: BffOptions) {
       }
     },
     /**
-     * GET /api/auth/hop?code=… (the family website): a staff member who is also a parent here opened My children on
-     * the staff website (0424). The one-time code is turned in at the API for this website's own session, in the
-     * school they were working in; any session of this website in this browser is replaced.
+     * GET /api/auth/hop?code=… : another EduPro website opened this one signed in (0424, 0425) — the family website
+     * from My children on the staff or admin website, or the staff website from the family website's way back. The
+     * one-time code is turned in at the API for this website's own session, in the school the person was working in;
+     * any session of this website in this browser is replaced.
      */
     async hop(req: NextRequest) {
       const code = req.nextUrl.searchParams.get('code') ?? '';
-      if (appName !== 'parent' || !/^[A-Za-z0-9_-]{40,100}$/.test(code))
+      if (appName === 'admin' || !/^[A-Za-z0-9_-]{40,100}$/.test(code))
         return NextResponse.redirect(new URL('/login?error=handoff', req.url));
       try {
         const r = await fetch(`${env.apiBaseUrl}/api/v1/auth/web-hop/redeem`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({ code, app: appName }),
           signal: AbortSignal.timeout(5000),
           cache: 'no-store',
         });
@@ -414,6 +420,7 @@ export function createBff(options: BffOptions) {
           schoolId: string;
           expiresAt: number;
           to: string;
+          from: 'teacher' | 'admin' | null;
         };
         await session.write({
           sub: t.sub,
@@ -421,6 +428,7 @@ export function createBff(options: BffOptions) {
           expiresAt: t.expiresAt,
           displayName: t.displayName,
           schoolId: t.schoolId,
+          ...(appName === 'parent' && t.from ? { cameFrom: t.from } : {}),
         });
         await recordSignIn(req, t.accessToken, 'otp');
         return NextResponse.redirect(new URL(safeReturn(t.to), req.url));

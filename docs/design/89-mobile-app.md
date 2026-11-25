@@ -1114,6 +1114,17 @@ more as the user scrolls down").
     Tests: `staff-parents` (issue, redeem once, not a parent, a page off the family website), permission-coverage (the
     redeem route listed public); a browser check on a test school (My children → the family home with the children,
     no sign-in; desktop and phone, axe).
+  - **The way back, and the admin website too** (migration 0425): the admin website's header has **My children** as
+    well (a login that is also a parent in the school it works in; not while the school has it open as someone). The
+    family website opened that way shows **Staff app** or **Admin app** (`cameFrom` in its session, from the code's
+    `from_app`) and goes back signed in: `/api/switch-back` asks `POST /auth/web-hop {app: teacher|admin}`; the staff
+    website's `/api/auth/hop` (bff `handlers.hop`) and the admin website's own `/api/auth/hop` turn the code in. Only a
+    family session opened from that website may ask (its token carries `via`; `ctx.user.hopFrom`): a family sign-in
+    of its own may not, since the school may sign families in by other means than staff. A code for the staff or admin
+    website needs an active staff membership (employee or external) there; `app.web_hop_member` checks both ways.
+    Tests: `staff-parents` (staff → family → staff, admin → family → admin, the wrong website, a family sign-in of its
+    own, once only); a browser check on a test school (both round trips with the source website signed out first;
+    desktop and phone, axe).
   - Tests: API `staff-parents` (father and mother, on save and by Excel, a staff member who gets a login later, own
     login with Use staff login and Undo, School staff No / a wrong code, rights, the school boundary); a browser check
     on a throwaway test school (the list, the Guardians card, the dialogs, My children; desktop and phone, axe).

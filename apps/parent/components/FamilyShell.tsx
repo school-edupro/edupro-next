@@ -44,6 +44,7 @@ export function FamilyShell({
   children,
   unread = 0,
   layout = null,
+  cameFrom = null,
 }: {
   me: Me;
   lang: Lang;
@@ -53,6 +54,8 @@ export function FamilyShell({
   unread?: number;
   /** The school's published layout for this person; null: the menu and the phone bar as built. */
   layout?: HomeLayout | null;
+  /** opened from the staff or admin website (My children): the way back there, signed in (0425) */
+  cameFrom?: 'teacher' | 'admin' | null;
 }) {
   const audience = audienceOf(me);
   const isCurrent = (href: string) =>
@@ -210,6 +213,20 @@ export function FamilyShell({
           </div>
         </div>
         <div className="ep-header__context">
+          {cameFrom ? (
+            <form method="post" action="/api/switch-back">
+              <button
+                type="submit"
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                title={t(
+                  lang,
+                  cameFrom === 'admin' ? 'Back to the admin website' : 'Back to the staff website',
+                )}
+              >
+                {t(lang, cameFrom === 'admin' ? 'Admin app' : 'Staff app')}
+              </button>
+            </form>
+          ) : null}
           <a
             className="ep-btn ep-btn--ghost ep-btn--sm"
             href={`/api/lang?to=${lang === 'hi' ? 'en' : 'hi'}&back=${back}`}

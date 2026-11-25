@@ -49,7 +49,14 @@ export default async function FamilyLayout({ children }: { children: ReactNode }
     !ended && me.permissions.includes('insights.assistant.use') && !isHidden(layout, '/assistant');
   return (
     <>
-      <FamilyShell me={me} lang={lang} currentPath={currentPath} unread={unread} layout={layout}>
+      <FamilyShell
+        me={me}
+        lang={lang}
+        currentPath={currentPath}
+        unread={unread}
+        layout={layout}
+        cameFrom={(await bff.session.read())?.cameFrom ?? null}
+      >
         {ended ? (
           <div className="ep-card" role="status">
             <h1>{t(lang, 'Portal access has ended')}</h1>

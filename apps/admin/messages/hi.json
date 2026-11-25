@@ -305,6 +305,8 @@
     "payrollApprovals": "स्वीकृति हेतु पेरोल ड्राफ़्ट"
   },
   "shell": {
+    "myChildren": "मेरे बच्चे",
+    "myChildrenHint": "इस विद्यालय में आपके बच्चे, परिवार वेबसाइट पर",
     "primaryNavigation": "मुख्य",
     "school": "विद्यालय",
     "year": "सत्र",

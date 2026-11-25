@@ -36,6 +36,12 @@ export async function Shell({
       }))
     : [];
   const allowed = new Set(me.permissions);
+  // also a parent in the school it works in (the chosen one, else the only one): My children (0425); not while the
+  // school has this app open as someone
+  const workingSchool = me.school?.id ?? me.memberships[0]?.schoolId;
+  const parentHere =
+    !me.impersonation &&
+    me.memberships.some((m) => m.schoolId === workingSchool && m.personType === 'guardian');
   // Admissions → Approvals: admission admins and the people named in an approval level (docs/design/55)
   const approvalsMenu = await apiFetch<{ show: boolean }>('/admissions/approvals/menu').catch(
     () => ({ show: false }),
@@ -344,6 +350,18 @@ export async function Shell({
         </div>
         <div className="ep-header__context">
           <HeaderKeys />
+          {parentHere ? (
+            // also a parent in this school: the family website, signed in (a one-time link, /api/my-children)
+            <form method="post" action="/api/my-children">
+              <button
+                type="submit"
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                title={t('myChildrenHint')}
+              >
+                {t('myChildren')}
+              </button>
+            </form>
+          ) : null}
           <LanguageMenu locale={locale} t={tt} />
           <a className="ep-header__icon-btn" href="/help" aria-label={t('help')} title={t('help')}>
             <Icon name="help" size={21} />

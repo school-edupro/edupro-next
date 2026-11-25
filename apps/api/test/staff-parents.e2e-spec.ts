@@ -234,65 +234,92 @@ describe('staff parents (e2e)', () => {
     ]);
   });
 
-  it('My children on the staff website: a one-time link opens the family website signed in (0424)', async () => {
-    // as the staff website asks: its session, no school chosen
-    const web = (sub: string) => ({ authorization: `Bearer dev:${sub}` });
-    const issued = await inject({
-      method: 'POST',
-      url: '/auth/web-hop',
-      headers: web(staffOne.sub),
-      json: { to: '/' },
-    });
+  it('My children and the way back: staff or admin website → family website → back, signed in (0424, 0425)', async () => {
+    // as a website asks: its session, no school chosen
+    const web = (token: string) => ({ authorization: `Bearer ${token}` });
+    const hop = (token: string, json: Record<string, string>) =>
+      inject({ method: 'POST', url: '/auth/web-hop', headers: web(token), json });
+    const redeem = (code: string, app?: string) =>
+      inject({
+        method: 'POST',
+        url: '/auth/web-hop/redeem',
+        headers: {},
+        json: app ? { code, app } : { code },
+      });
+    const codeOf = (u: string, path = '/api/auth/hop') => {
+      const url = new URL(u);
+      expect(url.pathname).toBe(path);
+      return url.searchParams.get('code')!;
+    };
+    // the staff website asks for the family website
+    const issued = await hop(`dev:${staffOne.sub}`, { app: 'parent', from: 'teacher', to: '/' });
     expect(issued.statusCode).toBe(200);
-    const url = new URL(issued.json().url as string);
-    expect(url.pathname).toBe('/api/auth/hop');
-    const code = url.searchParams.get('code')!;
-    const redeemed = await inject({
-      method: 'POST',
-      url: '/auth/web-hop/redeem',
-      headers: {},
-      json: { code },
-    });
+    const code = codeOf(issued.json().url as string);
+    // turned in by another website: refused (and the code is spent)
+    const wrongSite = await redeem(code, 'teacher');
+    expect(wrongSite.statusCode).toBe(401);
+    const issued2 = await hop(`dev:${staffOne.sub}`, { app: 'parent', from: 'teacher', to: '/' });
+    const code2 = codeOf(issued2.json().url as string);
+    const redeemed = await redeem(code2);
     expect(redeemed.statusCode).toBe(200);
-    expect(redeemed.json()).toMatchObject({ schoolId: school.id, to: '/' });
-    const token = redeemed.json().accessToken as string;
-    expect(token.startsWith('otp.')).toBe(true);
+    expect(redeemed.json()).toMatchObject({ schoolId: school.id, to: '/', from: 'teacher' });
+    const familyToken = redeemed.json().accessToken as string;
+    expect(familyToken.startsWith('otp.')).toBe(true);
     // the family website's session reads the family view
     const family = await inject({
       method: 'GET',
       url: '/engagement/family',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'x-school-id': school.id,
-        'x-acting-as': 'family',
-      },
+      headers: { ...web(familyToken), 'x-school-id': school.id, 'x-acting-as': 'family' },
     });
     expect((family.json().children as Array<{ id: string }>).map((c) => c.id)).toEqual([first]);
     // once only
-    const again = await inject({
-      method: 'POST',
-      url: '/auth/web-hop/redeem',
-      headers: {},
-      json: { code },
-    });
+    const again = await redeem(code2);
     expect(again.statusCode).toBe(401);
     expect(again.json().type).toBe('auth.hop_invalid');
-    // not a parent here: no link; a page that is not the family website's own: refused
-    const notParent = await inject({
-      method: 'POST',
-      url: '/auth/web-hop',
-      headers: web(teacher.sub),
-      json: { to: '/' },
+    // the way back: to the staff website it came from, signed in; not to the admin website
+    expect((await hop(familyToken, { app: 'admin', to: '/' })).json().type).toBe(
+      'auth.hop_not_from',
+    );
+    const back = await hop(familyToken, { app: 'teacher', to: '/' });
+    expect(back.statusCode).toBe(200);
+    expect(new URL(back.json().url as string).origin).toBe(
+      process.env.TEACHER_APP_URL ?? 'http://localhost:3002',
+    );
+    const staffSession = await redeem(codeOf(back.json().url as string), 'teacher');
+    expect(staffSession.statusCode).toBe(200);
+    expect(staffSession.json().from).toBeNull();
+    const me = await inject({
+      method: 'GET',
+      url: '/me',
+      headers: web(staffSession.json().accessToken as string),
     });
+    expect(me.json().school).toMatchObject({ id: school.id });
+    expect((me.json().permissions as string[]).length).toBeGreaterThan(0);
+    // a family sign-in of its own (not opened from the staff website) has no way back
+    const own = await hop(`dev:${staffOne.sub}`, { app: 'teacher', to: '/' });
+    expect(own.statusCode).toBe(403);
+    expect(own.json().type).toBe('auth.hop_not_from');
+    // the admin website the same way: My children there, Admin app back
+    const fromAdmin = await hop(`dev:${staffOne.sub}`, { app: 'parent', from: 'admin', to: '/' });
+    const viaAdmin = await redeem(codeOf(fromAdmin.json().url as string));
+    expect(viaAdmin.json().from).toBe('admin');
+    const toAdmin = await hop(viaAdmin.json().accessToken as string, { app: 'admin', to: '/' });
+    expect(toAdmin.statusCode).toBe(200);
+    expect(new URL(toAdmin.json().url as string).origin).toBe(
+      process.env.ADMIN_APP_URL ?? 'http://localhost:3000',
+    );
+    expect((await redeem(codeOf(toAdmin.json().url as string), 'admin')).statusCode).toBe(200);
+    // not a parent here: no link; no website named as the asker; a page off the website: refused
+    const notParent = await hop(`dev:${teacher.sub}`, { app: 'parent', from: 'teacher', to: '/' });
     expect(notParent.statusCode).toBe(403);
     expect(notParent.json().type).toBe('auth.hop_not_family');
+    expect((await hop(`dev:${staffOne.sub}`, { to: '/' })).statusCode).toBe(400);
     expect(
       (
-        await inject({
-          method: 'POST',
-          url: '/auth/web-hop',
-          headers: web(staffOne.sub),
-          json: { to: '//elsewhere.example/x' },
+        await hop(`dev:${staffOne.sub}`, {
+          app: 'parent',
+          from: 'teacher',
+          to: '//elsewhere.example/x',
         })
       ).statusCode,
     ).toBe(400);

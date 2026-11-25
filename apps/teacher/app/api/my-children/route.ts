@@ -11,7 +11,7 @@ export async function POST() {
   try {
     const r = await bff.api.fetch<{ url: string }>('/auth/web-hop', {
       method: 'POST',
-      body: JSON.stringify({ to: '/' }),
+      body: JSON.stringify({ app: 'parent', from: 'teacher', to: '/' }),
     });
     if (r.url.startsWith(`${FAMILY}/`)) return NextResponse.redirect(r.url, 303);
   } catch {
