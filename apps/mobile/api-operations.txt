@@ -424,3 +424,18 @@ PayrollTaxController_prevMine
 PayrollTaxController_regimeMine
 PayrollTaxDocsController_myForm !file
 PayrollTaxDocsController_mine !file
+
+# File movement as on the staff website and the admin's /workflow/files: the files to approve, mine, decided by me,
+# all I may see (filters, Excel / PDF); one file in full (the note, attachments, levels, history, the note sheet PDF);
+# raise and correct (the approvers to choose); approve / send back / reject; withdraw; the dashboard
+FileMovementController_people
+FileMovementController_dashboard
+FileMovementController_export !file
+FileMovementController_list
+FileMovementController_create
+FileMovementController_get
+FileMovementController_resubmit
+FileMovementController_decide
+FileMovementController_withdraw
+FileMovementController_pdf !file
+FileMovementController_file !file

@@ -754,7 +754,8 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
     kind: 'file',
     label: 'File movement',
     permissions: ['files.movement.raise'],
-    app: 'admin',
+    // staff open it on the staff website (/files, 25 Nov 2026); the office on the admin's page
+    app: 'teacher',
     list: { method: 'GET', url: '/file-movement?box=inbox' },
     detail: { get: (id) => ({ method: 'GET', url: `/file-movement/${id}` }) },
     items: (a) =>
@@ -766,7 +767,8 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
           by: name(x.createdBy),
           at: str(x.submittedAt),
           amount: null,
-          href: `/workflow/files/${String(x.id)}`,
+          href: `/files/${String(x.id)}`,
+          adminHref: `/workflow/files/${String(x.id)}`,
         }),
       ),
     decide: (id, d, r) => ({

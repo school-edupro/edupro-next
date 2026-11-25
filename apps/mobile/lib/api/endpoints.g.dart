@@ -1367,6 +1367,50 @@ class EduProApi {
   /// GET /payroll/me/tax/certificate — My certificate, once released
   Future<ApiFile> payrollTaxDocsMine({required String fy}) =>
       _t.file('GET', '/payroll/me/tax/certificate', query: {'fy': fy});
+
+  /// GET /file-movement/people — The employees who can be chosen as approvers
+  Future<dynamic> fileMovementPeople() =>
+      _t.send('GET', '/file-movement/people');
+
+  /// GET /file-movement/dashboard — Files by status, month by month, who holds what
+  Future<dynamic> fileMovementDashboard() =>
+      _t.send('GET', '/file-movement/dashboard');
+
+  /// GET /file-movement/export — The list with its filters as Excel or PDF
+  Future<ApiFile> fileMovementExport({String? box, String? status, String? from, String? to, String? creatorId, String? approverId, String? q, String? format}) =>
+      _t.file('GET', '/file-movement/export', query: {if (box != null) 'box': box, if (status != null) 'status': status, if (from != null) 'from': from, if (to != null) 'to': to, if (creatorId != null) 'creatorId': creatorId, if (approverId != null) 'approverId': approverId, if (q != null) 'q': q, if (format != null) 'format': format});
+
+  /// GET /file-movement — Files: waiting for me, raised by me, decided by me, or all I may see
+  Future<dynamic> fileMovementList({String? box, String? status, String? from, String? to, String? creatorId, String? approverId, String? q}) =>
+      _t.send('GET', '/file-movement', query: {if (box != null) 'box': box, if (status != null) 'status': status, if (from != null) 'from': from, if (to != null) 'to': to, if (creatorId != null) 'creatorId': creatorId, if (approverId != null) 'approverId': approverId, if (q != null) 'q': q});
+
+  /// POST /file-movement — Raise a file for approval
+  Future<dynamic> fileMovementCreate({required FileNoteDto body}) =>
+      _t.send('POST', '/file-movement', body: body.toJson());
+
+  /// GET /file-movement/{id}
+  Future<dynamic> fileMovementGet({required String id}) =>
+      _t.send('GET', '/file-movement/${Uri.encodeComponent(id)}');
+
+  /// PUT /file-movement/{id} — Correct a file that was sent back; it starts again from level 1
+  Future<dynamic> fileMovementResubmit({required FileNoteDto body, required String id}) =>
+      _t.send('PUT', '/file-movement/${Uri.encodeComponent(id)}', body: body.toJson());
+
+  /// POST /file-movement/{id}/decide — Approve, send back with a remark, or reject at my level
+  Future<dynamic> fileMovementDecide({required FileDecideDto body, required String id}) =>
+      _t.send('POST', '/file-movement/${Uri.encodeComponent(id)}/decide', body: body.toJson());
+
+  /// POST /file-movement/{id}/withdraw
+  Future<dynamic> fileMovementWithdraw({required String id}) =>
+      _t.send('POST', '/file-movement/${Uri.encodeComponent(id)}/withdraw');
+
+  /// GET /file-movement/{id}/pdf — The note sheet of an approved file
+  Future<ApiFile> fileMovementPdf({required String id}) =>
+      _t.file('GET', '/file-movement/${Uri.encodeComponent(id)}/pdf');
+
+  /// GET /file-movement/{id}/files/{fileId}
+  Future<ApiFile> fileMovementFile({required String id, required String fileId}) =>
+      _t.file('GET', '/file-movement/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
 }
 
 /** The OtpStartDto the API takes. */
@@ -3172,5 +3216,31 @@ class MyRegimeDto {
         'regime': regime,
         if (employeeId != null) 'employeeId': employeeId,
         if (reason != null) 'reason': reason,
+      };
+}
+
+/** The FileNoteDto the API takes. */
+class FileNoteDto {
+  const FileNoteDto({required this.subject, required this.bodyHtml, this.fileIds, required this.approverIds});
+  final String subject;
+  final String bodyHtml;
+  final List<String>? fileIds;
+  final List<String> approverIds;
+  Map<String, Object?> toJson() => {
+        'subject': subject,
+        'bodyHtml': bodyHtml,
+        if (fileIds != null) 'fileIds': fileIds,
+        'approverIds': approverIds,
+      };
+}
+
+/** The FileDecideDto the API takes. */
+class FileDecideDto {
+  const FileDecideDto({required this.outcome, this.remark});
+  final String outcome;
+  final String? remark;
+  Map<String, Object?> toJson() => {
+        'outcome': outcome,
+        if (remark != null) 'remark': remark,
       };
 }

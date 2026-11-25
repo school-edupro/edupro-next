@@ -46,6 +46,12 @@ const PAGES = [
   '/purchase',
   '/purchase?view=mine',
   '/purchase/672',
+  // file movement as the admin's (dev-teacher's own sample files)
+  '/files',
+  '/files?box=mine',
+  '/files/new',
+  '/files/11',
+  '/files/dashboard',
   '/library',
   '/library?view=history',
   '/library?view=find&q=a',

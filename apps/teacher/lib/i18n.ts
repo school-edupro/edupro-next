@@ -13,6 +13,73 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  // file movement (as the admin's /workflow/files)
+  'File movement': 'फ़ाइल संचलन',
+  'Files raised for approval move through the approvers their creator chose, level by level. An approved file can be downloaded as a PDF note sheet.':
+    'स्वीकृति हेतु भेजी गई फ़ाइलें बनाने वाले द्वारा चुने गए अनुमोदकों के पास स्तर दर स्तर जाती हैं। स्वीकृत फ़ाइल PDF नोट शीट के रूप में डाउनलोड हो सकती है।',
+  'Add new approval': 'नई स्वीकृति जोड़ें',
+  'sent back': 'वापस भेजी गईं',
+  mine: 'मेरी',
+  'Any status': 'कोई भी स्थिति',
+  'Raised from': 'भेजी गई (से)',
+  'Raised to': 'भेजी गई (तक)',
+  'Subject, file no. or raised by': 'विषय, फ़ाइल संख्या या भेजने वाला',
+  'No file waits for your approval.': 'कोई फ़ाइल आपकी स्वीकृति की प्रतीक्षा में नहीं है।',
+  'Nothing here.': 'यहाँ कुछ नहीं है।',
+  Files: 'फ़ाइलें',
+  'Files for approval': 'स्वीकृति हेतु फ़ाइलें',
+  'S.no': 'क्र.सं.',
+  'File no.': 'फ़ाइल सं.',
+  Subject: 'विषय',
+  'Raised on': 'भेजने की तिथि',
+  Levels: 'स्तर',
+  Round: 'दौर',
+  Dashboard: 'डैशबोर्ड',
+  'Files by status, month by month, and who is holding them.':
+    'स्थिति के अनुसार फ़ाइलें, महीने दर महीने, और किसके पास रुकी हैं।',
+  'Last six months': 'पिछले छह महीने',
+  'By status': 'स्थिति के अनुसार',
+  'Who is holding files': 'किसके पास फ़ाइलें हैं',
+  'No file is waiting with anyone.': 'कोई फ़ाइल किसी के पास प्रतीक्षा में नहीं है।',
+  'Oldest files still in approval': 'स्वीकृति में सबसे पुरानी फ़ाइलें',
+  'Nothing is in approval.': 'स्वीकृति में कुछ नहीं है।',
+  'Write what needs approval, attach the papers and choose who approves, in order.':
+    'लिखें कि किसकी स्वीकृति चाहिए, काग़ज़ जोड़ें और क्रम से अनुमोदक चुनें।',
+  'Note sheet (PDF)': 'नोट शीट (PDF)',
+  'Correct and submit again': 'सुधारें और फिर भेजें',
+  'This file was sent back': 'यह फ़ाइल वापस भेजी गई',
+  'Correct it and submit again; it will start from the L1 approver.':
+    'इसे सुधारकर फिर भेजें; यह L1 अनुमोदक से शुरू होगी।',
+  'Approval message': 'स्वीकृति संदेश',
+  Attachments: 'संलग्नक',
+  'None attached.': 'कुछ संलग्न नहीं।',
+  Approvers: 'अनुमोदक',
+  'Remark (needed to send back or reject; optional when approving)':
+    'टिप्पणी (वापस भेजने या अस्वीकार करने हेतु आवश्यक; स्वीकृति में वैकल्पिक)',
+  'Send back to the creator': 'बनाने वाले को वापस भेजें',
+  'Withdraw this file': 'यह फ़ाइल वापस लें',
+  'Every step of this file': 'इस फ़ाइल का हर चरण',
+  When: 'कब',
+  By: 'किसने',
+  'With this approver': 'इस अनुमोदक के पास',
+  'Sent back': 'वापस भेजी गई',
+  'In approval': 'स्वीकृति में',
+  'The file is submitted. It is with the L1 approver now.':
+    'फ़ाइल भेज दी गई। अब यह L1 अनुमोदक के पास है।',
+  'Submitted again. It starts from the L1 approver.':
+    'फिर से भेजी गई। यह L1 अनुमोदक से शुरू होती है।',
+  'Sent back to the creator with your remark.': 'आपकी टिप्पणी के साथ बनाने वाले को वापस भेजी गई।',
+  'Rejected. The creator sees your remark.': 'अस्वीकृत। बनाने वाला आपकी टिप्पणी देखता है।',
+  'The file is withdrawn.': 'फ़ाइल वापस ले ली गई।',
+  'Corrected and submitted again': 'सुधारकर फिर भेजी गई',
+  'Withdrawn by the creator': 'बनाने वाले ने वापस ली',
+  'My files': 'मेरी फ़ाइलें',
+  'Decided by me': 'मेरे द्वारा निर्णय',
+  'every file of the school': 'विद्यालय की हर फ़ाइल',
+  'raised by you or sent to you': 'आपके द्वारा भेजी गई या आपको भेजी गई',
+  'with an approver now': 'अभी किसी अनुमोदक के पास',
+  'waiting for the creator to correct': 'बनाने वाले के सुधार की प्रतीक्षा',
+  'none approved yet': 'अभी कोई स्वीकृत नहीं',
   // purchase indents (docs/design/83)
   'Not open to you': 'आपके लिए खुला नहीं',
   'The school put these in this tab; your role does not give you the right to open them. Ask the office if you need one.':

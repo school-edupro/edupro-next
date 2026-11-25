@@ -928,3 +928,27 @@ tax, My payslips open web page — do not open web page"). Purchase indents beca
 - Tests: `apps/mobile/test/staff_office_test.dart` (each screen and its sends, a11y light / dark / Hindi, 2× text);
   `staff_test` — the "tab with only a web page" test now uses Assets in my care (My tax is native), the payslip
   opens from its View icon.
+
+## As built — File movement for staff (25 Nov 2026)
+
+Asked by the user ("/workflow/files file movement section not on the staff website or app; add, and in the app not a
+web page"). Staff hold `files.movement.raise` (every staff role, migration 0090).
+
+- **Staff website** `/files` (menu Office → File movement, `can('files.movement.raise')`), as the admin's
+  `/workflow/files`: the tabs Files / Add new approval / Dashboard; To approve · n, My files (sent back), Decided by
+  me, All; filters (status, raised from / to, words); Excel / PDF (`/api/file-movement/export`); the table.
+  `/files/<id>`: status, the note sheet PDF (View / Download), sent back: the remark and Correct and submit again
+  (the form, starting again from L1), the message and attachments, the approvers level by level with the decision
+  (remark; Approve / Send back / Reject) and Withdraw, the history. `/files/new`: the form (subject, the rich-text
+  message, up to four attachments, L1–L5 approvers, searchable). `/files/dashboard`: figures, the last six months,
+  by status, who holds files, the oldest open. Hindi for every word.
+- **Staff app** (`lib/staff/file_movement.dart`, menu `/files`; no web page): the same boxes as tabs, folded
+  filters, Excel / PDF, cards, **Add new approval** floating, Dashboard; `FileDetailScreen` (as the page; the
+  header's Approvals read again after a decision); `FileFormScreen` (the message as text — paragraphs kept —, the
+  attachments kept or removed and new ones through `/platform/files`, the approvers as searchable drop-downs);
+  `FileDashboardScreen`. The app's Approvals open a file there.
+- **Approvals**: the `file` kind links staff to the staff website's `/files/<id>` (`app: 'teacher'`), the office
+  to `/workflow/files/<id>` (`adminHref`).
+- Tests: `staff_files_test.dart` (list, filters, files; deciding; correcting a file sent back; raising; the dashboard;
+  a11y light / dark / Hindi; 2× text); `teacher-a11y` gets the `/files` pages.
+

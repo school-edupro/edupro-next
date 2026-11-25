@@ -22,6 +22,7 @@ const Map<String, String> menuHindi = {
   'Exam date sheet': 'परीक्षा डेट शीट',
   'Exam register': 'परीक्षा रजिस्टर',
   'Fees': 'फ़ीस',
+  'File movement': 'फ़ाइल संचलन',
   'Gate passes': 'गेट पास',
   'Goods received to inspect': 'निरीक्षण हेतु प्राप्त माल',
   'Health': 'स्वास्थ्य',

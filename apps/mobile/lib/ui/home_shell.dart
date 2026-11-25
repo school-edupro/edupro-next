@@ -37,6 +37,7 @@ import '../staff/queries.dart' show StaffQueriesScreen;
 import '../staff/student_leave.dart' show StudentLeaveScreen;
 import '../staff/gate_passes.dart' show StaffGatePassesScreen;
 import '../staff/purchase_indents.dart' show PurchaseHandOverScreen, PurchaseIndentsScreen;
+import '../staff/file_movement.dart' show FilesScreen;
 import '../staff/issues.dart' show StaffIssuesScreen;
 import '../staff/my_certificates.dart' show StaffCertificatesScreen;
 import '../staff/my_tax.dart' show MyTaxScreen;
@@ -184,6 +185,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
       '/my-tax' => MyTaxScreen(profile: p),
       // forms and declarations as on the staff website: the consent forms asked of me, answer, change, the PDF
       '/consents' => ConsentsScreen(profile: p),
+      // file movement as on the staff website and the admin's: to approve, mine, decided, all; raise, decide
+      '/files' => FilesScreen(profile: p),
       // the assistant for staff: own sections or the whole school, by the person's rights (docs/design/91 D)
       '/assistant' => AssistantScreen(profile: p),
       // Help for staff kept on Helpdesk set-up, as on the staff website: headings, search, the screen, helpful?

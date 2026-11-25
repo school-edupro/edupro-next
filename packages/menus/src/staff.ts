@@ -270,6 +270,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: always,
       },
       {
+        href: '/files',
+        label: 'File movement',
+        help: 'Raise a file for approval and follow it; approve the files sent to you',
+        allowed: (can) => can('files.movement.raise'),
+      },
+      {
         href: '/office-orders',
         label: 'Office orders',
         help: 'Orders and circulars the school issued for staff',

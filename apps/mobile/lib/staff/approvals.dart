@@ -11,6 +11,7 @@ import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
 import '../ui/widgets.dart';
 import 'approval_forms.dart';
+import 'file_movement.dart' show FileDetailScreen;
 import 'purchase_indents.dart' show IndentDetailScreen;
 import 'queries.dart' show StaffTicketDetail;
 import 'data.dart';
@@ -141,6 +142,19 @@ class _ApprovalsScreenState extends ConsumerState<ApprovalsScreen> {
   }
 
   Future<void> _open(Json item) async {
+    if (item['kind'] == 'file') {
+      // a file with me: its own page in the app, as the admin's (approve, send back, reject)
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => FamilyPage(
+            title: '${item['title']}'.split(' · ').first,
+            child: FileDetailScreen(profile: widget.profile, id: '${item['id']}'),
+          ),
+        ),
+      );
+      if (mounted) ref.invalidate(approvalsProvider(widget.profile));
+      return;
+    }
     if (item['kind'] == 'purchase') {
       // a purchase indent at my level: its own page in the app, as the admin's (approve, send back, reject)
       await Navigator.of(context).push(
