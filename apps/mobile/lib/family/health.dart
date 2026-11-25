@@ -6,6 +6,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
+import '../ui/paged_feed.dart';
 import 'common.dart';
 import 'data.dart';
 
@@ -27,7 +28,7 @@ String _num(Object? v) {
 }
 
 /// The child's health as the website shows it (apps/parent/app/(app)/health): clinic visits and health check-up
-/// cards in one list, latest first, ten a page, with the type, the dates and a search; each opens in full, and a
+/// cards in one list, the latest 10 first and 10 more as the family scrolls, with the type, the dates and a search; each opens in full, and a
 /// card's PDF opens or saves on the phone.
 class HealthScreen extends ConsumerStatefulWidget {
   const HealthScreen({super.key, required this.profile});
@@ -42,7 +43,6 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
   DateTime? _from;
   DateTime? _to;
   String _q = '';
-  int _page = 1;
   final _search = TextEditingController();
 
   static const _size = 10;
@@ -55,14 +55,8 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
 
   bool get _filtered => _kind.isNotEmpty || _from != null || _to != null || _q.isNotEmpty;
 
-  (Profile, String, String, String, String, int) get _key => (
-    widget.profile,
-    _kind,
-    _from == null ? '' : ymd(_from!),
-    _to == null ? '' : ymd(_to!),
-    _q,
-    _page,
-  );
+  (Profile, String, String, String, String) get _key =>
+      (widget.profile, _kind, _from == null ? '' : ymd(_from!), _to == null ? '' : ymd(_to!), _q);
 
   Future<void> _pickDate(bool from) async {
     final now = DateTime.now();
@@ -79,7 +73,6 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
       } else {
         _to = d;
       }
-      _page = 1;
     });
   }
 
@@ -88,144 +81,129 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
     final s = ref.watch(stringsProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = dark ? Tokens.mobGray300 : Tokens.textMuted;
-    return LoadedList<Json>(
-      value: ref.watch(healthListProvider(_key)),
-      refresh: () => ref.refresh(healthListProvider(_key).future),
-      children: (list) {
-        final items = asList(list['data']);
-        final total = ((asJson(list['page'])['total'] as num?) ?? 0).toInt();
-        final pages = (total / _size).ceil();
-        return [
-          Text(
-            s.healthTitle,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+    final (p, kind, from, to, q) = _key;
+    // the latest 10 (visits and cards together), then 10 more as the family scrolls (as the website)
+    return PagedFeed(
+      key: ValueKey('healthFeed-$kind-$from-$to-$q'),
+      firstCacheKey: _filtered ? null : 'health-feed:${p.id}',
+      load: (page) => ref
+          .read(apiProvider)
+          .clinicMineList(
+            studentId: p.studentId,
+            kind: kind.isEmpty ? null : kind,
+            from: from.isEmpty ? null : from,
+            to: to.isEmpty ? null : to,
+            q: q.isEmpty ? null : q,
+            page: page,
+            size: _size,
           ),
+      parse: (a, page) {
+        final total = ((asJson(a['page'])['total'] as num?) ?? 0).toInt();
+        return (items: asList(a['data']), more: page * _size < total, total: total);
+      },
+      header: (total, _) => [
+        Text(
+          s.healthTitle,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+        ),
+        if (total != null)
           Text(
             s.healthCount(total, _filtered),
             key: const Key('healthCount'),
             style: TextStyle(color: muted, fontSize: 14),
           ),
-          const SizedBox(height: Tokens.sp3),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(Tokens.sp3),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Semantics(
-                    label: s.healthTitle,
-                    container: true,
-                    explicitChildNodes: true,
-                    child: Wrap(
-                      spacing: Tokens.sp2,
-                      runSpacing: Tokens.sp2,
-                      children: [
-                        for (final (v, label) in [
-                          ('', s.allKinds),
-                          ('visit', s.clinicVisits),
-                          ('card', s.healthCards),
-                        ])
-                          ChoiceChip(
-                            key: Key('healthKind-${v.isEmpty ? 'all' : v}'),
-                            label: Text(label),
-                            selected: _kind == v,
-                            showCheckmark: false,
-                            onSelected: (_) => setState(() {
-                              _kind = v;
-                              _page = 1;
-                            }),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: Tokens.sp2),
-                  Wrap(
+        const SizedBox(height: Tokens.sp3),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.sp3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  label: s.healthTitle,
+                  container: true,
+                  explicitChildNodes: true,
+                  child: Wrap(
                     spacing: Tokens.sp2,
                     runSpacing: Tokens.sp2,
                     children: [
-                      OutlinedButton.icon(
-                        key: const Key('healthFrom'),
-                        icon: const Icon(Icons.event),
-                        label: Text('${s.fromWord}: ${_from == null ? '—' : s.date(_from!)}'),
-                        onPressed: () => _pickDate(true),
-                      ),
-                      OutlinedButton.icon(
-                        key: const Key('healthTo'),
-                        icon: const Icon(Icons.event),
-                        label: Text('${s.givenTo}: ${_to == null ? '—' : s.date(_to!)}'),
-                        onPressed: () => _pickDate(false),
-                      ),
+                      for (final (v, label) in [
+                        ('', s.allKinds),
+                        ('visit', s.clinicVisits),
+                        ('card', s.healthCards),
+                      ])
+                        ChoiceChip(
+                          key: Key('healthKind-${v.isEmpty ? 'all' : v}'),
+                          label: Text(label),
+                          selected: _kind == v,
+                          showCheckmark: false,
+                          onSelected: (_) => setState(() => _kind = v),
+                        ),
                     ],
                   ),
-                  const SizedBox(height: Tokens.sp2),
-                  TextField(
-                    key: const Key('healthSearch'),
-                    controller: _search,
-                    maxLength: 80,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      labelText: s.healthSearch,
-                      prefixIcon: const Icon(Icons.search),
-                      border: const OutlineInputBorder(),
-                      counterText: '',
+                ),
+                const SizedBox(height: Tokens.sp2),
+                Wrap(
+                  spacing: Tokens.sp2,
+                  runSpacing: Tokens.sp2,
+                  children: [
+                    OutlinedButton.icon(
+                      key: const Key('healthFrom'),
+                      icon: const Icon(Icons.event),
+                      label: Text('${s.fromWord}: ${_from == null ? '—' : s.date(_from!)}'),
+                      onPressed: () => _pickDate(true),
                     ),
-                    onSubmitted: (v) => setState(() {
-                      _q = v.trim();
-                      _page = 1;
-                    }),
+                    OutlinedButton.icon(
+                      key: const Key('healthTo'),
+                      icon: const Icon(Icons.event),
+                      label: Text('${s.givenTo}: ${_to == null ? '—' : s.date(_to!)}'),
+                      onPressed: () => _pickDate(false),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Tokens.sp2),
+                TextField(
+                  key: const Key('healthSearch'),
+                  controller: _search,
+                  maxLength: 80,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    labelText: s.healthSearch,
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    counterText: '',
                   ),
-                  if (_filtered)
-                    Align(
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: TextButton(
-                        key: const Key('healthClear'),
-                        onPressed: () => setState(() {
-                          _kind = '';
-                          _from = null;
-                          _to = null;
-                          _q = '';
-                          _search.clear();
-                          _page = 1;
-                        }),
-                        child: Text(s.clearDates),
-                      ),
+                  onSubmitted: (v) => setState(() => _q = v.trim()),
+                ),
+                if (_filtered)
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton(
+                      key: const Key('healthClear'),
+                      onPressed: () => setState(() {
+                        _kind = '';
+                        _from = null;
+                        _to = null;
+                        _q = '';
+                        _search.clear();
+                      }),
+                      child: Text(s.clearDates),
                     ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: Tokens.sp2),
-          if (items.isEmpty) EmptyLine(_filtered ? s.nothingMatches : s.healthNothingYet),
-          for (final it in items)
-            it['kind'] == 'visit'
-                ? _VisitCard(profile: widget.profile, visit: asJson(it['visit']))
-                : _HealthCardCard(profile: widget.profile, card: asJson(it['card'])),
-          if (total > _size)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  key: const Key('healthPrev'),
-                  tooltip: s.previous,
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: _page > 1 ? () => setState(() => _page -= 1) : null,
-                ),
-                Flexible(child: Text(s.pageOf(_page, pages), textAlign: TextAlign.center)),
-                IconButton(
-                  key: const Key('healthNext'),
-                  tooltip: s.next,
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: _page < pages ? () => setState(() => _page += 1) : null,
-                ),
+                  ),
               ],
             ),
-        ];
-      },
+          ),
+        ),
+        const SizedBox(height: Tokens.sp2),
+      ],
+      empty: _filtered ? s.nothingMatches : s.healthNothingYet,
+      item: (context, it, _) => it['kind'] == 'visit'
+          ? _VisitCard(profile: widget.profile, visit: asJson(it['visit']))
+          : _HealthCardCard(profile: widget.profile, card: asJson(it['card'])),
     );
   }
 }
 
-/// The date block of a list entry: the day, the month and year, and the time when there is one.
 class _DateBlock extends StatelessWidget {
   const _DateBlock({required this.at, this.time});
   final DateTime at;

@@ -207,6 +207,16 @@ describe('academic board (e2e)', () => {
       title: string;
     }>;
     expect(docs.map((d) => d.title).sort()).toEqual(['Half-yearly date sheet', 'Vista 2026']);
+    // one child at a time, 10 a page (the family app and website, 25 Nov 2026): the child's section and the
+    // school's; a child not theirs: the school's only
+    const one = (
+      await get(`/academics/documents?studentId=${studentId}&page=1&size=10`, parent)
+    ).json();
+    expect(one.page).toEqual({ number: 1, size: 10, total: 2 });
+    expect(
+      (await get('/academics/documents?studentId=999999999&page=1&size=10', parent)).json().page
+        .total,
+    ).toBe(1);
     expect(
       (await get(`/academics/documents/${sheet.json().data[0].id}/files/${fileId}`, parent))
         .statusCode,

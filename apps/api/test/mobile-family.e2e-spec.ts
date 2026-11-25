@@ -291,6 +291,9 @@ describe('mobile app: the family screens read the real API (e2e)', () => {
 
     const notices = await phone('GET', `/academics/notices?studentId=${childId}&size=50`);
     expect(notices.statusCode).toBe(200);
+    // one child: how many still wait for the family's acknowledgement (25 Nov 2026); else not counted
+    expect(typeof notices.json().toAck).toBe('number');
+    expect((await phone('GET', '/academics/notices?size=50')).json().toAck).toBeNull();
     expect(notices.json().data).toContainEqual(
       expect.objectContaining({
         id: noticeId,

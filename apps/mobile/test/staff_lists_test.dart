@@ -2,6 +2,8 @@
 // Every name and number here is made up.
 import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app_services.dart';
+import 'package:edupro/family/documents.dart';
+import 'package:edupro/family/messages.dart';
 import 'package:edupro/family/common.dart';
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/staff/daily_work.dart';
@@ -25,6 +27,17 @@ const staff = Profile(
   schoolName: 'Sample School',
   name: 'Asha Teacher',
   app: 'teacher',
+);
+
+/// a parent, with the child chosen
+const parent = Profile(
+  id: 'parent:7:41',
+  kind: 'parent',
+  schoolId: '7',
+  schoolName: 'Sample School',
+  name: 'Mina Sample',
+  app: 'parent',
+  studentId: '41',
 );
 
 const many = 23;
@@ -135,6 +148,50 @@ Object? answer(Call c) {
         'decided': <Object>[],
         'page': {'number': page, 'size': size, 'total': many},
       };
+    case 'GET /academics/notices':
+      return {
+        'data': [
+          for (var i = from; i < upto; i++)
+            {
+              'id': 'x$i',
+              'kind': 'notice',
+              'title': 'Notice $i',
+              'body': 'Body of notice $i.',
+              'bodyFormat': 'text',
+              'publishFrom': '2026-11-20',
+              'publishedBy': 'Office',
+              'isPinned': false,
+              'ackRequired': i < 3,
+              'ackedFor': <Object>[],
+              'targets': <Object>[],
+              'files': <Object>[],
+            },
+        ],
+        'page': {'number': page, 'size': size, 'total': many},
+        'toAck': 3,
+      };
+    case 'GET /comms/inbox':
+      return {
+        'data': [
+          for (var i = from; i < upto; i++)
+            {
+              'id': 'x$i',
+              'messageIds': ['$i'],
+              'title': 'Message $i',
+              'subject': 'Message $i',
+              'text': 'Text of message $i.',
+              'html': null,
+              'channels': ['sms'],
+              'student': {'id': '41', 'name': 'Kid Sample'},
+              'sentAt': '2026-11-20T05:00:00Z',
+              'status': <String, Object?>{},
+              'readOnPhone': false,
+              'unread': false,
+              'attachments': <Object>[],
+            },
+        ],
+        'page': {'number': page, 'size': size, 'more': upto < many},
+      };
     case 'GET /academics/daily-work/sheet/options':
       return {'data': <Object>[]};
     case 'GET /academics/documents':
@@ -155,6 +212,7 @@ Object? answer(Call c) {
               'ackRequired': false,
               'ackCount': 0,
               'postedBy': 'Asha Teacher',
+              'ackedFor': <Object>[],
             },
         ],
         'kinds': <Object>[],
@@ -330,4 +388,34 @@ void main() {
       expect(find.byKey(const Key('wrCard-2026-11-20|VI-A|S22')), findsOneWidget);
     },
   );
+
+  testWidgets('a family: notices for the child, 10 at a time, with how many to acknowledge', (
+    tester,
+  ) async {
+    final t = await pump(tester, const NoticesList(profile: parent));
+    expect(
+      t.calls.firstWhere((c) => c.path == '/academics/notices').query,
+      allOf(containsPair('studentId', '41'), containsPair('size', 10)),
+    );
+    expect(find.textContaining('3'), findsWidgets);
+    await scrolls(tester, t, '/academics/notices', 'notice');
+  });
+
+  testWidgets('a family: messages, 10 at a time', (tester) async {
+    final t = await pump(tester, const InboxList(profile: parent));
+    expect(
+      t.calls.firstWhere((c) => c.path == '/comms/inbox').query,
+      allOf(containsPair('studentId', '41'), containsPair('size', 10)),
+    );
+    await scrolls(tester, t, '/comms/inbox', 'message');
+  });
+
+  testWidgets('a family: session plan and date sheets, the child\'s, 10 at a time', (tester) async {
+    final t = await pump(tester, const DocumentsScreen(profile: parent));
+    expect(
+      t.calls.firstWhere((c) => c.path == '/academics/documents').query,
+      allOf(containsPair('studentId', '41'), containsPair('size', 10)),
+    );
+    await scrolls(tester, t, '/academics/documents', 'doc');
+  });
 }

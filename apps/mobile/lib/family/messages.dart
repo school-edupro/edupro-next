@@ -7,7 +7,6 @@ import '../app_services.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
-import '../ui/widgets.dart';
 import '../ui/paged_feed.dart';
 import 'common.dart';
 import 'data.dart';
@@ -65,7 +64,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
   }
 }
 
-/// The school's messages (SMS, WhatsApp, e-mail, app) about the child, the newest first.
+/// The school's messages (SMS, WhatsApp, e-mail, app) about the child, the newest first: the latest 10, then 10 more
+/// as the person scrolls (as the websites). Staff see each as the notices' card; a family as a row with the child.
 class InboxList extends ConsumerWidget {
   const InboxList({super.key, required this.profile});
   final Profile profile;
@@ -73,149 +73,96 @@ class InboxList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
-    if (profile.isStaff) {
-      // the staff app: the latest 10 messages, then 10 more as the person scrolls (as the staff website)
-      final muted = Theme.of(context).brightness == Brightness.dark
-          ? Tokens.mobGray300
-          : Tokens.textMuted;
-      return PagedFeed(
-        key: const Key('inboxFeed'),
-        firstCacheKey: 'inbox-feed:${profile.id}',
-        load: (page) => ref.read(apiProvider).commsInboxList(page: page, size: 10),
-        parse: (a, _) =>
-            (items: asList(a['data']), more: asJson(a['page'])['more'] == true, total: null),
-        header: (_, _) => [
-          Text(
-            s.messagesTitle,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+    final muted = Theme.of(context).brightness == Brightness.dark
+        ? Tokens.mobGray300
+        : Tokens.textMuted;
+    return PagedFeed(
+      key: const Key('inboxFeed'),
+      firstCacheKey: 'inbox-feed:${profile.id}',
+      load: (page) => ref
+          .read(apiProvider)
+          .commsInboxList(
+            studentId: profile.isStaff ? null : profile.studentId,
+            page: page,
+            size: 10,
           ),
-          Text(s.messagesHelp, style: TextStyle(color: muted, fontSize: 14)),
-          const SizedBox(height: Tokens.sp3),
-        ],
-        item: (context, m, replace) => MessageCard(
-          message: m,
-          onOpen: () {
-            _InboxPage._open(context, ref, profile, m);
-            if (m['unread'] == true) replace({...m, 'unread': false});
-          },
-        ),
-        empty: s.noMessagesYet,
-      );
-    }
-    final first = (profile, 1);
-    return LoadedList<Json>(
-      value: ref.watch(inboxProvider(first)),
-      refresh: () => ref.refresh(inboxProvider(first).future),
-      children: (inbox) => [
+      parse: (a, _) =>
+          (items: asList(a['data']), more: asJson(a['page'])['more'] == true, total: null),
+      header: (_, _) => [
         Text(
           s.messagesTitle,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
         ),
-        Text(
-          s.messagesHelp,
-          style: TextStyle(
-            color: (Theme.of(context).brightness == Brightness.dark
-                ? Tokens.mobGray300
-                : Tokens.textMuted),
-            fontSize: 14,
-          ),
-        ),
+        Text(s.messagesHelp, style: TextStyle(color: muted, fontSize: 14)),
         const SizedBox(height: Tokens.sp3),
-        if (asList(inbox['data']).isEmpty) EmptyLine(s.noMessagesYet),
-        ..._InboxPage.items(context, ref, profile, inbox),
-        if (asJson(inbox['page'])['more'] == true) _InboxPage(profile: profile, page: 2),
       ],
+      item: (context, m, replace) {
+        void open() {
+          openMessage(context, ref, profile, m);
+          if (m['unread'] == true) replace({...m, 'unread': false});
+        }
+
+        return profile.isStaff
+            ? MessageCard(message: m, onOpen: open)
+            : _FamilyMessage(message: m, onOpen: open);
+      },
+      empty: s.noMessagesYet,
     );
   }
 }
 
-/// The next page of messages, shown after "Show more" (and offering the page after it).
-class _InboxPage extends ConsumerStatefulWidget {
-  const _InboxPage({required this.profile, required this.page});
-  final Profile profile;
-  final int page;
-
-  static List<Widget> items(BuildContext context, WidgetRef ref, Profile profile, Json inbox) {
-    final s = ref.read(stringsProvider);
-    return [
-      for (final m in asList(inbox['data']))
-        if (profile.isStaff)
-          // the staff app: each message as the notices' card (date block, tags, first lines, Details)
-          MessageCard(message: m, onOpen: () => _open(context, ref, profile, m))
-        else
-          Card(
-            child: ListTile(
-              key: Key('message-${m['id']}'),
-              leading: m['unread'] == true
-                  ? Semantics(
-                      label: s.unreadMessages,
-                      child: const Icon(Icons.circle, size: 12, color: Tokens.mobCyan600),
-                    )
-                  : const SizedBox(width: 12),
-              title: Text(
-                '${m['title'] ?? m['subject']}',
-                style: m['unread'] == true ? const TextStyle(fontWeight: Tokens.fwBold) : null,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              // as the website: when · the child · the channels, then the first words
-              subtitle: Text(
-                '${messageMeta(s, m)}\n${'${m['text'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ')}',
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-              isThreeLine: true,
-              onTap: () => _open(context, ref, profile, m),
-            ),
-          ),
-    ];
-  }
-
-  static void _open(BuildContext context, WidgetRef ref, Profile profile, Json m) {
-    final ids = [for (final x in (m['messageIds'] as List? ?? const [])) '$x'];
-    if (m['unread'] == true && ids.isNotEmpty) {
-      // best effort: the list and the badge catch up on the next refresh
-      ref
-          .read(apiProvider)
-          .commsInboxRead(body: CommsInboxReadDto(ids: ids))
-          .then((_) {
-            ref.invalidate(inboxProvider);
-            ref.invalidate(unreadProvider(profile));
-          })
-          .catchError((_) {});
-    }
-    pushPage(context, '${m['title']}', MessageDetail(message: m));
-  }
+/// A message on the family's list: unread dot, the title, when · the child · the channels, then the first words.
+class _FamilyMessage extends ConsumerWidget {
+  const _FamilyMessage({required this.message, required this.onOpen});
+  final Json message;
+  final VoidCallback onOpen;
 
   @override
-  ConsumerState<_InboxPage> createState() => _InboxPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final m = message;
+    return Card(
+      child: ListTile(
+        key: Key('message-${m['id']}'),
+        leading: m['unread'] == true
+            ? Semantics(
+                label: s.unreadMessages,
+                child: const Icon(Icons.circle, size: 12, color: Tokens.mobCyan600),
+              )
+            : const SizedBox(width: 12),
+        title: Text(
+          '${m['title'] ?? m['subject']}',
+          style: m['unread'] == true ? const TextStyle(fontWeight: Tokens.fwBold) : null,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        // as the website: when · the child · the channels, then the first words
+        subtitle: Text(
+          '${messageMeta(s, m)}\n${'${m['text'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ')}',
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+        isThreeLine: true,
+        onTap: onOpen,
+      ),
+    );
+  }
 }
 
-class _InboxPageState extends ConsumerState<_InboxPage> {
-  bool _open = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ref.watch(stringsProvider);
-    if (!_open) {
-      return OutlinedButton(
-        key: Key('more-${widget.page}'),
-        onPressed: () => setState(() => _open = true),
-        child: Text(s.loadMore),
-      );
-    }
-    return switch (ref.watch(inboxProvider((widget.profile, widget.page)))) {
-      AsyncValue(:final value?) => Column(
-        children: [
-          ..._InboxPage.items(context, ref, widget.profile, value.data),
-          if (asJson(value.data['page'])['more'] == true)
-            _InboxPage(profile: widget.profile, page: widget.page + 1),
-        ],
-      ),
-      AsyncValue(:final error?) => ErrorText(errorText(s, error)),
-      _ => const LinearProgressIndicator(),
-    };
+/// Opens a message in full; an unread one is marked read (best effort: the badge catches up on the next refresh).
+void openMessage(BuildContext context, WidgetRef ref, Profile profile, Json m) {
+  final ids = [for (final x in (m['messageIds'] as List? ?? const [])) '$x'];
+  if (m['unread'] == true && ids.isNotEmpty) {
+    ref
+        .read(apiProvider)
+        .commsInboxRead(body: CommsInboxReadDto(ids: ids))
+        .then((_) {
+          ref.invalidate(inboxProvider);
+          ref.invalidate(unreadProvider(profile));
+        })
+        .catchError((_) {});
   }
+  pushPage(context, '${m['title']}', MessageDetail(message: m));
 }
 
 /// When a message came, for whom and by which channels: 19 Nov 2026, 10:42 · Kid · SMS + WhatsApp
@@ -431,85 +378,57 @@ class _NoticesListState extends ConsumerState<NoticesList> {
     final p = widget.profile;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
-    final arg = (p, _kind, _q);
-    if (p.isStaff) {
-      // the staff app: the latest 10 notices, then 10 more as the person scrolls (as the staff website); the type,
-      // the dates and the words go to the API
-      final from = _from == null ? null : ymd(_from!);
-      final to = _to == null ? null : ymd(_to!);
-      return PagedFeed(
-        key: ValueKey('noticesFeed-$_kind-$_q-$from-$to-$_round'),
-        firstCacheKey: _filtered ? null : 'notices-feed:${p.id}',
-        load: (page) => ref
-            .read(apiProvider)
-            .noticesList(
-              kind: _kind.isEmpty ? null : _kind,
-              q: _q.isEmpty ? null : _q,
-              from: from,
-              to: to,
-              page: page,
-              size: 10,
-            ),
-        parse: (a, page) {
-          final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
-          return (items: asList(a['data']), more: page * 10 < total, total: total);
-        },
-        header: (total, _) => [
-          Text(
-            s.noticesTitle,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+    // the latest 10 notices, then 10 more as the person scrolls (as the websites); the type, the dates and the
+    // words go to the API; a family sees the child's, with how many still wait for an acknowledgement
+    final from = _from == null ? null : ymd(_from!);
+    final to = _to == null ? null : ymd(_to!);
+    final child = p.isStaff ? null : p.studentId;
+    bool pending(Json n) =>
+        n['ackRequired'] == true &&
+        (p.isStaff
+            ? n['ackedByMe'] != true
+            : child != null && !(n['ackedFor'] is List && (n['ackedFor'] as List).contains(child)));
+    return PagedFeed(
+      key: ValueKey('noticesFeed-$_kind-$_q-$from-$to-$_round'),
+      firstCacheKey: _filtered ? null : 'notices-feed:${p.id}',
+      load: (page) => ref
+          .read(apiProvider)
+          .noticesList(
+            studentId: child,
+            kind: _kind.isEmpty ? null : _kind,
+            q: _q.isEmpty ? null : _q,
+            from: from,
+            to: to,
+            page: page,
+            size: 10,
           ),
-          if (total != null)
-            Text(
-              s.noticesCount(total, _filtered, 0),
-              key: const Key('noticesCount'),
-              style: TextStyle(color: muted, fontSize: 14),
-            ),
-          const SizedBox(height: Tokens.sp3),
-          _filters(s),
-          const SizedBox(height: Tokens.sp2),
-        ],
-        item: (context, n, _) => NoticeTile(
-          profile: p,
-          notice: n,
-          pending: n['ackRequired'] == true && n['ackedByMe'] != true,
-          // back from a notice (it may have been acknowledged there): the list starts again from the newest
-          onClosed: () => setState(() => _round++),
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      header: (total, a) => [
+        Text(
+          s.noticesTitle,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
         ),
-        empty: _filtered ? s.nothingMatches : s.noNoticesNow,
-      );
-    }
-    return LoadedList<List<Json>>(
-      value: ref.watch(noticesFilteredProvider(arg)),
-      refresh: () => ref.refresh(noticesFilteredProvider(arg).future),
-      children: (notices) {
-        final from = _from == null ? '' : ymd(_from!);
-        final to = _to == null ? '' : ymd(_to!);
-        final list = notices.where((n) {
-          final on = '${n['publishFrom']}'.split('T').first;
-          return (from.isEmpty || on.compareTo(from) >= 0) && (to.isEmpty || on.compareTo(to) <= 0);
-        }).toList();
-        bool pending(Json n) =>
-            n['ackRequired'] == true &&
-            p.studentId != null &&
-            !(n['ackedFor'] is List && (n['ackedFor'] as List).contains(p.studentId));
-        return [
+        if (total != null)
           Text(
-            s.noticesTitle,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
-          ),
-          Text(
-            s.noticesCount(list.length, _filtered, list.where(pending).length),
+            s.noticesCount(total, _filtered, (a?['toAck'] as num?)?.toInt() ?? 0),
             key: const Key('noticesCount'),
             style: TextStyle(color: muted, fontSize: 14),
           ),
-          const SizedBox(height: Tokens.sp3),
-          _filters(s),
-          const SizedBox(height: Tokens.sp2),
-          if (list.isEmpty) EmptyLine(_filtered ? s.nothingMatches : s.noNoticesNow),
-          for (final n in list) NoticeTile(profile: p, notice: n, pending: pending(n)),
-        ];
-      },
+        const SizedBox(height: Tokens.sp3),
+        _filters(s),
+        const SizedBox(height: Tokens.sp2),
+      ],
+      item: (context, n, _) => NoticeTile(
+        profile: p,
+        notice: n,
+        pending: pending(n),
+        // back from a notice (it may have been acknowledged there): the list starts again from the newest
+        onClosed: () => setState(() => _round++),
+      ),
+      empty: _filtered ? s.nothingMatches : s.noNoticesNow,
     );
   }
 }

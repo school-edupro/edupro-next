@@ -109,6 +109,14 @@ export class DocumentsService {
         params.push(q.classSectionId);
         w.push(`(d.class_section_id IS NULL OR d.class_section_id = $${String(params.length)})`);
       }
+      // a family may ask for one child: that child's section and the whole school's (another's: the school's only)
+      if (q.studentId && v.kind === 'family') {
+        const section = v.students.find((s) => s.id === q.studentId)?.classSectionId ?? null;
+        params.push(section);
+        w.push(
+          `(d.class_section_id IS NULL OR d.class_section_id = $${String(params.length)}::bigint)`,
+        );
+      }
       if (q.from) {
         params.push(q.from);
         w.push(

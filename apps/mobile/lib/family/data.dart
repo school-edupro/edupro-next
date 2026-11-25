@@ -176,23 +176,6 @@ final noticesProvider = FutureProvider.autoDispose.family<Loaded<List<Json>>, Pr
   return Loaded(asList(asJson(r.data)['data']), r.at, stale: r.stale);
 });
 
-/// Notices and circulars for the child as the website's Notices page asks for them: `(profile, kind, words)`
-/// (empty: all), up to 200, latest first.
-final noticesFilteredProvider = FutureProvider.autoDispose
-    .family<Loaded<List<Json>>, (Profile, String, String)>((ref, a) async {
-      final (p, kind, q) = a;
-      final r = await cached(
-        'notices:${p.id}:$kind:$q',
-        () => _api(ref).noticesList(
-          studentId: p.studentId,
-          kind: kind.isEmpty ? null : kind,
-          q: q.isEmpty ? null : q,
-          size: 200,
-        ),
-      );
-      return Loaded(asList(asJson(r.data)['data']), r.at, stale: r.stale);
-    });
-
 /// One notice in full.
 final noticeProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profile, String)>((
   ref,
@@ -235,37 +218,6 @@ final timetableProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profil
   });
   return Loaded(asJson(r.data), r.at, stale: r.stale);
 });
-
-/// What the teachers and the school shared for the session (session plan, curriculum, date sheets, the
-/// magazine, the almanac) with the kinds, and the child's class to keep only theirs: `{data, kinds, section}`.
-final documentsProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((ref, p) async {
-  final r = await cached('docs:${p.id}', () async {
-    final section = await _sectionOf(ref, p);
-    final list = asJson(await _api(ref).documentsList());
-    return {'data': list['data'], 'kinds': list['kinds'], 'section': section};
-  });
-  return Loaded(asJson(r.data), r.at, stale: r.stale);
-});
-
-/// The child's clinic visits and health check-up cards, latest first, ten a page, with the filters of the
-/// website's Health page: `(profile, kind, from, to, search, page)` (empty: no filter).
-final healthListProvider = FutureProvider.autoDispose
-    .family<Loaded<Json>, (Profile, String, String, String, String, int)>((ref, a) async {
-      final (p, kind, from, to, q, page) = a;
-      final r = await cached(
-        'health:${p.id}:$kind:$from:$to:$q:$page',
-        () => _api(ref).clinicMineList(
-          studentId: p.studentId,
-          kind: kind.isEmpty ? null : kind,
-          from: from.isEmpty ? null : from,
-          to: to.isEmpty ? null : to,
-          q: q.isEmpty ? null : q,
-          page: page,
-          size: 10,
-        ),
-      );
-      return Loaded(asJson(r.data), r.at, stale: r.stale);
-    });
 
 /// One clinic visit in full.
 final healthVisitProvider = FutureProvider.autoDispose.family<Json, String>(

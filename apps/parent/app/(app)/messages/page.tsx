@@ -5,8 +5,14 @@ import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild, familyKids } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { MoreFeed } from '@/components/MoreFeed';
+import { messagesPage } from '@/lib/feed-actions';
 import { EnablePush } from './EnablePush';
-import { MessageItem, type InboxItem } from './MessageItem';
+import { MessageItems } from './MessageItems';
+import type { InboxItem } from './MessageItem';
+
+/** The first page: the latest 10; the rest load as the family scrolls. */
+const PAGE = 10;
 
 interface Inbox {
   data: InboxItem[];
@@ -22,16 +28,15 @@ interface Inbox {
 export default async function MessagesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ child?: string; page?: string }>;
+  searchParams: Promise<{ child?: string }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
-  const page = Math.max(1, Number(sp.page) || 1);
-  const q = new URLSearchParams({ page: String(page), size: '20' });
   const kid = await chosenChild(sp.child);
   const kids = await familyKids();
   // a family with several children reads one child's messages at a time (the switch is under the title)
-  if (kid && kids.length > 1) q.set('studentId', kid.id);
+  const filters: Record<string, string> = kid && kids.length > 1 ? { studentId: kid.id } : {};
+  const q = new URLSearchParams({ ...filters, page: '1', size: String(PAGE) });
   let inbox: Inbox;
   try {
     inbox = await bff.api.fetch<Inbox>(`/comms/inbox?${q.toString()}`);
@@ -46,15 +51,6 @@ export default async function MessagesPage({
       );
     throw error;
   }
-  const link = (p: number) => `/messages?page=${String(p)}`;
-  const status: Record<string, string> = {
-    delivered: t(lang, 'Delivered'),
-    sent: t(lang, 'Sent'),
-    sending: t(lang, 'Sent'),
-    queued: t(lang, 'Queued'),
-    failed: t(lang, 'Failed'),
-    read: t(lang, 'Read on WhatsApp'),
-  };
   return (
     <main className="fp-page">
       <PageHeader
@@ -79,32 +75,22 @@ export default async function MessagesPage({
         }}
       />
       {inbox.data.length === 0 ? <Card>{t(lang, 'No messages yet.')}</Card> : null}
-      <div className="fp-msg__list">
-        {inbox.data.map((m) => (
-          <MessageItem
-            key={m.id}
-            item={m}
+      {inbox.data.length ? (
+        <div className="fp-msg__list">
+          <MoreFeed
+            key={JSON.stringify(filters)}
+            first={<MessageItems items={inbox.data} lang={lang} />}
+            more={inbox.page.more}
+            load={messagesPage.bind(null, filters)}
             labels={{
-              unread: t(lang, 'Unread'),
-              open: t(lang, 'Open the email'),
-              attachment: t(lang, 'Attachment'),
-              status,
+              more: t(lang, 'Show more'),
+              loading: t(lang, 'Loading…'),
+              failed: t(lang, 'Could not load more.'),
+              end: t(lang, 'That is everything.'),
             }}
           />
-        ))}
-      </div>
-      <div className="fp-msg__pager">
-        {page > 1 ? (
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={link(page - 1)}>
-            ← {t(lang, 'Newer messages')}
-          </a>
-        ) : null}
-        {inbox.page.more ? (
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={link(page + 1)}>
-            {t(lang, 'Older messages')} →
-          </a>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -162,9 +162,14 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
       final json = asJson(answer);
       final p = widget.parse(json, page);
       if (!mounted) return;
-      final seen = {for (final x in _items) '${x['id']}'};
+      // an item already shown (the list moved on as one was added) is not shown twice; items without an id of
+      // their own (a health list's visit or card) are always taken
+      final seen = {
+        for (final x in _items)
+          if (x['id'] != null) '${x['id']}',
+      };
       setState(() {
-        _items.addAll(p.items.where((x) => !seen.contains('${x['id']}')));
+        _items.addAll(p.items.where((x) => x['id'] == null || !seen.contains('${x['id']}')));
         _page = page;
         _more = p.more && p.items.isNotEmpty;
         _total = p.total ?? _total;

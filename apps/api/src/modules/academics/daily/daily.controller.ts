@@ -263,8 +263,8 @@ export class NoticesController {
   @ApiOperation({ summary: 'Notices and circulars visible to the caller' })
   @RequirePermission(DAILY.noticeView, { description: 'Read notices and circulars' })
   async list(@ReqCtx() ctx: RequestContext, @Query() q: ListNoticesQueryDto) {
-    const { rows, total } = await this.notices.list(ctx, q);
-    return { data: rows, page: { number: q.page, size: q.size, total } };
+    const { rows, total, toAck } = await this.notices.list(ctx, q);
+    return { data: rows, page: { number: q.page, size: q.size, total }, toAck };
   }
 
   @Get(':id')

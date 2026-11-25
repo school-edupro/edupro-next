@@ -202,7 +202,7 @@ export class NoticesService {
   async list(
     ctx: RequestContext,
     q: ListNoticesQueryDto,
-  ): Promise<{ rows: NoticeRow[]; total: number }> {
+  ): Promise<{ rows: NoticeRow[]; total: number; toAck: number | null }> {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
     const all = await this.viewer.resolve(ctx, DAILY.noticeView);
@@ -246,13 +246,27 @@ export class NoticesService {
         `SELECT count(*)::text AS n FROM notices n WHERE ${whereSql}`,
         params,
       );
+      // one child: how many of these still wait for the family's acknowledgement for that child
+      const toAck = one?.[0]
+        ? Number(
+            (
+              await c.query<{ n: string }>(
+                // eslint-disable-next-line no-restricted-syntax -- whereSql is a conjunction of fixed fragments; values are bound parameters
+                `SELECT count(*)::text AS n FROM notices n WHERE ${whereSql} AND n.ack_required
+                   AND NOT EXISTS (SELECT 1 FROM academic_acks k WHERE k.item_type = 'notice' AND k.item_id = n.id
+                                     AND k.student_id = $${String(params.length + 1)}::bigint)`,
+                [...params, one[0].id],
+              )
+            ).rows[0]?.n ?? 0,
+          )
+        : null;
       params.push(q.size, (q.page - 1) * q.size);
       const r = await c.query<Db>(
         // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; whereSql holds fixed fragments; values are bound parameters
         `${SELECT} WHERE ${whereSql} ORDER BY n.is_pinned DESC, n.publish_from DESC, n.id DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
       );
-      return { rows: r.rows.map(toRow), total: Number(total.rows[0]?.n ?? 0) };
+      return { rows: r.rows.map(toRow), total: Number(total.rows[0]?.n ?? 0), toAck };
     });
   }
 

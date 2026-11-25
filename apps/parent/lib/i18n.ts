@@ -13,6 +13,11 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  // lists that load as they scroll
+  'Show more': 'और दिखाएँ',
+  'Loading…': 'लोड हो रहा है…',
+  'Could not load more.': 'और लोड नहीं हो सका।',
+  'That is everything.': 'बस इतना ही।',
   'Your parent pays it (the parent app or the school office)':
     'आपके अभिभावक इसका भुगतान करते हैं (अभिभावक ऐप या विद्यालय कार्यालय)',
   'Ask for a certificate': 'प्रमाणपत्र के लिए अनुरोध करें',

@@ -6,13 +6,14 @@ import '../app_services.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
+import '../ui/paged_feed.dart';
 import 'common.dart';
 import 'data.dart';
 
 /// The papers the teachers and the school shared for the session, as the website's "Session plan and date sheets"
-/// (apps/parent/app/(app)/documents): the kinds to pick from; **For the class** (session plan, curriculum, date
-/// sheet, other — the child's class only) and **From the school** (magazine, almanac); each with its files (View /
-/// Download), who shared it and when, and "I have seen this" when the school asks.
+/// (apps/parent/app/(app)/documents): the kinds to pick from; one list by date — the child's class's and the school's,
+/// the latest 10 first and 10 more as the family scrolls — each with its kind, its files (View / Download), who
+/// shared it and when, and "I have seen this" when the school asks.
 class DocumentsScreen extends ConsumerStatefulWidget {
   const DocumentsScreen({super.key, required this.profile});
   final Profile profile;
@@ -24,34 +25,34 @@ class DocumentsScreen extends ConsumerStatefulWidget {
 class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   String _kind = '';
 
-  static const _groups = [
-    ('class', ['session_plan', 'curriculum', 'date_sheet', 'other']),
-    ('school', ['magazine', 'almanac']),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final p = widget.profile;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = dark ? Tokens.mobGray300 : Tokens.textMuted;
-    return LoadedList<Json>(
-      value: ref.watch(documentsProvider(p)),
-      refresh: () => ref.refresh(documentsProvider(p).future),
-      children: (d) {
-        final docs = asList(d['data']);
-        final kinds = asList(d['kinds']).where((k) => docs.any((x) => x['kind'] == k['value']));
-        final section = d['section'];
-        // the child's class (or the whole school), and the kind picked
-        final mine = docs
-            .where(
-              (x) =>
-                  x['classSectionId'] == null ||
-                  section == null ||
-                  '${x['classSectionId']}' == '$section',
-            )
-            .where((x) => _kind.isEmpty || x['kind'] == _kind)
-            .toList();
+    final round = ref.watch(feedRoundProvider('family-docs'));
+    // the first page kept on the phone for reading offline (all kinds only)
+    final keptAs = _kind.isEmpty ? 'docs-feed:${p.id}' : null;
+    return PagedFeed(
+      key: ValueKey('docsFeed-$_kind-$round'),
+      firstCacheKey: keptAs,
+      load: (page) => ref
+          .read(apiProvider)
+          .documentsList(
+            studentId: p.studentId,
+            kind: _kind.isEmpty ? null : _kind,
+            page: page,
+            size: 10,
+          ),
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      empty: s.nothingShared,
+      item: (context, x, _) => _DocCard(profile: p, doc: x),
+      header: (_, d) {
+        final kinds = asList(d?['kinds']);
         return [
           Text(
             s.docsTitle,
@@ -82,16 +83,6 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             ),
           ),
           const SizedBox(height: Tokens.sp2),
-          if (mine.isEmpty) EmptyLine(s.nothingShared),
-          for (final (group, list) in _groups)
-            if (mine.any((x) => list.contains(x['kind']))) ...[
-              SectionTitle(
-                group == 'class' ? s.forTheClass : s.fromTheSchool,
-                key: Key('docGroup-$group'),
-              ),
-              for (final x in mine.where((x) => list.contains(x['kind'])))
-                _DocCard(profile: p, doc: x),
-            ],
         ];
       },
     );
@@ -127,7 +118,7 @@ class _DocCardState extends ConsumerState<_DocCard> {
             ),
           );
       if (mounted) setState(() => _seen = true);
-      ref.invalidate(documentsProvider(widget.profile));
+      ref.read(feedRoundProvider('family-docs').notifier).bump();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(s, e))));

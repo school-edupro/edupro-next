@@ -298,6 +298,8 @@ export class CreateDocumentDto extends createZodDto(CreateDocumentSchema) {}
 export const ListDocumentsQuerySchema = z.object({
   kind: DocumentKindSchema.optional(),
   classSectionId: IdSchema.optional(),
+  /** A family: only what is for this child's section, and the whole school's. */
+  studentId: IdSchema.optional(),
   /** Published from / to (dates, school time). */
   from: DateSchema.optional(),
   to: DateSchema.optional(),

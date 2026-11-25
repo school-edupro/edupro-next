@@ -429,6 +429,9 @@ class School {
               'files': [],
             },
           ],
+          // as the API answers a page for one child: how many in all, how many still to acknowledge
+          'page': {'number': 1, 'size': 10, 'total': 1},
+          'toAck': 1,
         };
       case 'GET /academics/notices/601':
         return {
@@ -569,7 +572,10 @@ class School {
           },
         };
         return {
-          'data': [if (asked != 'card') visit, if (asked != 'visit') card],
+          // the visit and the card on page 1 (the rest of the 12 are not in the fake)
+          'data': (int.tryParse('${(c.query ?? const {})['page']}') ?? 1) > 1
+              ? <Object>[]
+              : [if (asked != 'card') visit, if (asked != 'visit') card],
           'page': {
             'number': int.tryParse('${(c.query ?? const {})['page']}') ?? 1,
             'size': 10,
@@ -765,6 +771,15 @@ class School {
       case 'POST /certificate-requests/mine/82/withdraw':
         return {'ok': true};
       case 'GET /academics/documents':
+        // as the API: one child's (their section's and the school's), the kind asked, a page of 10
+        final docsFor = (c.query ?? const {})['studentId'];
+        final docsKind = (c.query ?? const {})['kind'];
+        final docs = <Map<String, Object?>>[
+          for (final d in familyDocs(day))
+            if ((docsFor == null || d['classSectionId'] == null || d['classSectionId'] == '300') &&
+                (docsKind == null || d['kind'] == docsKind))
+              d,
+        ];
         return {
           'kinds': [
             {'value': 'session_plan', 'label': 'Session plan'},
@@ -772,50 +787,8 @@ class School {
             {'value': 'date_sheet', 'label': 'Date sheet'},
             {'value': 'other', 'label': 'Other'},
           ],
-          'data': [
-            {
-              'id': 'd1',
-              'kind': 'session_plan',
-              'kindLabel': 'Session plan',
-              'title': 'Session plan 2026-27',
-              'remark': '<p>The plan for the <b>whole</b> year.</p>',
-              'classSectionId': '300',
-              'section': 'VI-A',
-              'fileIds': ['81'],
-              'publishAt': '${day(-3)}T04:30:00Z',
-              'ackRequired': true,
-              'ackedFor': [],
-              'postedBy': 'Asha Teacher',
-            },
-            {
-              'id': 'd2',
-              'kind': 'date_sheet',
-              'kindLabel': 'Date sheet',
-              'title': 'Not this class',
-              'remark': null,
-              'classSectionId': '301',
-              'section': 'VI-B',
-              'fileIds': ['82'],
-              'publishAt': '${day(-2)}T04:30:00Z',
-              'ackRequired': false,
-              'ackedFor': [],
-              'postedBy': null,
-            },
-            {
-              'id': 'd3',
-              'kind': 'magazine',
-              'kindLabel': 'School magazine',
-              'title': 'Our magazine',
-              'remark': null,
-              'classSectionId': null,
-              'section': null,
-              'fileIds': ['83'],
-              'publishAt': '${day(-1)}T04:30:00Z',
-              'ackRequired': false,
-              'ackedFor': [],
-              'postedBy': null,
-            },
-          ],
+          'data': docs,
+          'page': {'number': 1, 'size': 10, 'total': docs.length},
         };
       case 'GET /academics/documents/d1/files/81':
         return const ApiFile(
@@ -2385,11 +2358,9 @@ void main() {
       expect(find.text('Annual check-up 2026'), findsOneWidget);
       expect(find.text('Please see a doctor'), findsOneWidget);
       expect(find.text('Height 140 cm · Weight 35 kg · BMI 17.9 · Blood group B+'), findsOneWidget);
-      // pages of ten
-      expect(find.text('Page 1 / 2'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('healthNext')));
-      await tester.pumpAndSettle();
-      expect(t.calls.lastWhere((c) => c.path == '/clinic/mine/list').query!['page'], 2);
+      // ten a page; the next comes by itself (here the first page does not fill the screen)
+      expect(t.calls.firstWhere((c) => c.path == '/clinic/mine/list').query!['size'], 10);
+      expect(t.calls.any((c) => c.path == '/clinic/mine/list' && c.query!['page'] == 2), isTrue);
       // the type and a search
       await tester.tap(find.byKey(const Key('healthKind-visit')));
       await tester.pumpAndSettle();
@@ -2535,20 +2506,25 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(ListTile, 'Session plan and date sheets'));
       await tester.pumpAndSettle();
-      expect(t.calls.any((c) => c.path == '/academics/documents'), isTrue);
+      expect(
+        t.calls.firstWhere((c) => c.path == '/academics/documents').query,
+        allOf(containsPair('studentId', '41'), containsPair('page', 1), containsPair('size', 10)),
+      );
       expect(find.text('Session plan, curriculum and date sheets'), findsWidgets);
-      // the child's class and the whole school; another class's paper is not shown
-      expect(find.text('For the class'), findsOneWidget);
-      expect(find.text('From the school'), findsOneWidget);
+      // the child's class and the whole school in one list by date; another class's paper is not shown
       expect(find.text('Session plan 2026-27'), findsOneWidget);
       expect(find.text('The plan for the whole year.'), findsOneWidget);
       expect(find.text('Our magazine'), findsOneWidget);
       expect(find.text('Not this class'), findsNothing);
-      // the kinds that have papers
+      // a kind to pick: the API is asked for it from the newest
       expect(find.byKey(const Key('docKind-session_plan')), findsOneWidget);
-      expect(find.byKey(const Key('docKind-curriculum')), findsNothing);
+      expect(find.byKey(const Key('docKind-curriculum')), findsOneWidget);
       await tester.tap(find.byKey(const Key('docKind-session_plan')));
       await tester.pumpAndSettle();
+      expect(
+        t.calls.lastWhere((c) => c.path == '/academics/documents').query,
+        allOf(containsPair('kind', 'session_plan'), containsPair('page', 1)),
+      );
       expect(find.text('Our magazine'), findsNothing);
       // the file and "I have seen this"
       await tester.tap(find.byKey(const Key('view-0')));
@@ -3292,3 +3268,49 @@ void main() {
     expect(en.time('09:30:00'), '09:30');
   });
 }
+
+/// The family's class papers of the fake: the child's section (300), another section's, the school's.
+List<Map<String, Object?>> familyDocs(String Function(int) day) => [
+  {
+    'id': 'd1',
+    'kind': 'session_plan',
+    'kindLabel': 'Session plan',
+    'title': 'Session plan 2026-27',
+    'remark': '<p>The plan for the <b>whole</b> year.</p>',
+    'classSectionId': '300',
+    'section': 'VI-A',
+    'fileIds': ['81'],
+    'publishAt': '${day(-3)}T04:30:00Z',
+    'ackRequired': true,
+    'ackedFor': [],
+    'postedBy': 'Asha Teacher',
+  },
+  {
+    'id': 'd2',
+    'kind': 'date_sheet',
+    'kindLabel': 'Date sheet',
+    'title': 'Not this class',
+    'remark': null,
+    'classSectionId': '301',
+    'section': 'VI-B',
+    'fileIds': ['82'],
+    'publishAt': '${day(-2)}T04:30:00Z',
+    'ackRequired': false,
+    'ackedFor': [],
+    'postedBy': null,
+  },
+  {
+    'id': 'd3',
+    'kind': 'magazine',
+    'kindLabel': 'School magazine',
+    'title': 'Our magazine',
+    'remark': null,
+    'classSectionId': null,
+    'section': null,
+    'fileIds': ['83'],
+    'publishAt': '${day(-1)}T04:30:00Z',
+    'ackRequired': false,
+    'ackedFor': [],
+    'postedBy': null,
+  },
+];

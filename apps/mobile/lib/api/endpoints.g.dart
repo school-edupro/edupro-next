@@ -161,8 +161,8 @@ class EduProApi {
       _t.send('POST', '/academics/acks', body: body.toJson());
 
   /// GET /academics/documents — Class documents the viewer may see (families from the publish time)
-  Future<dynamic> documentsList({String? kind, String? classSectionId, String? from, String? to, int? page, int? size}) =>
-      _t.send('GET', '/academics/documents', query: {if (kind != null) 'kind': kind, if (classSectionId != null) 'classSectionId': classSectionId, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
+  Future<dynamic> documentsList({String? kind, String? classSectionId, String? studentId, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/academics/documents', query: {if (kind != null) 'kind': kind, if (classSectionId != null) 'classSectionId': classSectionId, if (studentId != null) 'studentId': studentId, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
 
   /// GET /academics/documents/{id}/files/{fileId}
   Future<ApiFile> documentsFile({required String id, required String fileId}) =>
@@ -177,8 +177,8 @@ class EduProApi {
       _t.send('DELETE', '/academics/documents/${Uri.encodeComponent(id)}');
 
   /// GET /academics/documents/report — Class documents with the filters, as Excel or PDF
-  Future<ApiFile> documentsDocumentsReport({String? kind, String? classSectionId, String? from, String? to, String? format, String? wrap}) =>
-      _t.file('GET', '/academics/documents/report', query: {if (kind != null) 'kind': kind, if (classSectionId != null) 'classSectionId': classSectionId, if (from != null) 'from': from, if (to != null) 'to': to, if (format != null) 'format': format, if (wrap != null) 'wrap': wrap});
+  Future<ApiFile> documentsDocumentsReport({String? kind, String? classSectionId, String? studentId, String? from, String? to, String? format, String? wrap}) =>
+      _t.file('GET', '/academics/documents/report', query: {if (kind != null) 'kind': kind, if (classSectionId != null) 'classSectionId': classSectionId, if (studentId != null) 'studentId': studentId, if (from != null) 'from': from, if (to != null) 'to': to, if (format != null) 'format': format, if (wrap != null) 'wrap': wrap});
 
   /// GET /academics/acks — Who acknowledged an item and who has not
   Future<dynamic> documentsAckStatus({required String type, required String id}) =>

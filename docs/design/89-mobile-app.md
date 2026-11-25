@@ -1045,3 +1045,27 @@ more as the user scrolls down").
     the admin's lesson report and work reports are the same HTML; a browser check on a throwaway test school (12
     lessons, 12 documents: 10, then 12) and on Alpha read-only (a teacher's daily work since April: 10, then 25),
     desktop and phone, axe.
+- **Families and students (25 Nov 2026): Health, Session plan, curriculum and date sheets, Notices, Messages**, app
+  and the family website, the same as the staff lists: the latest 10, then 10 more as the person scrolls; a filter
+  or another child starts again from the newest.
+  - API: `/academics/documents` takes `studentId` (a family: that child's section's papers and the school's; another
+    child's: the school's only); `/academics/notices` answers `toAck` for one child (how many still wait for the
+    family's acknowledgement), as the list no longer has every notice to count. Health (`/clinic/mine/list`) and
+    the inbox were already paged.
+  - Session plan and date sheets: one list by date, each paper with its kind (as Daily work's report), in place of
+    "For the class" / "From the school"; every kind the school uses can be picked (the list no longer has all the
+    papers to see which kinds are there).
+  - App: `InboxList` and `NoticesList` are one `PagedFeed` for staff and families (a family keeps its row and the
+    child's to-acknowledge count from `toAck`); `HealthScreen` and the family `DocumentsScreen` on `PagedFeed` (the
+    Previous / Next of Health and the "Show more" pages of Messages are gone). `PagedFeed` no longer takes an item
+    without an id of its own (a health list's visit or card) for one already shown.
+  - Family website: `components/MoreFeed.tsx` holds the first page as the page drew it and asks a server action
+    (`lib/feed-actions.tsx`: `healthPage`, `noticesPage`, `documentsPage`, `messagesPage`, bound to the list's
+    filters) for the next, which comes back drawn on the server with the same cards (`HealthItems`, `NoticeItems`,
+    `DocItems`, `MessageItems`, in the person's language).
+  - Tests: API `academic-board` (one child's papers, 10 a page) and `mobile-family` (`toAck`); app `family_test`
+    (the child's notices with `toAck`, health ten a page, the child's papers by kind) and `staff_lists_test` (a
+    family's notices, messages and papers: 23 → 10, 20, 23); a browser check on a throwaway test school (12 notices,
+    12 papers for the child: 10, then 12, desktop and phone, axe) and on Alpha read-only (each list ends). Alpha's
+    papers page shows one teacher's remark with links that are not underlined (axe link-in-text-block): it was so
+    before; not changed here.

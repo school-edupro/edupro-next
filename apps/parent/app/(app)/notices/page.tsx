@@ -1,11 +1,17 @@
-import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
+import { MoreFeed } from '@/components/MoreFeed';
+import { noticesPage } from '@/lib/feed-actions';
 import { currentLang, t } from '@/lib/i18n';
-import { dayParts, excerpt, type Notice } from './shared';
+import { NoticeItems } from './NoticeItems';
+import type { Notice } from './shared';
+
+/** The first page: the latest 10; the rest load as the family scrolls. */
+const PAGE = 10;
 
 /**
  * Notices and circulars for the family, laid out like the Health screen: filters on top, then a card
@@ -25,16 +31,28 @@ export default async function NoticesPage({
   const to = isDate(sp.to) ? sp.to : '';
   const q = (sp.q ?? '').trim().slice(0, 80);
   const filtered = Boolean(kind || from || to || q);
-  let notices: Notice[];
+  // the filters and the child, as the next pages ask for them too: one child at a time (what is for that
+  // child's class, section or the child), the type, the words and the dates
+  const filters: Record<string, string> = {};
+  if (kind) filters.kind = kind;
+  if (q) filters.q = q;
+  if (from) filters.from = from;
+  if (to) filters.to = to;
+  if (kid) filters.studentId = kid.id;
+  let list: Notice[];
+  let total = 0;
+  let toAck = 0;
   try {
-    const query = new URLSearchParams({ size: '200' });
-    if (kind) query.set('kind', kind);
-    if (q) query.set('q', q);
-    // one child at a time: what is for that child's class, section or the child
-    if (kid) query.set('studentId', kid.id);
-    notices = await bff.api
-      .fetch<{ data: Notice[] }>(`/academics/notices?${query.toString()}`)
-      .then((r) => r.data);
+    const r = await bff.api.fetch<{
+      data: Notice[];
+      page: { total: number };
+      toAck: number | null;
+    }>(
+      `/academics/notices?${new URLSearchParams({ ...filters, page: '1', size: String(PAGE) }).toString()}`,
+    );
+    list = r.data;
+    total = r.page.total;
+    toAck = r.toAck ?? 0;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)
@@ -46,18 +64,18 @@ export default async function NoticesPage({
       );
     throw error;
   }
-  const list = notices.filter(
-    (n) => (!from || n.publishFrom >= from) && (!to || n.publishFrom <= to),
-  );
-  const toAck = kid
-    ? list.filter((n) => n.ackRequired && !(n.ackedFor ?? []).includes(kid.id)).length
-    : 0;
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
         kicker={t(lang, 'Notices')}
         title={t(lang, 'Notices and circulars')}
-        description={`${String(list.length)} ${t(lang, filtered ? 'found' : 'in all')} · ${t(lang, 'latest first')}${toAck ? ` · ${String(toAck)} ${t(lang, 'to acknowledge')}` : ''}`}
+        description={`${String(total)} ${t(lang, filtered ? 'found' : 'in all')} · ${t(lang, 'latest first')}${toAck ? ` · ${String(toAck)} ${t(lang, 'to acknowledge')}` : ''}`}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
             {t(lang, 'Home')}
@@ -112,59 +130,15 @@ export default async function NoticesPage({
           {filtered ? t(lang, 'Nothing matches these filters.') : t(lang, 'No notices right now.')}
         </Card>
       ) : null}
-      {list.map((n) => {
-        const d = dayParts(n.publishFrom);
-        const pending = Boolean(n.ackRequired && kid && !(n.ackedFor ?? []).includes(kid.id));
-        return (
-          <Card key={n.id} elevated style={{ marginBottom: 'var(--sp-3)' }}>
-            <div className="ep-apt">
-              <div className="ep-apt__date">
-                <span className="ep-apt__day">{d.day}</span>
-                <span className="ep-apt__month">{d.month}</span>
-                <span className="ep-apt__time">{d.year}</span>
-              </div>
-              <div className="ep-apt__body">
-                <div className="ep-apt__top">
-                  <a className="ep-apt__title" href={`/notices/${n.id}`}>
-                    {n.title}
-                  </a>
-                  <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
-                    {n.isPinned ? <Badge tone="warning">{t(lang, 'Pinned')}</Badge> : null}
-                    <Badge tone={n.kind === 'circular' ? 'info' : 'neutral'}>
-                      {t(lang, n.kind)}
-                    </Badge>
-                    {pending ? <Badge tone="danger">{t(lang, 'Acknowledge')}</Badge> : null}
-                  </span>
-                </div>
-                <div>{excerpt(n)}</div>
-                <div className="ep-kicker">
-                  {[
-                    n.targets.length
-                      ? n.targets
-                          .slice(0, 3)
-                          .map((x) => x.label)
-                          .join(', ')
-                      : null,
-                    n.files.length ? `${String(n.files.length)} ${t(lang, 'Attachments')}` : null,
-                    n.publishedBy ?? null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </div>
-                <div className="ep-apt__actions">
-                  <a
-                    className="ep-btn ep-btn--secondary ep-btn--sm"
-                    href={`/notices/${n.id}`}
-                    aria-label={`${t(lang, 'Details')}: ${n.title}`}
-                  >
-                    {t(lang, 'Details')}
-                  </a>
-                </div>
-              </div>
-            </div>
-          </Card>
-        );
-      })}
+      {list.length ? (
+        <MoreFeed
+          key={JSON.stringify(filters)}
+          first={<NoticeItems items={list} lang={lang} kid={kid} />}
+          more={PAGE < total}
+          load={noticesPage.bind(null, filters)}
+          labels={foot}
+        />
+      ) : null}
     </main>
   );
 }
