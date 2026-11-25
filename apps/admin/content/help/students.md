@@ -116,9 +116,10 @@ Parents see Aadhaar, PAN and bank numbers of their own child in full; approvers 
 
 When a father, mother or guardian works in the school, mark **School staff: Yes** in their section of
 the full profile and enter their **employee code**. Their child's record is then joined to the staff
-member's own login: in the app they switch between **Staff** and **Parent** with one sign-in. The
-staff and admin websites show **My children**, which opens the family website already signed in; there
-**Staff app** or **Admin app** goes back to the website they came from, signed in too.
+member's own login: in the app they switch between **Staff** and **Parent** with one sign-in. On
+the staff and admin websites the **⇄ Switch** icon in the header lists the staff website, the admin
+website and each child: picking a child opens the family website on that child, already signed in,
+and the same icon there goes back.
 
 - Saving the profile (or a bulk Excel update) joins it by itself when the parent record has no login
   of its own. If the employee has no login yet, it joins when they get one.

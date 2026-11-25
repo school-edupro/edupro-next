@@ -10,6 +10,7 @@ import { Tour } from './Tour';
 import { AccountMenu, ContextMenu, LanguageMenu } from './HeaderMenus';
 import { HeaderKeys } from './HeaderKeys';
 import { SidebarToggle } from './SidebarToggle';
+import { SwitchMenu, type SwitchKid } from './SwitchMenu';
 import { APPROVALS_MENU, LEAVE_MENU, NAV } from '@/lib/nav';
 
 export async function Shell({
@@ -42,6 +43,24 @@ export async function Shell({
   const parentHere =
     !me.impersonation &&
     me.memberships.some((m) => m.schoolId === workingSchool && m.personType === 'guardian');
+  // their children for the Switch menu (the family website on each)
+  const kids: SwitchKid[] = parentHere
+    ? await apiFetch<{
+        data: Array<{
+          kind: string;
+          schoolId: string;
+          studentId: string | null;
+          name: string;
+          detail: string | null;
+        }>;
+      }>('/me/profiles')
+        .then((r) =>
+          r.data
+            .filter((p) => p.kind === 'parent' && p.schoolId === workingSchool && p.studentId)
+            .map((p) => ({ id: p.studentId!, name: p.name, detail: p.detail })),
+        )
+        .catch(() => [])
+    : [];
   // Admissions → Approvals: admission admins and the people named in an approval level (docs/design/55)
   const approvalsMenu = await apiFetch<{ show: boolean }>('/admissions/approvals/menu').catch(
     () => ({ show: false }),
@@ -350,17 +369,18 @@ export async function Shell({
         </div>
         <div className="ep-header__context">
           <HeaderKeys />
-          {parentHere ? (
-            // also a parent in this school: the family website, signed in (a one-time link, /api/my-children)
-            <form method="post" action="/api/my-children">
-              <button
-                type="submit"
-                className="ep-btn ep-btn--ghost ep-btn--sm"
-                title={t('myChildrenHint')}
-              >
-                {t('myChildren')}
-              </button>
-            </form>
+          {kids.length ? (
+            // also a parent in this school: the staff website, or the family website on a child, signed in
+            <SwitchMenu
+              kids={kids}
+              words={{
+                switchWebsite: t('switchWebsite'),
+                switchTo: t('switchTo'),
+                admin: t('adminWebsite'),
+                staff: t('staffWebsite'),
+                parent: t('parent'),
+              }}
+            />
           ) : null}
           <LanguageMenu locale={locale} t={tt} />
           <a className="ep-header__icon-btn" href="/help" aria-label={t('help')} title={t('help')}>

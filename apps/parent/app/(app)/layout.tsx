@@ -6,6 +6,7 @@ import { AssistantDock } from '@/components/AssistantDock';
 import { FamilyShell, audienceOf } from '@/components/FamilyShell';
 import { homeLayout, isHidden } from '@/lib/home-layout';
 import { bff } from '@/lib/bff';
+import { chosenChild, familyKids } from '@/lib/child';
 import { currentLang, t } from '@/lib/i18n';
 
 /** Signed-in parent and student screens share the portal frame (sidebar, header, phone tab bar). */
@@ -55,7 +56,11 @@ export default async function FamilyLayout({ children }: { children: ReactNode }
         currentPath={currentPath}
         unread={unread}
         layout={layout}
-        cameFrom={(await bff.session.read())?.cameFrom ?? null}
+        switcher={
+          (await bff.session.read())?.cameFrom
+            ? { kids: await familyKids(), current: (await chosenChild())?.id ?? null }
+            : null
+        }
       >
         {ended ? (
           <div className="ep-card" role="status">

@@ -1125,6 +1125,17 @@ more as the user scrolls down").
     Tests: `staff-parents` (staff → family → staff, admin → family → admin, the wrong website, a family sign-in of its
     own, once only); a browser check on a test school (both round trips with the source website signed out first;
     desktop and phone, axe).
+  - **One Switch menu** (replaces the My children, Staff app and Admin app text buttons and their `/api/my-children`
+    and `/api/switch-back` routes): a ⇄ icon in the header of the staff, admin and family websites opens "Switch to"
+    — this website ticked, the other staff-side website, then each child as "Parent · name" (class · admission no),
+    as the app's profile switcher. The staff and admin websites show it for a login that is a parent in the school
+    they work in (children from `/me/profiles`); the family website for a session opened from the staff side
+    (children from the family view, the one shown ticked; picking one is the sibling switch). A child opens the
+    family website on that child (`/api/child?id=…`). Each website has one route, `/api/switch`. The staff and admin
+    websites may now open each other; only a family code sign-in of its own (token `app` parent, no `via`:
+    `ctx.user.codeApp`) may not open either. On a phone the panel hangs from the whole header
+    (`.ep-hmenu--switch`, packages/ui). Tests: `staff-parents` (staff ↔ admin, a family code token refused); a
+    browser check on a test school (staff → a child → admin → staff, desktop and phone, axe).
   - Tests: API `staff-parents` (father and mother, on save and by Excel, a staff member who gets a login later, own
     login with Use staff login and Undo, School staff No / a wrong code, rights, the school boundary); a browser check
     on a throwaway test school (the list, the Guardians card, the dialogs, My children; desktop and phone, axe).

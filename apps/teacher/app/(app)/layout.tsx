@@ -36,6 +36,28 @@ export default async function StaffLayout({ children }: { children: ReactNode })
   // the header badge, what waits on this person and the school's staff menu (docs/design/94: one call, as the app);
   // best effort, never blocks the page
   const mine = await myStaffLayout();
+  // also a parent in the school it works in (the chosen one, else the only one): their children for the Switch menu
+  const workingSchool = me.school?.id ?? me.memberships[0]?.schoolId;
+  const kids = me.memberships.some(
+    (m) => m.schoolId === workingSchool && m.personType === 'guardian',
+  )
+    ? await bff.api
+        .fetch<{
+          data: Array<{
+            kind: string;
+            schoolId: string;
+            studentId: string | null;
+            name: string;
+            detail: string | null;
+          }>;
+        }>('/me/profiles')
+        .then((r) =>
+          r.data
+            .filter((p) => p.kind === 'parent' && p.schoolId === workingSchool && p.studentId)
+            .map((p) => ({ id: p.studentId!, name: p.name, detail: p.detail })),
+        )
+        .catch(() => [])
+    : [];
   const unread = mine?.unread ?? 0;
   const waiting: StaffWaiting = mine?.waiting ?? { approvals: 0 };
   // everything waiting for this person's decision, every kind (the server's approvals inbox, as the admin's header and
@@ -54,6 +76,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         approvals={approvals}
         waiting={waiting}
         layout={mine?.published ? mine : null}
+        kids={kids}
       >
         {children}
       </StaffShell>

@@ -29,6 +29,8 @@ export interface AuthenticatedUser {
    * from. Only such a session may ask for the way back (a code for that website).
    */
   hopFrom?: 'teacher' | 'admin';
+  /** A code sign-in token: the website it was made for (`parent` = a family sign-in of its own). */
+  codeApp?: string;
   /**
    * The profile the request acts as (header `X-Acting-As`, docs/design/89): a teacher who is also a parent in
    * the school reads as the parent with `family`. Honoured only when the person has that membership.

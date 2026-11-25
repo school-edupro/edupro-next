@@ -7,6 +7,7 @@ import { canOpen } from '@/lib/portal-menu';
 import { Icon, type IconName } from './nav-icons';
 import { PhoneMenu } from './PhoneMenu';
 import { SidebarToggle } from './SidebarToggle';
+import { SwitchMenu } from './SwitchMenu';
 
 export type { Audience };
 const NAV = FAMILY_MENU as Array<Omit<FamilyGroup, 'icon'> & { icon: IconName }>;
@@ -44,7 +45,7 @@ export function FamilyShell({
   children,
   unread = 0,
   layout = null,
-  cameFrom = null,
+  switcher = null,
 }: {
   me: Me;
   lang: Lang;
@@ -54,8 +55,14 @@ export function FamilyShell({
   unread?: number;
   /** The school's published layout for this person; null: the menu and the phone bar as built. */
   layout?: HomeLayout | null;
-  /** opened from the staff or admin website (My children): the way back there, signed in (0425) */
-  cameFrom?: 'teacher' | 'admin' | null;
+  /**
+   * opened from the staff or admin website (Switch, 0425): the Switch menu — the staff and admin websites, and the
+   * children (the one shown ticked)
+   */
+  switcher?: {
+    kids: Array<{ id: string; name: string; section: string | null }>;
+    current: string | null;
+  } | null;
 }) {
   const audience = audienceOf(me);
   const isCurrent = (href: string) =>
@@ -213,19 +220,8 @@ export function FamilyShell({
           </div>
         </div>
         <div className="ep-header__context">
-          {cameFrom ? (
-            <form method="post" action="/api/switch-back">
-              <button
-                type="submit"
-                className="ep-btn ep-btn--ghost ep-btn--sm"
-                title={t(
-                  lang,
-                  cameFrom === 'admin' ? 'Back to the admin website' : 'Back to the staff website',
-                )}
-              >
-                {t(lang, cameFrom === 'admin' ? 'Admin app' : 'Staff app')}
-              </button>
-            </form>
+          {switcher ? (
+            <SwitchMenu kids={switcher.kids} current={switcher.current} back={back} lang={lang} />
           ) : null}
           <a
             className="ep-btn ep-btn--ghost ep-btn--sm"

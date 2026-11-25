@@ -17,8 +17,9 @@ export type HopApp = 'parent' | 'teacher' | 'admin';
  * goes back from it (Staff app / Admin app). The website left asks for a one-time code (60 seconds, used once, kept
  * as a keyed hash); the website opened turns it in for its own session (12 hours, as a code sign-in makes).
  *  - to the family website: for someone who is a parent (or student) in the school, from the staff or admin website;
- *  - back to the staff or admin website: only from a family website session that was opened from that website (a
- *    family sign-in of its own may not: the school may sign families in by other means than staff).
+ *  - to the staff or admin website: for someone who is staff in the school, from the other staff-side website or
+ *    from a family website session opened from either (a family sign-in of its own may not: the school may sign
+ *    families in by other means than staff).
  */
 @Injectable()
 export class WebHopService {
@@ -57,11 +58,12 @@ export class WebHopService {
       });
     if (app === 'parent' && !from)
       throw new DomainError('validation-failed', 'Say which website asks (from)', { status: 400 });
-    // back to the staff or admin website: only the family session that came from there
-    if (app !== 'parent' && ctx.user.hopFrom !== app)
+    // to the staff or admin website: not from a family sign-in of its own (the school may sign families in by other
+    // means than staff); a family session opened from the staff or admin website may go there
+    if (app !== 'parent' && ctx.user.codeApp === 'parent' && !ctx.user.hopFrom)
       throw new DomainError(
         'auth.hop_not_from',
-        'Sign in to that website: this family website session was not opened from it',
+        'Sign in to that website: this family website session was not opened from the staff or admin website',
         { status: 403 },
       );
     const tenant = requireTenant(ctx);

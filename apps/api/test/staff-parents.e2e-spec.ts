@@ -7,6 +7,8 @@
  * joined by itself; the list (to do, joined); the rights and the school boundary.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { SignJWT } from 'jose';
+import { ENV, type Env } from '../src/config/env';
 import {
   createApp,
   headersFor,
@@ -276,10 +278,8 @@ describe('staff parents (e2e)', () => {
     const again = await redeem(code2);
     expect(again.statusCode).toBe(401);
     expect(again.json().type).toBe('auth.hop_invalid');
-    // the way back: to the staff website it came from, signed in; not to the admin website
-    expect((await hop(familyToken, { app: 'admin', to: '/' })).json().type).toBe(
-      'auth.hop_not_from',
-    );
+    // the way back: to the staff website it came from (or the admin website), signed in
+    expect((await hop(familyToken, { app: 'admin', to: '/' })).statusCode).toBe(200);
     const back = await hop(familyToken, { app: 'teacher', to: '/' });
     expect(back.statusCode).toBe(200);
     expect(new URL(back.json().url as string).origin).toBe(
@@ -295,11 +295,30 @@ describe('staff parents (e2e)', () => {
     });
     expect(me.json().school).toMatchObject({ id: school.id });
     expect((me.json().permissions as string[]).length).toBeGreaterThan(0);
-    // a family sign-in of its own (not opened from the staff website) has no way back
-    const own = await hop(`dev:${staffOne.sub}`, { app: 'teacher', to: '/' });
-    expect(own.statusCode).toBe(403);
-    expect(own.json().type).toBe('auth.hop_not_from');
-    // the admin website the same way: My children there, Admin app back
+    // the staff website straight to the admin website (and back), signed in
+    const staffToAdmin = await hop(`dev:${staffOne.sub}`, { app: 'admin', to: '/' });
+    expect(staffToAdmin.statusCode).toBe(200);
+    const adminSession = await redeem(codeOf(staffToAdmin.json().url as string), 'admin');
+    expect(adminSession.statusCode).toBe(200);
+    expect(
+      (await hop(adminSession.json().accessToken as string, { app: 'teacher', to: '/' }))
+        .statusCode,
+    ).toBe(200);
+    // a family code sign-in of its own (not opened from the staff side) cannot open the staff or admin website
+    const familyCode = `otp.${await new SignJWT({ amr: ['otp'], app: 'parent' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(staffOne.sub)
+      .setIssuer('edupro-otp')
+      .setAudience('edupro-otp')
+      .setIssuedAt()
+      .setExpirationTime('10m')
+      .sign(new TextEncoder().encode(app.get<Env>(ENV).OTP_JWT_SECRET))}`;
+    for (const site of ['teacher', 'admin']) {
+      const own = await hop(familyCode, { app: site, to: '/' });
+      expect(own.statusCode).toBe(403);
+      expect(own.json().type).toBe('auth.hop_not_from');
+    }
+    // the admin website the same way: Switch there to a child, then back to the admin website
     const fromAdmin = await hop(`dev:${staffOne.sub}`, { app: 'parent', from: 'admin', to: '/' });
     const viaAdmin = await redeem(codeOf(fromAdmin.json().url as string));
     expect(viaAdmin.json().from).toBe('admin');

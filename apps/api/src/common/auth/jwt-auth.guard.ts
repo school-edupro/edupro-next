@@ -65,6 +65,7 @@ export class JwtAuthGuard implements CanActivate {
     let oneAuth = false;
     let mobileSessionId: string | undefined;
     let hopFrom: 'teacher' | 'admin' | undefined;
+    let codeApp: string | undefined;
 
     if (token.startsWith('dev:')) {
       if (!this.env.AUTH_DEV_BYPASS || this.env.NODE_ENV === 'production') {
@@ -129,6 +130,7 @@ export class JwtAuthGuard implements CanActivate {
       }
       // a family website session opened from the staff or admin website (0425): the way back is allowed there
       if (payload.via === 'teacher' || payload.via === 'admin') hopFrom = payload.via;
+      if (typeof payload.app === 'string') codeApp = payload.app;
     } else if (token.startsWith('compat.')) {
       // Session token issued by the compatibility handshake (S4-05): HS256, short-lived, carries the school.
       const payload = await this.verifyCompat(token.slice('compat.'.length));
@@ -177,6 +179,7 @@ export class JwtAuthGuard implements CanActivate {
     if (authTime !== undefined) user.authTime = authTime;
     if (mobileSessionId) user.mobileSessionId = mobileSessionId;
     if (hopFrom) user.hopFrom = hopFrom;
+    if (codeApp) user.codeApp = codeApp;
     // the profile the app acts as (a teacher who is also a parent): honoured where the person is a family member
     if (req.headers['x-acting-as'] === 'family') user.actingAs = 'family';
     if (impersonation) user.impersonation = impersonation;

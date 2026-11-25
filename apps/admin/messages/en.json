@@ -305,8 +305,11 @@
     "payrollApprovals": "Payroll drafts to approve"
   },
   "shell": {
-    "myChildren": "My children",
-    "myChildrenHint": "Your children at this school, on the family website",
+    "switchWebsite": "Switch website",
+    "switchTo": "Switch to",
+    "adminWebsite": "Admin website",
+    "staffWebsite": "Staff website",
+    "parent": "Parent",
     "primaryNavigation": "Primary",
     "school": "School",
     "year": "Year",

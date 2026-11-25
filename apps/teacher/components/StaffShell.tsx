@@ -5,6 +5,7 @@ import { staffTabs, type StaffWaiting } from '@/lib/staff-menu';
 import { staffGroups, type StaffLayoutView } from '@/lib/staff-layout';
 import { Icon, type IconName } from './nav-icons';
 import { PhoneMenu } from './PhoneMenu';
+import { SwitchMenu, type SwitchKid } from './SwitchMenu';
 import { SidebarToggle } from './SidebarToggle';
 
 /**
@@ -23,6 +24,7 @@ export function StaffShell({
   approvals = 0,
   waiting,
   layout = null,
+  kids = [],
 }: {
   me: Me;
   lang: Lang;
@@ -35,6 +37,8 @@ export function StaffShell({
   waiting?: StaffWaiting;
   /** The school's published staff layout for this person; null: the menu and the phone bar as built. */
   layout?: StaffLayoutView | null;
+  /** also a parent in this school: their children, for the Switch menu (0425); empty: no menu */
+  kids?: SwitchKid[];
 }) {
   const isCurrent = (href: string) =>
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
@@ -60,11 +64,6 @@ export function StaffShell({
   const school =
     me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0] ?? null;
   const back = encodeURIComponent(currentPath);
-  // a staff member who is also a parent here (their child's record joined to this login, 0423): the family website
-  // (the school the header shows: the one chosen, else the only one)
-  const parentHere = me.memberships.some(
-    (m) => m.schoolId === school?.schoolId && m.personType === 'guardian',
-  );
   return (
     <div className="ep-shell fp-shell">
       <aside className="ep-sidebar" aria-label={t(lang, 'Sidebar')}>
@@ -167,18 +166,7 @@ export function StaffShell({
           </div>
         </div>
         <div className="ep-header__context">
-          {parentHere ? (
-            // the family website, signed in with this login (a one-time link, /api/my-children)
-            <form method="post" action="/api/my-children">
-              <button
-                type="submit"
-                className="ep-btn ep-btn--ghost ep-btn--sm"
-                title={t(lang, 'Your children at this school, on the family website')}
-              >
-                {t(lang, 'My children')}
-              </button>
-            </form>
-          ) : null}
+          {kids.length ? <SwitchMenu kids={kids} lang={lang} /> : null}
           <a
             className="ep-btn ep-btn--ghost ep-btn--sm"
             href={`/api/lang?to=${lang === 'hi' ? 'en' : 'hi'}&back=${back}`}

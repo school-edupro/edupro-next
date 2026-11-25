@@ -10340,6 +10340,18 @@ a.ep-pub-foot__item {
   font-size: var(--fs-small);
   color: var(--text-muted);
 }
+/* the Switch menu (staff, admin and family websites): on a phone its icon sits mid-header, so the panel hangs from
+   the whole header (its positioned box) instead of running off the screen's left edge */
+@media (max-width: 48rem) {
+  .ep-hmenu--switch {
+    position: static;
+  }
+  .ep-hmenu--switch .ep-hmenu__panel {
+    left: var(--sp-3);
+    right: var(--sp-3);
+    width: auto;
+  }
+}
 .ep-hchip {
   display: inline-flex;
   align-items: center;
