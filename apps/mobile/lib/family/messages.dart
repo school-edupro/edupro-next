@@ -109,31 +109,35 @@ class _InboxPage extends ConsumerStatefulWidget {
     final s = ref.read(stringsProvider);
     return [
       for (final m in asList(inbox['data']))
-        Card(
-          child: ListTile(
-            key: Key('message-${m['id']}'),
-            leading: m['unread'] == true
-                ? Semantics(
-                    label: s.unreadMessages,
-                    child: const Icon(Icons.circle, size: 12, color: Tokens.mobCyan600),
-                  )
-                : const SizedBox(width: 12),
-            title: Text(
-              '${m['title'] ?? m['subject']}',
-              style: m['unread'] == true ? const TextStyle(fontWeight: Tokens.fwBold) : null,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+        if (profile.isStaff)
+          // the staff app: each message as the notices' card (date block, tags, first lines, Details)
+          MessageCard(message: m, onOpen: () => _open(context, ref, profile, m))
+        else
+          Card(
+            child: ListTile(
+              key: Key('message-${m['id']}'),
+              leading: m['unread'] == true
+                  ? Semantics(
+                      label: s.unreadMessages,
+                      child: const Icon(Icons.circle, size: 12, color: Tokens.mobCyan600),
+                    )
+                  : const SizedBox(width: 12),
+              title: Text(
+                '${m['title'] ?? m['subject']}',
+                style: m['unread'] == true ? const TextStyle(fontWeight: Tokens.fwBold) : null,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              // as the website: when · the child · the channels, then the first words
+              subtitle: Text(
+                '${messageMeta(s, m)}\n${'${m['text'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ')}',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              isThreeLine: true,
+              onTap: () => _open(context, ref, profile, m),
             ),
-            // as the website: when · the child · the channels, then the first words
-            subtitle: Text(
-              '${messageMeta(s, m)}\n${'${m['text'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ')}',
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-            isThreeLine: true,
-            onTap: () => _open(context, ref, profile, m),
           ),
-        ),
     ];
   }
 
@@ -430,9 +434,18 @@ class _NoticesListState extends ConsumerState<NoticesList> {
 
 /// A notice in the list: the date block, its tags, the first lines, for whom, the attachments and who published it.
 class NoticeTile extends ConsumerWidget {
-  const NoticeTile({super.key, required this.profile, required this.notice, this.pending = false});
+  const NoticeTile({
+    super.key,
+    required this.profile,
+    required this.notice,
+    this.pending = false,
+    this.onClosed,
+  });
   final Profile profile;
   final Json notice;
+
+  /// called when its detail closes (the list reads again: it may have been acknowledged there)
+  final VoidCallback? onClosed;
 
   /// still to acknowledge for this child
   final bool pending;
@@ -451,7 +464,18 @@ class NoticeTile extends ConsumerWidget {
     if (excerpt.length > 180) excerpt = '${excerpt.substring(0, 180).trimRight()}…';
     final targets = [for (final t in asList(n['targets']).take(3)) '${t['label']}'];
     final files = asList(n['files']).length;
-    void open() => pushPage(context, s.notices, NoticeDetail(profile: profile, id: '${n['id']}'));
+    Future<void> open() async {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => FamilyPage(
+            title: s.noticeKind('${n['kind']}'),
+            child: NoticeDetail(profile: profile, id: '${n['id']}'),
+          ),
+        ),
+      );
+      onClosed?.call();
+    }
+
     return Card(
       child: InkWell(
         key: Key('notice-${n['id']}'),
@@ -516,6 +540,96 @@ class NoticeTile extends ConsumerWidget {
                           label: '${s.details}: ${n['title']}',
                           child: Text(s.details),
                         ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A message in the staff app, as the notices' card: the date block, the subject, its tags (new, the channels), the
+/// first lines, when it came and its attachments, and Details.
+class MessageCard extends ConsumerWidget {
+  const MessageCard({super.key, required this.message, required this.onOpen});
+  final Json message;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
+    final m = message;
+    final at = DateTime.tryParse('${m['sentAt']}')?.toLocal() ?? DateTime.now();
+    final unread = m['unread'] == true;
+    var excerpt = '${m['text'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (excerpt.length > 180) excerpt = '${excerpt.substring(0, 180).trimRight()}…';
+    final files = asList(m['attachments']).length;
+    final title = '${m['title'] ?? m['subject'] ?? ''}';
+    return Card(
+      child: InkWell(
+        key: Key('message-${m['id']}'),
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.all(Tokens.sp3),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 60,
+                padding: const EdgeInsets.symmetric(vertical: Tokens.sp2),
+                decoration: BoxDecoration(
+                  color: (dark ? Tokens.mobNavy700 : Tokens.mobNavy50),
+                  borderRadius: BorderRadius.circular(Tokens.radiusSm),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      at.day.toString().padLeft(2, '0'),
+                      style: const TextStyle(fontSize: 20, fontWeight: Tokens.fwBold),
+                    ),
+                    Text(s.monthShort(at), style: const TextStyle(fontSize: 12)),
+                    Text('${at.year}', style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Tokens.sp3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: Tokens.fwBold)),
+                    const SizedBox(height: Tokens.sp1),
+                    Wrap(
+                      spacing: Tokens.sp1,
+                      runSpacing: Tokens.sp1,
+                      children: [
+                        if (unread) StatusChip(s.hindi ? 'नया' : 'New', Tone.info),
+                        for (final c in (m['channels'] as List? ?? const []))
+                          StatusChip(s.channel('$c'), Tone.neutral),
+                      ],
+                    ),
+                    if (excerpt.isNotEmpty) ...[const SizedBox(height: Tokens.sp1), Text(excerpt)],
+                    Text(
+                      [
+                        '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}',
+                        if (asJson(m['student'])['name'] != null) '${asJson(m['student'])['name']}',
+                        if (files > 0) s.attachmentsN(files),
+                      ].join(' · '),
+                      style: TextStyle(color: muted, fontSize: 13),
+                    ),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton(
+                        key: Key('messageDetails-${m['id']}'),
+                        onPressed: onOpen,
+                        child: Semantics(label: '${s.details}: $title', child: Text(s.details)),
                       ),
                     ),
                   ],

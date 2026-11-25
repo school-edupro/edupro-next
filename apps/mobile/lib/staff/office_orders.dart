@@ -2,13 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../api/api_transport.dart' show ApiException;
-import '../api/endpoints.g.dart';
 import '../app_services.dart';
 import '../family/common.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
+import '../family/messages.dart' show NoticeTile;
 import 'data.dart';
 
 /// The words of Office orders (as the staff website's, in English and Hindi).
@@ -108,122 +108,17 @@ class _List extends ConsumerWidget {
         Text(s.ooHelp, style: const TextStyle(fontSize: 13)),
         const SizedBox(height: Tokens.sp3),
         if (rows.isEmpty) Notice(text: s.ooNone),
-        for (final n in rows) _Order(profile: profile, notice: n),
+        // as the notices' card: date block, tags, first lines, for whom, attachments, Details (the text, files
+        // and Acknowledge open there)
+        for (final n in rows)
+          NoticeTile(
+            key: Key('ooOrder-${n['id']}'),
+            profile: profile,
+            notice: n,
+            pending: n['ackRequired'] == true && n['ackedByMe'] != true,
+            onClosed: () => ref.invalidate(officeOrdersProvider),
+          ),
       ],
-    );
-  }
-}
-
-class _Order extends ConsumerStatefulWidget {
-  const _Order({required this.profile, required this.notice});
-  final Profile profile;
-  final Json notice;
-
-  @override
-  ConsumerState<_Order> createState() => _OrderState();
-}
-
-class _OrderState extends ConsumerState<_Order> {
-  bool _busy = false;
-
-  Future<void> _ack() async {
-    final s = ref.read(stringsProvider);
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(apiProvider)
-          .documentsAck(
-            body: AckDto(type: 'notice', id: '${widget.notice['id']}'),
-          );
-      ref.invalidate(officeOrdersProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.ooAckDone)));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(s, e))));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ref.watch(stringsProvider);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
-    final n = widget.notice;
-    final id = '${n['id']}';
-    final kind = '${n['kind']}';
-    final body = '${n['body'] ?? ''}';
-    final files = asList(n['files']);
-    return Card(
-      key: Key('ooOrder-$id'),
-      margin: const EdgeInsets.only(bottom: Tokens.sp3),
-      child: Padding(
-        padding: const EdgeInsets.all(Tokens.sp4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    '${n['title'] ?? ''}',
-                    style: const TextStyle(fontWeight: Tokens.fwBold, fontSize: 16),
-                  ),
-                ),
-                const SizedBox(width: Tokens.sp2),
-                Flexible(
-                  child: Tag(
-                    s.ooKind(kind),
-                    color: kind == 'office_order' ? Tokens.mobCyan100 : Tokens.mobGray100,
-                  ),
-                ),
-              ],
-            ),
-            Text(
-              [
-                if (n['publishFrom'] != null) s.date('${n['publishFrom']}'),
-                if (n['publishedBy'] != null) '${n['publishedBy']}',
-              ].join(' · '),
-              style: TextStyle(color: muted, fontSize: 13),
-            ),
-            const SizedBox(height: Tokens.sp2),
-            SelectionArea(child: Text(n['bodyFormat'] == 'html' ? plainText(body) : body)),
-            if (files.isNotEmpty) ...[
-              const SizedBox(height: Tokens.sp2),
-              Wrap(
-                spacing: Tokens.sp2,
-                runSpacing: Tokens.sp1,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(s.ooAttachments, style: TextStyle(color: muted, fontSize: 13)),
-                  for (final (i, f) in files.indexed)
-                    FileIcons(
-                      name: 'ooFile-${f['id']}',
-                      label: s.ooAttachment(i + 1, '${n['title'] ?? ''}'),
-                      load: () => ref.read(apiProvider).noticesFile(id: id, fileId: '${f['id']}'),
-                    ),
-                ],
-              ),
-            ],
-            if (n['ackRequired'] == true) ...[
-              const SizedBox(height: Tokens.sp2),
-              if (n['ackedByMe'] == true)
-                StatusChip(s.ooAcked, Tone.success)
-              else
-                FilledButton(
-                  key: Key('ooAck-$id'),
-                  onPressed: _busy ? null : _ack,
-                  child: Text(s.ooAck),
-                ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

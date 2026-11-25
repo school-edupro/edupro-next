@@ -3,6 +3,7 @@
 import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app_services.dart';
 import 'package:edupro/family/common.dart';
+import 'package:edupro/family/messages.dart' show MessagesScreen;
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
 import 'package:edupro/staff/data.dart' show ymd;
@@ -215,6 +216,62 @@ class School {
               },
           ],
         };
+      // one notice in full (Details), as the list has it
+      case 'GET /academics/notices/3':
+        return {
+          'id': '3',
+          'kind': 'office_order',
+          'title': 'Duty roster for the exams',
+          'body': '<p>Report at <b>8:30</b>.</p>',
+          'bodyFormat': 'html',
+          'publishFrom': '2026-11-20',
+          'publishedBy': 'Ravi Head',
+          'isPinned': false,
+          'ackRequired': true,
+          'ackedByMe': sent['ack']?.isNotEmpty == true,
+          'targets': [
+            {'label': 'Teaching staff'},
+          ],
+          'files': [
+            {'id': '91', 'name': 'roster.pdf'},
+          ],
+        };
+      case 'GET /academics/notices/3/files/91':
+        return const ApiFile(
+          bytes: [37, 80, 68, 70],
+          contentType: 'application/pdf',
+          name: 'roster.pdf',
+        );
+      case 'GET /comms/inbox':
+        return {
+          'data': [
+            {
+              'id': 'm1',
+              'messageIds': ['71'],
+              'title': 'Staff meeting at 3',
+              'subject': 'Staff meeting at 3',
+              'text': 'All teachers meet in the hall at 3 pm today.',
+              'html': null,
+              'channels': ['email', 'app'],
+              'student': null,
+              'sentAt': '2026-11-24T09:30:00Z',
+              'status': {'email': 'delivered'},
+              'readOnPhone': false,
+              'unread': true,
+              'attachments': [
+                {
+                  'name': 'agenda.pdf',
+                  'url': 'https://files.test/a.pdf',
+                  'contentType': 'application/pdf',
+                },
+              ],
+            },
+          ],
+          'page': {'more': false},
+        };
+      case 'POST /comms/inbox/read':
+        _keep('read', c.body);
+        return {'ok': true};
       case 'POST /academics/acks':
         _keep('ack', c.body);
         return {'ok': true};
@@ -297,22 +354,52 @@ void main() {
     expect(nativeScreen(staff, '/profile', s), isA<StaffProfileScreen>());
   });
 
-  testWidgets('office orders: the text, its attachment, acknowledge; all notices for staff', (
-    tester,
-  ) async {
-    final (t, school) = await pump(tester, const OfficeOrdersScreen(profile: staff));
-    expect(t.calls.first.query?['kind'], 'office_order');
-    expect(find.text('Duty roster for the exams'), findsOneWidget);
-    expect(find.text('Report at 8:30.'), findsOneWidget);
-    expect(find.textContaining('Ravi Head'), findsOneWidget);
-    expect(find.byKey(const Key('view-ooFile-91')), findsOneWidget);
-    expect(find.text('Winter timings'), findsNothing);
-    await tapIn(tester, find.byKey(const Key('ooAck-3')));
-    expect(school.sent['ack']!.single, {'type': 'notice', 'id': '3'});
-    await tapIn(tester, find.text(s.ooAllTab));
-    expect(find.text('Winter timings'), findsOneWidget);
-    expect(find.text(s.ooAcked), findsOneWidget);
-  });
+  testWidgets(
+    'office orders as notice cards: the date, tags, first lines; Details: text, file, acknowledge',
+    (tester) async {
+      final (t, school) = await pump(tester, const OfficeOrdersScreen(profile: staff));
+      expect(t.calls.first.query?['kind'], 'office_order');
+      // the card: the date block, the title, its tags, the first lines, attachments and who published it
+      expect(find.byKey(const Key('ooOrder-3')), findsOneWidget);
+      expect(find.text('20'), findsOneWidget);
+      expect(find.text('Duty roster for the exams'), findsOneWidget);
+      expect(find.text(s.noticeKind('office_order')), findsOneWidget);
+      expect(find.text(s.toAcknowledge), findsOneWidget);
+      expect(find.text('Report at 8:30.'), findsOneWidget);
+      expect(find.text('${s.attachmentsN(1)} · Ravi Head'), findsOneWidget);
+      expect(find.text('Winter timings'), findsNothing);
+      // Details: the whole text, the file, Acknowledge
+      await tapIn(tester, find.byKey(const Key('noticeDetails-3')));
+      expect(find.text('Teaching staff'), findsOneWidget);
+      expect(find.byKey(const Key('view-0')), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('ackNotice')));
+      expect(school.sent['ack']!.single, {'type': 'notice', 'id': '3'});
+      await tapIn(tester, find.byType(BackButton));
+      await tapIn(tester, find.text(s.ooAllTab));
+      expect(find.text('Winter timings'), findsOneWidget);
+      // acknowledged already: no "to acknowledge" on it
+      expect(find.text(s.toAcknowledge), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'staff messages as the notice cards: date block, new, channels, first lines, Details',
+    (tester) async {
+      final (_, school) = await pump(tester, const MessagesScreen(profile: staff));
+      expect(find.byKey(const Key('message-m1')), findsOneWidget);
+      expect(find.text('24'), findsOneWidget);
+      expect(find.text('Staff meeting at 3'), findsOneWidget);
+      expect(find.text('New'), findsOneWidget);
+      expect(find.text(s.channel('email')), findsOneWidget);
+      expect(find.text('All teachers meet in the hall at 3 pm today.'), findsOneWidget);
+      expect(find.textContaining(s.attachmentsN(1)), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('messageDetails-m1')));
+      expect(school.sent['read']!.single, {
+        'ids': ['71'],
+      });
+      expect(find.byKey(const Key('delivery')), findsOneWidget);
+    },
+  );
 
   testWidgets('office orders: no right to read them is an empty list', (tester) async {
     await pump(tester, const OfficeOrdersScreen(profile: staff), school: School(noRight: true));
@@ -492,6 +579,13 @@ void main() {
       await check();
       await pump(
         tester,
+        const MessagesScreen(profile: staff),
+        hindi: hindi,
+        dark: dark,
+      );
+      await check();
+      await pump(
+        tester,
         const StaffProfileScreen(profile: staff),
         hindi: hindi,
         dark: dark,
@@ -509,6 +603,8 @@ void main() {
       text: 2,
       size: const Size(360, 4000),
     );
+    expect(tester.takeException(), isNull);
+    await pump(tester, const MessagesScreen(profile: staff), text: 2, size: const Size(360, 3000));
     expect(tester.takeException(), isNull);
     await pump(
       tester,
