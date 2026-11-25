@@ -106,7 +106,11 @@ export {
 } from './components/LeaveCells';
 export {
   MyLeaveTab,
+  MyLeaveRow,
+  MY_LEAVE_HEAD,
   TeamLeaveTab,
+  TeamLeaveRow,
+  TEAM_LEAVE_HEAD,
   TeamAttendanceTab,
   TeamAttendanceGrid,
   ADMIN_LEAVE_PATHS,

@@ -211,7 +211,7 @@ const Page = {
   size: z.coerce
     .number()
     .int()
-    .refine((v) => [25, 50, 100].includes(v), '25, 50 or 100 a page')
+    .refine((v) => [10, 25, 50, 100].includes(v), '10, 25, 50 or 100 a page')
     .default(50),
 };
 export const RegisterQuerySchema = z.object({

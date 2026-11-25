@@ -167,6 +167,9 @@ export class LeaveDecideDto extends createZodDto(LeaveDecideSchema) {}
 export const LeaveListSchema = z.object({
   tab: z.enum(['inbox', 'pending', 'approved', 'rejected', 'all']).default('inbox'),
   q: blank(z.string().trim().max(80)),
+  /** given: that page of `size` (the staff app and website: 10, then more as they scroll); else the latest 300 */
+  page: z.coerce.number().int().min(1).max(500).optional(),
+  size: z.coerce.number().int().min(1).max(100).default(10),
 });
 export class LeaveListDto extends createZodDto(LeaveListSchema) {}
 

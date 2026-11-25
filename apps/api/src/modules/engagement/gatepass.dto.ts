@@ -164,6 +164,13 @@ export const MyPassesSchema = z.object({
 });
 export class MyPassesDto extends createZodDto(MyPassesSchema) {}
 
+/** The passes waiting on me; given `page`, that page of `size` (the staff app and website: 10, then more). */
+export const PassInboxSchema = z.object({
+  page: z.coerce.number().int().min(1).max(500).optional(),
+  size: z.coerce.number().int().min(1).max(100).default(10),
+});
+export class PassInboxDto extends createZodDto(PassInboxSchema) {}
+
 const LevelSchema = z
   .object({
     /** student / staff passes, or the hostel's home leave and outings (each with its own levels). */

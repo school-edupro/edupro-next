@@ -495,6 +495,9 @@ describe('the leave module against its plan (e2e)', () => {
       (await apply(t2, { leaveTypeId: ids.CL, from: PAST[10], to: PAST[10] })).json().detail,
     ).toMatch(/up to 5 days back/);
     const form = (await call(t2, 'GET', '/leave/mine?size=25')).json().types;
+    // 10 a page too, for the staff app and website (25 Nov 2026); other sizes are refused
+    expect((await call(t2, 'GET', '/leave/mine?size=10')).statusCode).toBe(200);
+    expect((await call(t2, 'GET', '/leave/mine?size=12')).statusCode).toBe(400);
     const cl = form.find((t: { id: string }) => t.id === ids.CL);
     expect(cl).toMatchObject({ earliest: add(today, -5), pastDays: 'up to 5 days back' });
     expect(form.find((t: { id: string }) => t.id === ids.EL)).toMatchObject({

@@ -14,6 +14,7 @@ import { ApiError } from '@edupro/bff';
 import { notFound } from 'next/navigation';
 import { LeaveApplyForm } from '@/components/LeaveApplyForm';
 import { bff } from '@/lib/bff';
+import { currentLang, t as tr } from '@/lib/i18n';
 import {
   LEAVE_STATUS,
   type MyAttendance,
@@ -29,6 +30,10 @@ import {
   decideMyLeaveCancel,
   withdrawMyLeave,
 } from './actions';
+import { LeaveFeed } from './LeaveFeed';
+
+/** My Leave and Reporties Leave: the latest 10 first, the rest as the person scrolls (docs/design/89). */
+const FEED = '10';
 
 const TEAM_STATUSES = ['waiting', 'all', ...Object.keys(LEAVE_STATUS)];
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -120,7 +125,7 @@ export async function StaffLeavePage({
   try {
     [d, att, teamLeave, teamAtt, [team, waitingWithMe]] = await Promise.all([
       fetch<MyLeave>(
-        `/leave/mine?${tab === 'leave' ? q({ page: String(page), size, from: lf.from, to: lf.to }) : 'size=25'}`,
+        `/leave/mine?${tab === 'leave' ? q({ page: '1', size: FEED, from: lf.from, to: lf.to }) : 'size=25'}`,
       ).catch((e: unknown) => {
         if (tab !== 'leave') throw e;
         leaveProblem = refused(e);
@@ -132,8 +137,8 @@ export async function StaffLeavePage({
       tab === 'team-leave'
         ? fetch<TeamLeave>(
             `/leave/self/team?${q({
-              page: String(page),
-              size,
+              page: '1',
+              size: FEED,
               from: lf.from,
               to: lf.to,
               status: status === 'all' ? '' : status,
@@ -181,6 +186,26 @@ export async function StaffLeavePage({
       const s = k.toString();
       return `${base}${s ? `?${s}` : ''}`;
     };
+  const lang = await currentLang();
+  const foot = {
+    more: tr(lang, 'Show more'),
+    loading: tr(lang, 'Loading…'),
+    failed: tr(lang, 'Could not load more.'),
+    end: tr(lang, 'That is everything.'),
+  };
+  const leaveActions = {
+    withdraw: withdrawMyLeave,
+    askCancel: askCancelMyLeave,
+    decide: decideMyLeave,
+    decideCancel: decideMyLeaveCancel,
+  };
+  const teamFilters: Record<string, string> = {
+    from: lf.from,
+    to: lf.to,
+    ...(status === 'all' ? {} : { status }),
+    ...(employeeId ? { employeeId } : {}),
+    ...(leaveTypeId ? { leaveTypeId } : {}),
+  };
   const paths: LeavePaths = {
     base,
     request: (id) => `/my-leave/${id}`,
@@ -267,6 +292,21 @@ export async function StaffLeavePage({
             link={link(lf)}
             paths={paths}
             actions={{ withdraw: withdrawMyLeave, askCancel: askCancelMyLeave }}
+            feed={
+              <LeaveFeed
+                key={`${lf.from}-${lf.to}`}
+                which="mine"
+                first={d.rows}
+                more={Number(FEED) < d.total}
+                filters={{ from: lf.from, to: lf.to }}
+                back={link(lf)(1)}
+                empty={
+                  d.employee ? 'No Leave Records in these dates.' : 'No leave for this sign-in.'
+                }
+                actions={leaveActions}
+                foot={foot}
+              />
+            }
           />
         </>
       ) : null}
@@ -279,6 +319,19 @@ export async function StaffLeavePage({
             link={link({ ...lf, status, employeeId, leaveTypeId })}
             paths={paths}
             actions={{ decide: decideMyLeave, decideCancel: decideMyLeaveCancel }}
+            feed={
+              <LeaveFeed
+                key={JSON.stringify(teamFilters)}
+                which="team"
+                first={teamLeave.rows}
+                more={Number(FEED) < teamLeave.total}
+                filters={teamFilters}
+                back={link({ ...lf, status, employeeId, leaveTypeId })(1)}
+                empty={status === 'waiting' ? 'No Leaves waiting for you.' : 'No Leaves.'}
+                actions={leaveActions}
+                foot={foot}
+              />
+            }
           />
         ) : (
           <p className="ep-alert ep-alert--warning" role="alert">

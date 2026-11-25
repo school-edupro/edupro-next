@@ -1001,3 +1001,25 @@ more as the user scrolls down").
     `staff_purchase_test`, `staff_files_test`, `staff_queries_test` (23 rows: 10 → 20 → 23; To answer asks
     `view=others`); a browser check on a throwaway test school (12 of each: 10, then 12 on scroll, desktop and
     phone, axe).
+- **My leave (My Leave and Reporties Leave), Student leave, Gate passes** (staff), app and website, the same: each
+  list shows its latest 10 (Student leave: those waiting on top; gate passes to approve: the soonest first) and
+  loads 10 more as the person scrolls; a filter starts again from the newest.
+  - API: staff leave's page size takes 10 as well as 25, 50 and 100 (`/leave/mine`, `/leave/self/team`);
+    `/attendance/leaves` and `/gate-passes/inbox` take `page` and `size` and answer with `page.total` (without
+    `page` as before: the latest 300 leaves, the first 200 passes); `/gate-passes/staff` was already paged.
+  - App: `PagedFeed` gains `nested` (the leave tabs sit under the leave cards in a NestedScrollView: the list takes
+    the view's own scrolling and notices the end from its scroll notifications) and `listKey` (each tab keeps its
+    place). My Leave and Reporties Leave show "n in all" with Excel and PDF instead of Previous / Next; Student leave
+    and Gate passes count what waits in their tabs from each page's answer. A decision, a withdrawal or a new pass
+    bumps `feedRoundProvider('my-leave' | 'team-leave' | 'student-leaves' | 'gate-inbox' | 'gate-mine')`.
+  - Website: My Leave and Reporties Leave keep the admin's table and filters; the shared `MyLeaveTab` /
+    `TeamLeaveTab` (packages/ui) take a `feed` that stands in place of the table and its pages (the admin's page,
+    without it, renders exactly as before), and their rows are `MyLeaveRow` / `TeamLeaveRow` with
+    `MY_LEAVE_HEAD` / `TEAM_LEAVE_HEAD`, shared by the admin's table and the staff website's `LeaveFeed`. Student
+    leave (`StudentLeaveFeed`) and Gate passes (`GatePassFeed`, both lists; a pass's stage is put into the person's
+    language on the server, `lib/gate-pass.ts` holds the shared pieces) the same way.
+  - Tests: API `leave-gaps` (10 a page, 12 refused), `attendance-plus` and `gatepass` (pages and totals; without
+    page as before); app `staff_lists_test` (23 rows: 10 → 20 → 23 for each list, the leave tabs under their
+    header); a render check that the admin's leave tables are the same HTML before and after the row split; a
+    browser check on a throwaway test school (12 student leaves, 12 own passes, 12 to approve: 10, then 12) and on
+    Alpha read-only (a coordinator's approved reporties' leave: 10, then 16), desktop and phone, axe.

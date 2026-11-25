@@ -8,6 +8,7 @@ import '../family/common.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
+import '../ui/paged_feed.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 
@@ -71,19 +72,6 @@ extension StudentLeaveWords on S {
   );
 }
 
-/// One list of Student leave: `inbox` (waiting on me) or `all` (all that came to me).
-final studentLeavesProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profile, String)>((
-  ref,
-  k,
-) async {
-  final (p, tab) = k;
-  final r = await cached(
-    'student-leaves:${p.id}:$tab',
-    () => ref.read(apiProvider).leaveList(tab: tab),
-  );
-  return Loaded(asJson(r.data), r.at, stale: r.stale);
-});
-
 final studentLeaveProvider = FutureProvider.autoDispose.family<Json, String>(
   (ref, id) async => asJson(await ref.read(apiProvider).leaveGet(id: id)),
 );
@@ -111,17 +99,28 @@ String _statusWord(S s, Json l) => l['status'] == 'pending' && l['waitingOn'] !=
 
 /// Student leave for the teacher as on the staff website: what waits for their approval, and all that came to them.
 /// An approved leave shows as LV in the class and the bus roll. No web page.
-class StudentLeaveScreen extends ConsumerWidget {
+class StudentLeaveScreen extends ConsumerStatefulWidget {
   const StudentLeaveScreen({super.key, required this.profile});
   final Profile profile;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StudentLeaveScreen> createState() => _StudentLeaveScreenState();
+}
+
+class _StudentLeaveScreenState extends ConsumerState<StudentLeaveScreen> {
+  /// how many wait on me (each page of either list says)
+  int _waiting = 0;
+
+  void _onAnswer(Json a) {
+    final n = (a['inbox'] as num?)?.toInt() ?? 0;
+    if (mounted && n != _waiting) setState(() => _waiting = n);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    final waiting =
-        (ref.watch(studentLeavesProvider((profile, 'inbox'))).value?.data['inbox'] as num?)
-            ?.toInt() ??
-        0;
+    final profile = widget.profile;
+    final waiting = _waiting;
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -141,8 +140,8 @@ class StudentLeaveScreen extends ConsumerWidget {
           Expanded(
             child: TabBarView(
               children: [
-                _List(profile: profile, tab: 'inbox'),
-                _List(profile: profile, tab: 'all'),
+                _List(profile: profile, tab: 'inbox', onAnswer: _onAnswer),
+                _List(profile: profile, tab: 'all', onAnswer: _onAnswer),
               ],
             ),
           ),
@@ -152,34 +151,63 @@ class StudentLeaveScreen extends ConsumerWidget {
   }
 }
 
-class _List extends ConsumerWidget {
-  const _List({required this.profile, required this.tab});
+/// One list — `inbox` (waiting on me) or `all` (all that came to me) — the latest 10 first (those waiting on top), 10
+/// more as the teacher scrolls (as the staff website).
+class _List extends ConsumerStatefulWidget {
+  const _List({required this.profile, required this.tab, required this.onAnswer});
   final Profile profile;
   final String tab;
+  final void Function(Json answer) onAnswer;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_List> createState() => _ListState();
+}
+
+class _ListState extends ConsumerState<_List> {
+  /// Student leave is not open to this person (403)
+  bool _notYours = false;
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    final value = ref.watch(studentLeavesProvider((profile, tab)));
-    final forbidden = value.error is ApiException && (value.error as ApiException).status == 403;
-    if (forbidden) {
-      return Padding(
-        padding: const EdgeInsets.all(Tokens.sp4),
-        child: Notice(text: s.slNotYours),
-      );
-    }
-    return LoadedList<Json>(
-      value: value,
-      refresh: () => ref.refresh(studentLeavesProvider((profile, tab)).future),
-      children: (d) {
-        final rows = asList(d['data']);
-        return [
-          Text(s.slHelp, style: const TextStyle(fontSize: 13)),
-          const SizedBox(height: Tokens.sp3),
-          if (rows.isEmpty) Notice(text: tab == 'inbox' ? s.slNoneInbox : s.slNoneAll),
-          for (final l in rows) _LeaveCard(profile: profile, leave: l),
-        ];
+    final round = ref.watch(feedRoundProvider('student-leaves'));
+    final tab = widget.tab;
+    return PagedFeed(
+      key: ValueKey('slFeed-$tab-$round'),
+      firstCacheKey: 'student-leaves-feed:${widget.profile.id}:$tab',
+      load: (page) async {
+        try {
+          return await ref.read(apiProvider).leaveList(tab: tab, page: page, size: 10);
+        } on ApiException catch (e) {
+          if (e.status == 403) {
+            return {
+              'data': <Object>[],
+              'page': {'total': 0},
+              'notYours': true,
+            };
+          }
+          rethrow;
+        }
       },
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      onAnswer: (a) {
+        if (mounted && _notYours != (a['notYours'] == true)) {
+          setState(() => _notYours = a['notYours'] == true);
+        }
+        widget.onAnswer(a);
+      },
+      header: (_, _) => [
+        Text(s.slHelp, style: const TextStyle(fontSize: 13)),
+        const SizedBox(height: Tokens.sp3),
+      ],
+      empty: tab == 'inbox' ? s.slNoneInbox : s.slNoneAll,
+      emptyCard: Notice(
+        text: _notYours ? s.slNotYours : (tab == 'inbox' ? s.slNoneInbox : s.slNoneAll),
+      ),
+      item: (context, l, _) => _LeaveCard(profile: widget.profile, leave: l),
     );
   }
 }
@@ -283,7 +311,7 @@ class _StudentLeaveDetailState extends ConsumerState<StudentLeaveDetail> {
             id: widget.id,
             body: LeaveDecideDto(outcome: outcome, note: note.isEmpty ? null : note),
           );
-      ref.invalidate(studentLeavesProvider);
+      ref.read(feedRoundProvider('student-leaves').notifier).bump();
       ref.invalidate(studentLeaveProvider(widget.id));
       // the header's Approvals count and list read again
       ref.invalidate(approvalsProvider);

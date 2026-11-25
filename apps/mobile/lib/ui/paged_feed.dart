@@ -51,6 +51,8 @@ class PagedFeed extends ConsumerStatefulWidget {
     this.onAnswer,
     this.footer = const [],
     this.endGap = 0,
+    this.nested = false,
+    this.listKey,
   });
 
   /// the API's answer for a page (1, 2, …)
@@ -79,6 +81,13 @@ class PagedFeed extends ConsumerStatefulWidget {
 
   /// room after the foot (for a floating button)
   final double endGap;
+
+  /// inside a NestedScrollView's tab (under a header that scrolls away): the list takes the view's own scrolling and
+  /// notices the end from its scroll notifications
+  final bool nested;
+
+  /// the list's key (a PageStorageKey keeps a tab's place)
+  final Key? listKey;
   final String? firstCacheKey;
 
   @override
@@ -113,6 +122,22 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
     if (_scroll.hasClients && _scroll.position.extentAfter < 400) _next();
   }
 
+  /// nested: near the end, or a first page that leaves the view short, brings the next page
+  bool _onNotice(Notification n) {
+    final m = n is ScrollNotification
+        ? n.metrics
+        : n is ScrollMetricsNotification
+        ? n.metrics
+        : null;
+    final depth = n is ScrollNotification
+        ? n.depth
+        : n is ScrollMetricsNotification
+        ? n.depth
+        : 1;
+    if (m != null && depth == 0 && m.extentAfter < 400) _next();
+    return false;
+  }
+
   Future<void> _next() async {
     if (_busy || !_more) return;
     setState(() {
@@ -143,7 +168,12 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
       widget.onAnswer?.call(json);
       // a short first page that does not fill the screen: bring the next one too
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scroll.hasClients && _scroll.position.maxScrollExtent <= 0) _next();
+        if (mounted &&
+            !widget.nested &&
+            _scroll.hasClients &&
+            _scroll.position.maxScrollExtent <= 0) {
+          _next();
+        }
       });
     } catch (e) {
       if (mounted) setState(() => _error = e);
@@ -170,63 +200,59 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
     final muted = Theme.of(context).brightness == Brightness.dark
         ? Tokens.mobGray300
         : Tokens.textMuted;
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView(
-        controller: _scroll,
-        padding: const EdgeInsets.all(Tokens.sp4),
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          if (_staleAt != null) ...[StaleLine(at: _staleAt!), const SizedBox(height: Tokens.sp3)],
-          ...?widget.header?.call(_total, _answer),
-          for (var i = 0; i < _items.length; i++)
-            widget.item(context, _items[i], (changed) => setState(() => _items[i] = changed)),
-          if (_busy)
-            Padding(
-              padding: const EdgeInsets.all(Tokens.sp4),
-              child: Center(
-                child: Semantics(label: s.loading, child: const CircularProgressIndicator()),
-              ),
-            )
-          else if (_error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: Tokens.sp3),
-              child: Column(
-                children: [
-                  ErrorText(_items.isEmpty ? errorText(s, _error!) : s.pfFailed),
-                  OutlinedButton(
-                    key: const Key('feedRetry'),
-                    onPressed: _next,
-                    child: Text(s.retry),
-                  ),
-                ],
-              ),
-            )
-          else if (_items.isEmpty)
-            widget.emptyCard ?? EmptyLine(widget.empty)
-          else if (_more)
-            Center(
-              child: TextButton(
-                key: const Key('feedMore'),
-                onPressed: _next,
-                child: Text(s.pfMore),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: Tokens.sp3),
-              child: Center(
-                child: Text(
-                  s.pfEnd,
-                  key: const Key('feedEnd'),
-                  style: TextStyle(color: muted),
-                ),
+    final list = ListView(
+      key: widget.listKey,
+      controller: widget.nested ? null : _scroll,
+      padding: const EdgeInsets.all(Tokens.sp4),
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        if (_staleAt != null) ...[StaleLine(at: _staleAt!), const SizedBox(height: Tokens.sp3)],
+        ...?widget.header?.call(_total, _answer),
+        for (var i = 0; i < _items.length; i++)
+          widget.item(context, _items[i], (changed) => setState(() => _items[i] = changed)),
+        if (_busy)
+          Padding(
+            padding: const EdgeInsets.all(Tokens.sp4),
+            child: Center(
+              child: Semantics(label: s.loading, child: const CircularProgressIndicator()),
+            ),
+          )
+        else if (_error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Tokens.sp3),
+            child: Column(
+              children: [
+                ErrorText(_items.isEmpty ? errorText(s, _error!) : s.pfFailed),
+                OutlinedButton(key: const Key('feedRetry'), onPressed: _next, child: Text(s.retry)),
+              ],
+            ),
+          )
+        else if (_items.isEmpty)
+          widget.emptyCard ?? EmptyLine(widget.empty)
+        else if (_more)
+          Center(
+            child: TextButton(key: const Key('feedMore'), onPressed: _next, child: Text(s.pfMore)),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Tokens.sp3),
+            child: Center(
+              child: Text(
+                s.pfEnd,
+                key: const Key('feedEnd'),
+                style: TextStyle(color: muted),
               ),
             ),
-          ...widget.footer,
-          if (widget.endGap > 0) SizedBox(height: widget.endGap),
-        ],
-      ),
+          ),
+        ...widget.footer,
+        if (widget.endGap > 0) SizedBox(height: widget.endGap),
+      ],
+    );
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: widget.nested
+          ? NotificationListener<Notification>(onNotification: _onNotice, child: list)
+          : list,
     );
   }
 }

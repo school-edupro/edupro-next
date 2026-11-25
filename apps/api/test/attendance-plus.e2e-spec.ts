@@ -559,6 +559,14 @@ describe('attendance: leave, gate pass, windows and bus roll (e2e)', () => {
     // the co-class teacher is not asked while the section has its class teacher
     expect((await get('/attendance/leaves', other)).json().data).toHaveLength(0);
     expect((await get('/attendance/leaves', teacher)).json()).toMatchObject({ inbox: 1 });
+    // a page at a time for the staff app and website (25 Nov 2026); without page, as before
+    expect((await get('/attendance/leaves', teacher)).json().page).toBeNull();
+    const paged = (await get('/attendance/leaves?tab=inbox&page=1&size=10', teacher)).json();
+    expect(paged).toMatchObject({ inbox: 1, page: { number: 1, size: 10, total: 1 } });
+    expect(paged.data).toHaveLength(1);
+    expect(
+      (await get('/attendance/leaves?tab=inbox&page=2&size=10', teacher)).json().data,
+    ).toHaveLength(0);
     expect(
       (await post(`/attendance/leaves/${short.json().id}/decide`, other, { outcome: 'approved' }))
         .statusCode,

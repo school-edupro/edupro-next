@@ -161,6 +161,12 @@ describe('gate pass v2 (e2e)', () => {
         .statusCode,
     ).toBe(403);
     expect((await get('/gate-passes/inbox', teacher)).data).toHaveLength(1);
+    // a page at a time for the staff app and website (25 Nov 2026); without page, as before
+    expect((await get('/gate-passes/inbox', teacher)).page).toBeNull();
+    const p1 = await get('/gate-passes/inbox?page=1&size=10', teacher);
+    expect(p1.page).toEqual({ number: 1, size: 10, total: 1 });
+    expect(p1.data).toHaveLength(1);
+    expect((await get('/gate-passes/inbox?page=2&size=10', teacher)).data).toHaveLength(0);
     // a rejection needs its reason
     expect(
       (await post(`/gate-passes/${passId}/decide`, teacher, { outcome: 'rejected' })).statusCode,

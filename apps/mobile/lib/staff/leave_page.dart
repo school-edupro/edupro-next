@@ -11,6 +11,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
+import '../ui/paged_feed.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'my_attendance.dart' show CorrectionForm, dayTone;
@@ -29,45 +30,8 @@ final leaveMenuProvider = FutureProvider.autoDispose.family<Json, Profile>((ref,
   }
 });
 
-/// My leave touching From–To, a page of 25.
-final myLeaveListProvider = FutureProvider.autoDispose.family<Json, (Profile, String, String, int)>(
-  (ref, a) async {
-    final (_, from, to, page) = a;
-    return asJson(
-      await ref
-          .watch(apiProvider)
-          .staffLeaveMine(
-            page: page,
-            size: 25,
-            from: from.isEmpty ? null : from,
-            to: to.isEmpty ? null : to,
-          ),
-    );
-  },
-);
-
-/// The filters of a reporties' list, as one key: status, employee, type, from, to, page.
-typedef TeamFilter = (String, String, String, String, String, int);
-
-final teamLeaveProvider = FutureProvider.autoDispose.family<Json, (Profile, TeamFilter)>((
-  ref,
-  a,
-) async {
-  final (status, employeeId, leaveTypeId, from, to, page) = a.$2;
-  return asJson(
-    await ref
-        .watch(apiProvider)
-        .leaveSelfTeam(
-          status: status == 'all' ? null : status,
-          employeeId: employeeId.isEmpty ? null : employeeId,
-          leaveTypeId: leaveTypeId.isEmpty ? null : leaveTypeId,
-          from: from.isEmpty ? null : from,
-          to: to.isEmpty ? null : to,
-          page: page,
-          size: 25,
-        ),
-  );
-});
+/// The filters of a reporties' list, as one key: status, employee, type, from, to.
+typedef TeamFilter = (String, String, String, String, String);
 
 final teamAttendanceProvider = FutureProvider.autoDispose
     .family<Json, (Profile, String, String, String, int)>((ref, a) async {
@@ -433,7 +397,7 @@ class _Balance extends ConsumerWidget {
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(s.leaveSent)));
       ref.invalidate(myLeaveProvider(profile));
-      ref.invalidate(myLeaveListProvider);
+      ref.read(feedRoundProvider('my-leave').notifier).bump();
     }
   }
 }
@@ -467,6 +431,42 @@ class _DateButton extends ConsumerWidget {
         );
         if (d != null) on(ymd(d));
       },
+    );
+  }
+}
+
+/// How many in all and the Excel and PDF of everything (a list that loads as it scrolls).
+class _FeedBar extends ConsumerWidget {
+  const _FeedBar({required this.total, this.file});
+  final int total;
+
+  /// the list's file (Excel or PDF) as the API answers it
+  final Future<dynamic> Function(String format)? file;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    return Wrap(
+      spacing: Tokens.sp2,
+      runSpacing: Tokens.sp2,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          s.lvInAll(total),
+          key: const Key('lvInAll'),
+          style: const TextStyle(fontWeight: Tokens.fwSemibold),
+        ),
+        if (file != null && total > 0) ...[
+          OutlinedButton(
+            onPressed: () => _openFile(context, s.lvExcel, () => file!('xlsx')),
+            child: Text(s.lvExcel),
+          ),
+          OutlinedButton(
+            onPressed: () => _openFile(context, s.lvPdf, () => file!('pdf')),
+            child: Text(s.lvPdf),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -864,7 +864,8 @@ Future<String?> leaveReasonDialog(
   );
 }
 
-/// My Leave: From and To (the leave year), my leave touching them a page at a time, Withdraw / Ask to cancel.
+/// My Leave: From and To (the leave year), my leave touching them — the latest 10, then 10 more as I scroll —
+/// Withdraw / Ask to cancel.
 class _MyLeaveTab extends ConsumerStatefulWidget {
   const _MyLeaveTab({required this.profile});
   final Profile profile;
@@ -876,17 +877,28 @@ class _MyLeaveTab extends ConsumerStatefulWidget {
 class _MyLeaveTabState extends ConsumerState<_MyLeaveTab> {
   late String _from = leaveYearOf(schoolToday()).$1;
   late String _to = leaveYearOf(schoolToday()).$2;
-  int _page = 1;
 
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    final key = (widget.profile, _from, _to, _page);
-    final async = ref.watch(myLeaveListProvider(key));
-    return ListView(
-      key: const PageStorageKey('lvLeave'),
-      padding: const EdgeInsets.all(Tokens.sp4),
-      children: [
+    final round = ref.watch(feedRoundProvider('my-leave'));
+    return PagedFeed(
+      key: ValueKey('lvLeaveFeed-$_from-$_to-$round'),
+      nested: true,
+      listKey: const PageStorageKey('lvLeave'),
+      load: (page) => ref
+          .read(apiProvider)
+          .staffLeaveMine(
+            page: page,
+            size: 10,
+            from: _from.isEmpty ? null : _from,
+            to: _to.isEmpty ? null : _to,
+          ),
+      parse: (a, page) {
+        final total = (a['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['rows']), more: page * 10 < total, total: total);
+      },
+      header: (total, _) => [
         Wrap(
           spacing: Tokens.sp2,
           runSpacing: Tokens.sp2,
@@ -895,60 +907,47 @@ class _MyLeaveTabState extends ConsumerState<_MyLeaveTab> {
               keyName: 'lvFrom',
               label: s.lvFrom,
               value: _from,
-              on: (v) => setState(() {
-                _from = v;
-                _page = 1;
-              }),
+              on: (v) => setState(() => _from = v),
             ),
             _DateButton(
               keyName: 'lvTo',
               label: s.lvTo,
               value: _to,
-              on: (v) => setState(() {
-                _to = v;
-                _page = 1;
-              }),
+              on: (v) => setState(() => _to = v),
             ),
           ],
         ),
         const SizedBox(height: Tokens.sp3),
-        if (!async.hasValue)
-          async.hasError ? ErrorText(errorText(s, async.error!)) : const LinearProgressIndicator()
-        else ...[
-          _ListBar(
-            page: _page,
-            size: 25,
-            total: (async.value!['total'] as num?)?.toInt() ?? 0,
-            onPage: (p) => setState(() => _page = p),
+        if (total != null)
+          _FeedBar(
+            total: total,
             file: (f) => ref.read(apiProvider).leaveSelfLeaveFile(from: _from, to: _to, format: f),
           ),
-          if (asList(async.value!['rows']).isEmpty) EmptyLine(s.lvNoLeave),
-          for (final r in asList(async.value!['rows']))
-            _LeaveCard(
-              r: r,
-              profile: widget.profile,
-              actions: [
-                if (asJson(r['can'])['withdraw'] == true)
-                  OutlinedButton(
-                    key: Key('lvWithdraw-${r['id']}'),
-                    onPressed: () => _withdraw(r),
-                    child: Text(s.withdraw),
-                  ),
-                if (asJson(r['can'])['requestCancel'] == true)
-                  OutlinedButton(
-                    key: Key('lvAskCancel-${r['id']}'),
-                    onPressed: () => _askCancel(r),
-                    child: Text(s.askCancel),
-                  ),
-              ],
+      ],
+      empty: s.lvNoLeave,
+      item: (context, r, _) => _LeaveCard(
+        r: r,
+        profile: widget.profile,
+        actions: [
+          if (asJson(r['can'])['withdraw'] == true)
+            OutlinedButton(
+              key: Key('lvWithdraw-${r['id']}'),
+              onPressed: () => _withdraw(r),
+              child: Text(s.withdraw),
+            ),
+          if (asJson(r['can'])['requestCancel'] == true)
+            OutlinedButton(
+              key: Key('lvAskCancel-${r['id']}'),
+              onPressed: () => _askCancel(r),
+              child: Text(s.askCancel),
             ),
         ],
-      ],
+      ),
     );
   }
 
   void _refresh() {
-    ref.invalidate(myLeaveListProvider);
+    ref.read(feedRoundProvider('my-leave').notifier).bump();
     ref.invalidate(myLeaveProvider(widget.profile));
   }
 
@@ -1028,8 +1027,8 @@ Widget _pick(
   dropdownMenuEntries: [for (final (v, l) in entries) DropdownMenuEntry(value: v, label: l)],
 );
 
-/// Reporties Leave: Waiting with me first, or my reportees' leave by employee, type, status and dates; Approve, or
-/// Reject with a reason, in the row (a cancellation too).
+/// Reporties Leave: Waiting with me first, or my reportees' leave by employee, type, status and dates — the latest 10,
+/// then 10 more as I scroll; Approve, or Reject with a reason, in the row (a cancellation too).
 class _TeamLeaveTab extends ConsumerStatefulWidget {
   const _TeamLeaveTab({required this.profile, required this.team});
   final Profile profile;
@@ -1045,66 +1044,64 @@ class _TeamLeaveTabState extends ConsumerState<_TeamLeaveTab> {
   String _type = '';
   late String _from = leaveYearOf(schoolToday()).$1;
   late String _to = leaveYearOf(schoolToday()).$2;
-  int _page = 1;
   bool _busy = false;
 
-  TeamFilter get _f => (_status, _employee, _type, _from, _to, _page);
+  /// the employees and types to filter by (from the latest page)
+  Json _filters = const {};
+
+  TeamFilter get _f => (_status, _employee, _type, _from, _to);
 
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    final async = ref.watch(teamLeaveProvider((widget.profile, _f)));
-    final t = async.value;
-    final filters = asJson(t?['filters']);
-    return ListView(
-      key: const PageStorageKey('lvTeamLeave'),
-      padding: const EdgeInsets.all(Tokens.sp4),
-      children: [
-        _pick(
-          'lvStatus',
-          s.lvStatus,
-          _status,
-          [
-            ('waiting', s.lvWaitingWithMe),
-            ('all', s.lvAll),
-            for (final x in ['pending', 'approved', 'rejected', 'withdrawn', 'cancelled'])
-              (x, x == 'pending' ? s.lvWaitingAny : s.staffLeaveStatus(x)),
-          ],
-          (v) => setState(() {
-            _status = v.isEmpty ? 'waiting' : v;
-            _page = 1;
-          }),
-        ),
+    final round = ref.watch(feedRoundProvider('team-leave'));
+    final filters = _filters;
+    final (status, employeeId, leaveTypeId, from, to) = _f;
+    return PagedFeed(
+      key: ValueKey('lvTeamFeed-$status-$employeeId-$leaveTypeId-$from-$to-$round'),
+      nested: true,
+      listKey: const PageStorageKey('lvTeamLeave'),
+      load: (page) => ref
+          .read(apiProvider)
+          .leaveSelfTeam(
+            status: status == 'all' ? null : status,
+            employeeId: employeeId.isEmpty ? null : employeeId,
+            leaveTypeId: leaveTypeId.isEmpty ? null : leaveTypeId,
+            from: from.isEmpty ? null : from,
+            to: to.isEmpty ? null : to,
+            page: page,
+            size: 10,
+          ),
+      parse: (a, page) {
+        final total = (a['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['rows']), more: page * 10 < total, total: total);
+      },
+      onAnswer: (a) {
+        final f = asJson(a['filters']);
+        if (mounted && f.isNotEmpty && _filters.isEmpty) setState(() => _filters = f);
+      },
+      empty: widget.team == 0
+          ? s.lvNobody
+          : (_status == 'waiting' ? s.lvNoneWaiting : s.lvNoLeaves),
+      header: (total, _) => [
+        _pick('lvStatus', s.lvStatus, _status, [
+          ('waiting', s.lvWaitingWithMe),
+          ('all', s.lvAll),
+          for (final x in ['pending', 'approved', 'rejected', 'withdrawn', 'cancelled'])
+            (x, x == 'pending' ? s.lvWaitingAny : s.staffLeaveStatus(x)),
+        ], (v) => setState(() => _status = v.isEmpty ? 'waiting' : v)),
         const SizedBox(height: Tokens.sp2),
-        _pick(
-          'lvEmployee',
-          s.lvEmployee,
-          _employee,
-          [
-            ('', s.lvAllEmployees),
-            for (final e in asList(filters['employees']))
-              ('${e['id']}', '${e['name']} (${e['code']})'),
-          ],
-          (v) => setState(() {
-            _employee = v;
-            _page = 1;
-          }),
-        ),
+        _pick('lvEmployee', s.lvEmployee, _employee, [
+          ('', s.lvAllEmployees),
+          for (final e in asList(filters['employees']))
+            ('${e['id']}', '${e['name']} (${e['code']})'),
+        ], (v) => setState(() => _employee = v)),
         const SizedBox(height: Tokens.sp2),
-        _pick(
-          'lvType',
-          s.lvType,
-          _type,
-          [
-            ('', s.lvAllTypes),
-            for (final x in asList(filters['types'])) ('${x['id']}', '${x['code']} — ${x['name']}'),
-          ],
-          (v) => setState(() {
-            _type = v;
-            _page = 1;
-          }),
-        ),
+        _pick('lvType', s.lvType, _type, [
+          ('', s.lvAllTypes),
+          for (final x in asList(filters['types'])) ('${x['id']}', '${x['code']} — ${x['name']}'),
+        ], (v) => setState(() => _type = v)),
         const SizedBox(height: Tokens.sp2),
         Wrap(
           spacing: Tokens.sp2,
@@ -1114,19 +1111,13 @@ class _TeamLeaveTabState extends ConsumerState<_TeamLeaveTab> {
               keyName: 'lvTeamFrom',
               label: s.lvFrom,
               value: _from,
-              on: (v) => setState(() {
-                _from = v;
-                _page = 1;
-              }),
+              on: (v) => setState(() => _from = v),
             ),
             _DateButton(
               keyName: 'lvTeamTo',
               label: s.lvTo,
               value: _to,
-              on: (v) => setState(() {
-                _to = v;
-                _page = 1;
-              }),
+              on: (v) => setState(() => _to = v),
             ),
           ],
         ),
@@ -1134,14 +1125,9 @@ class _TeamLeaveTabState extends ConsumerState<_TeamLeaveTab> {
           padding: const EdgeInsets.symmetric(vertical: Tokens.sp2),
           child: Text(s.lvWaitingHelp, style: TextStyle(color: muted, fontSize: 13)),
         ),
-        if (t == null)
-          async.hasError ? ErrorText(errorText(s, async.error!)) : const LinearProgressIndicator()
-        else ...[
-          _ListBar(
-            page: _page,
-            size: 25,
-            total: (t['total'] as num?)?.toInt() ?? 0,
-            onPage: (p) => setState(() => _page = p),
+        if (total != null)
+          _FeedBar(
+            total: total,
             file: (f) => ref
                 .read(apiProvider)
                 .leaveSelfTeam(
@@ -1153,36 +1139,31 @@ class _TeamLeaveTabState extends ConsumerState<_TeamLeaveTab> {
                   format: f,
                 ),
           ),
-          if (widget.team == 0 && asList(t['rows']).isEmpty) EmptyLine(s.lvNobody),
-          if (widget.team > 0 && asList(t['rows']).isEmpty)
-            EmptyLine(_status == 'waiting' ? s.lvNoneWaiting : s.lvNoLeaves),
-          for (final r in asList(t['rows']))
-            () {
-              final can = asJson(r['can']);
-              final cancellation = can['decide'] != true && can['decideCancel'] == true;
-              return _LeaveCard(
-                r: r,
-                profile: widget.profile,
-                who: asJson(r['employee']),
-                actions: [
-                  if (can['decide'] == true || can['decideCancel'] == true) ...[
-                    FilledButton(
-                      key: Key('lvApprove-${r['id']}'),
-                      style: FilledButton.styleFrom(minimumSize: const Size(48, 44)),
-                      onPressed: _busy ? null : () => _decide(r, 'approved', cancellation),
-                      child: Text(cancellation ? s.lvApproveCancel : s.lvApprove),
-                    ),
-                    OutlinedButton(
-                      key: Key('lvReject-${r['id']}'),
-                      onPressed: _busy ? null : () => _reject(r, cancellation),
-                      child: Text(cancellation ? s.lvRejectCancel : s.lvReject),
-                    ),
-                  ],
-                ],
-              );
-            }(),
-        ],
       ],
+      item: (context, r, _) {
+        final can = asJson(r['can']);
+        final cancellation = can['decide'] != true && can['decideCancel'] == true;
+        return _LeaveCard(
+          r: r,
+          profile: widget.profile,
+          who: asJson(r['employee']),
+          actions: [
+            if (can['decide'] == true || can['decideCancel'] == true) ...[
+              FilledButton(
+                key: Key('lvApprove-${r['id']}'),
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 44)),
+                onPressed: _busy ? null : () => _decide(r, 'approved', cancellation),
+                child: Text(cancellation ? s.lvApproveCancel : s.lvApprove),
+              ),
+              OutlinedButton(
+                key: Key('lvReject-${r['id']}'),
+                onPressed: _busy ? null : () => _reject(r, cancellation),
+                child: Text(cancellation ? s.lvRejectCancel : s.lvReject),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -1212,7 +1193,7 @@ class _TeamLeaveTabState extends ConsumerState<_TeamLeaveTab> {
       } else {
         await api.staffLeaveDecide(id: '${r['id']}', body: body);
       }
-      ref.invalidate(teamLeaveProvider);
+      ref.read(feedRoundProvider('team-leave').notifier).bump();
       ref.invalidate(leaveMenuProvider(widget.profile));
       if (mounted) {
         ScaffoldMessenger.of(context)

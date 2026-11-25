@@ -3,25 +3,14 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { FileLinks } from '@/components/FileLinks';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { approveLeave, rejectLeave } from './actions';
+import { StudentLeaveFeed, leaveDays, type StudentLeave } from './StudentLeaveFeed';
 
-interface Leave {
-  id: string;
-  number: string;
-  student: string;
-  admissionNo: string | null;
-  section: string | null;
-  leaveTypeLabel: string;
-  fromDate: string;
-  toDate: string;
-  days: number;
-  reason: string;
-  long: boolean;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
-  appliedBy: string | null;
-  waitingOn: string | null;
-  decisionNote: string | null;
-}
+/** The first page: the latest 10 (those waiting on top); the rest load as the teacher scrolls. */
+const PAGE = 10;
+
+type Leave = StudentLeave;
 interface Detail extends Leave {
   files: Array<{ id: string; name: string }>;
   approvals: Array<{
@@ -40,16 +29,7 @@ const TONE: Record<string, 'warning' | 'success' | 'danger' | 'neutral'> = {
   rejected: 'danger',
   cancelled: 'neutral',
 };
-const day = (d: string) =>
-  new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    timeZone: 'UTC',
-  });
-const days = (l: Leave) =>
-  l.fromDate === l.toDate
-    ? `${day(l.fromDate)} · 1 day`
-    : `${day(l.fromDate)} to ${day(l.toDate)} · ${String(l.days)} days`;
+const days = leaveDays;
 
 /**
  * Student leave for the teacher: what waits for their approval, and what they decided. An approved leave
@@ -68,9 +48,9 @@ export default async function TeacherLeavesPage({
 }) {
   const sp = await searchParams;
   const tab = sp.tab === 'all' ? 'all' : 'inbox';
-  let list: { data: Leave[]; inbox: number };
+  let list: { data: Leave[]; inbox: number; page: { total: number } | null };
   try {
-    list = await bff.api.fetch<{ data: Leave[]; inbox: number }>(`/attendance/leaves?tab=${tab}`);
+    list = await bff.api.fetch(`/attendance/leaves?tab=${tab}&page=1&size=${String(PAGE)}`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)
@@ -82,6 +62,13 @@ export default async function TeacherLeavesPage({
       );
     throw error;
   }
+  const lang = await currentLang();
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   const open = /^\d+$/.test(sp.open ?? '')
     ? await bff.api.fetch<Detail>(`/attendance/leaves/${sp.open!}`).catch(() => null)
     : null;
@@ -195,41 +182,13 @@ export default async function TeacherLeavesPage({
       {list.data.length === 0 ? (
         <Card>{tab === 'inbox' ? 'No leave waits for your approval.' : 'Nothing here yet.'}</Card>
       ) : (
-        list.data.map((l) => (
-          <Card key={l.id} style={{ marginBottom: 'var(--sp-2)' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 'var(--sp-3)',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-              }}
-            >
-              <div>
-                <strong>{l.student}</strong>{' '}
-                <span className="ep-kicker">
-                  {[l.section, l.number].filter(Boolean).join(' · ')}
-                </span>
-                <div>
-                  {l.leaveTypeLabel} · {days(l)}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-                <Badge tone={TONE[l.status] ?? 'neutral'}>
-                  {l.status === 'pending' && l.waitingOn ? `Waiting: ${l.waitingOn}` : l.status}
-                </Badge>
-                <a
-                  className="ep-btn ep-btn--secondary ep-btn--sm"
-                  href={`/leaves?tab=${tab}&open=${l.id}`}
-                  aria-label={`Open ${l.number} of ${l.student}`}
-                >
-                  Open
-                </a>
-              </div>
-            </div>
-          </Card>
-        ))
+        <StudentLeaveFeed
+          key={tab}
+          first={list.data}
+          more={PAGE < (list.page?.total ?? 0)}
+          tab={tab}
+          foot={foot}
+        />
       )}
     </main>
   );

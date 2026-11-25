@@ -1,9 +1,11 @@
 'use server';
 /**
  * The staff website's lists that load as they scroll (Messages: messages and notices; Office orders; Forms and
- * declarations; Queries; File movement; Purchase indents): the next page of 10, and acknowledging a notice in place.
+ * declarations; Queries; File movement; Purchase indents; leave; Student leave; Gate passes): the next page of 10,
+ * and acknowledging a notice in place.
  */
 import { bff } from './bff';
+import { currentLang, t } from './i18n';
 
 /** How many a page of the Messages section brings: the latest 10, then 10 more as the person scrolls. */
 const PAGE = 10;
@@ -116,6 +118,68 @@ export async function loadIndents(
       `/purchase/indents?${qs}&page=${String(page)}&size=${String(PAGE)}`,
     );
     return { ok: true, data: r.data, more: page * PAGE < r.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of Student leave: `inbox` (waiting on me, the oldest waiting first) or `all`. */
+export async function loadStudentLeaves(
+  page: number,
+  tab: 'inbox' | 'all',
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  if (tab !== 'inbox' && tab !== 'all') return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ data: unknown[]; page: { total: number } }>(
+      `/attendance/leaves?tab=${tab}&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.data, more: page * PAGE < r.page.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of gate passes: `inbox` (waiting on me, the soonest first) or `mine` (my own, the latest first). */
+export async function loadGatePasses(
+  page: number,
+  box: 'inbox' | 'mine',
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  if (box !== 'inbox' && box !== 'mine') return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ data: Array<{ stage: string }>; page: { total: number } }>(
+      `/gate-passes/${box === 'inbox' ? 'inbox' : 'staff'}?page=${String(page)}&size=${String(PAGE)}`,
+    );
+    const lang = await currentLang();
+    return {
+      ok: true,
+      data: r.data.map((x) => ({ ...x, stageLabel: t(lang, x.stage) })),
+      more: page * PAGE < r.page.total,
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of my leave, or of my reporties' leave, with the tab's filters. */
+export async function loadStaffLeave(
+  page: number,
+  which: 'mine' | 'team',
+  filters: Record<string, string>,
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  if (which !== 'mine' && which !== 'team') return { ok: false };
+  const qs = filterQuery(
+    filters,
+    which === 'mine' ? ['from', 'to'] : ['from', 'to', 'status', 'employeeId', 'leaveTypeId'],
+  );
+  if (qs === null) return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ rows: unknown[]; total: number }>(
+      `/leave/${which === 'mine' ? 'mine' : 'self/team'}?${qs}&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.rows, more: page * PAGE < r.total };
   } catch {
     return { ok: false };
   }

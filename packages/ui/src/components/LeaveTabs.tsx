@@ -38,6 +38,267 @@ export type LeaveAct = (id: string, fd: FormData) => void | Promise<void>;
 /** a leave's attached document as the website shows files (View / Download); none given: the word "Attached" */
 export type LeaveFileLink = (fileId: string, label: string) => ReactNode;
 
+/** My Leave's columns (the admin's table and the staff website's list that loads as it scrolls). */
+export const MY_LEAVE_HEAD = [
+  'Sr No',
+  'Leave Id',
+  'Leave Type',
+  'Days',
+  'Attachment',
+  'Is Half Day',
+  'Reason',
+  'Applied Date',
+  'Action By',
+  'Action Date',
+  'Actions',
+  'Status',
+] as const;
+/** Reporties Leave's columns. */
+export const TEAM_LEAVE_HEAD = [
+  'Sr.No.',
+  'Leave Id',
+  'Emp Name',
+  'Applied Date',
+  'Attachment',
+  'Days',
+  'Is Half Day',
+  'Leave Type',
+  'On Behalf?',
+  'On Behalf Created By',
+  'Reason',
+  'Action',
+  'Status',
+] as const;
+
+/** How many in all and the Excel and PDF of everything (a list that loads as it scrolls: no pages). */
+function FeedBar({
+  total,
+  noun,
+  files,
+}: {
+  total: number;
+  noun: string;
+  files?: { xlsx: string; pdf: string } | null;
+}) {
+  return (
+    <div className="ep-listbar">
+      <div className="ep-listbar__end">
+        <span className="ep-field__help">
+          {total} {noun}
+        </span>
+        {files && total ? (
+          <>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href={files.xlsx} download>
+              Excel
+            </a>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href={files.pdf} download>
+              PDF
+            </a>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** One leave of My Leave: its row (the admin's table and the staff website's list). */
+export function MyLeaveRow({
+  r,
+  n,
+  back,
+  paths,
+  actions,
+  fileLink,
+}: {
+  r: MyLeave['rows'][number];
+  /** its number on the list */
+  n: number;
+  /** where the actions come back to */
+  back: string;
+  paths: LeavePaths;
+  actions: { withdraw: LeaveAct; askCancel: LeaveAct };
+  fileLink?: LeaveFileLink;
+}) {
+  return (
+    <tr>
+      <td>{n}</td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <a href={paths.request(r.id)}>{r.number}</a>
+      </td>
+      <td>
+        {r.leaveType.code} — {r.leaveType.name}
+      </td>
+      <td>
+        <DateChips r={r} />
+      </td>
+      <td>
+        {r.documentFileId
+          ? fileLink
+            ? fileLink(r.documentFileId, `the document of ${r.number}`)
+            : 'Attached'
+          : '—'}
+      </td>
+      <td style={{ whiteSpace: 'nowrap' }}>{halfWords(r)}</td>
+      <td>{r.reason}</td>
+      <td style={{ whiteSpace: 'nowrap' }}>{when(r.appliedAt)}</td>
+      <td>{r.decidedBy ?? (r.decidedAt ? 'System' : '')}</td>
+      <td style={{ whiteSpace: 'nowrap' }}>{when(r.decidedAt)}</td>
+      <td>
+        <div className="ep-rowacts">
+          <a
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            href={paths.request(r.id)}
+            aria-label={`View ${r.number}`}
+          >
+            View
+          </a>
+          {r.can.withdraw ? (
+            <LeaveDialogButton
+              id={`ml-wd-${r.id}`}
+              label="Withdraw"
+              title={`Withdraw ${r.number}`}
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+            >
+              <form action={actions.withdraw.bind(null, r.id)} className="ep-form-section__body">
+                <input type="hidden" name="back" value={back} />
+                <p className="ep-field__help">
+                  It has not been decided yet: withdrawing it gives the days back.
+                </p>
+                <label className="ep-field" htmlFor={`ml-wd-${r.id}-why`}>
+                  <span className="ep-field__label">Why (optional)</span>
+                  <textarea
+                    id={`ml-wd-${r.id}-why`}
+                    name="reason"
+                    className="ep-input"
+                    rows={2}
+                    maxLength={500}
+                  />
+                </label>
+                <button type="submit" className="ep-btn ep-btn--danger ep-btn--sm">
+                  Withdraw the leave
+                </button>
+              </form>
+            </LeaveDialogButton>
+          ) : null}
+          {r.can.requestCancel ? (
+            <LeaveDialogButton
+              id={`ml-cx-${r.id}`}
+              label="Ask to cancel"
+              title={`Ask to cancel ${r.number}`}
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+            >
+              <form action={actions.askCancel.bind(null, r.id)} className="ep-form-section__body">
+                <input type="hidden" name="back" value={back} />
+                <p className="ep-field__help">
+                  It is approved: the cancellation goes to your approvers, as the leave did. The
+                  days come back once they approve it.
+                </p>
+                <label className="ep-field" htmlFor={`ml-cx-${r.id}-why`}>
+                  <span className="ep-field__label">Why</span>
+                  <textarea
+                    id={`ml-cx-${r.id}-why`}
+                    name="reason"
+                    className="ep-input"
+                    rows={2}
+                    minLength={3}
+                    maxLength={500}
+                    required
+                  />
+                </label>
+                <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                  Send the cancellation
+                </button>
+              </form>
+            </LeaveDialogButton>
+          ) : null}
+        </div>
+      </td>
+      <td>
+        <LeaveStatusCell r={r} />
+      </td>
+    </tr>
+  );
+}
+
+/** One leave of Reporties Leave: its row (the admin's table and the staff website's list). */
+export function TeamLeaveRow({
+  r,
+  n,
+  back,
+  paths,
+  actions,
+  fileLink,
+}: {
+  r: TeamLeave['rows'][number];
+  n: number;
+  back: string;
+  paths: LeavePaths;
+  actions: { decide: LeaveAct; decideCancel: LeaveAct };
+  fileLink?: LeaveFileLink;
+}) {
+  return (
+    <tr>
+      <td>{n}</td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <a href={paths.request(r.id)}>{r.number}</a>
+      </td>
+      <td>
+        <strong>{r.employee.name}</strong>
+        <span className="ep-mr-col__desc">
+          {r.employee.code}
+          {r.employee.department ? ` · ${r.employee.department}` : ''}
+        </span>
+      </td>
+      <td style={{ whiteSpace: 'nowrap' }}>{when(r.appliedAt)}</td>
+      <td>
+        {r.documentFileId
+          ? fileLink
+            ? fileLink(r.documentFileId, `the document of ${r.number}`)
+            : 'Attached'
+          : '—'}
+      </td>
+      <td>
+        <DateChips r={r} />
+      </td>
+      <td style={{ whiteSpace: 'nowrap' }}>{halfWords(r)}</td>
+      <td>
+        {r.leaveType.code} — {r.leaveType.name}
+      </td>
+      <td style={{ whiteSpace: 'nowrap' }}>{onBehalf(r.source)}</td>
+      <td>{r.source === 'on_behalf' ? (r.appliedBy ?? '') : ''}</td>
+      <td>
+        {r.reason}
+        {r.what === 'cancellation' && r.cancelReason ? (
+          <span className="ep-mr-col__desc">To cancel: {r.cancelReason}</span>
+        ) : null}
+      </td>
+      <td>
+        {r.can.decide || r.can.decideCancel ? (
+          <Decide
+            actions={actions}
+            id={r.id}
+            number={r.number}
+            name={r.employee.name}
+            cancellation={!r.can.decide && r.can.decideCancel}
+            back={back}
+          />
+        ) : (
+          <a
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            href={paths.request(r.id)}
+            aria-label={`View ${r.number}`}
+          >
+            View
+          </a>
+        )}
+      </td>
+      <td>
+        <LeaveStatusCell r={r} />
+      </td>
+    </tr>
+  );
+}
+
 /**
  * My Leave (My leave → My Leave), as the old screen: From and To, then my leave touching them — Leave Id,
  * type, the dates, the attachment, half day, reason, applied, who acted and when, what I may do, status —
@@ -52,8 +313,11 @@ export function MyLeaveTab({
   actions,
   paths = ADMIN_LEAVE_PATHS,
   fileLink,
+  feed,
 }: {
   d: MyLeave;
+  /** the staff website: its list that loads as it scrolls, in place of the table and its pages */
+  feed?: ReactNode;
   /** withdraw a leave not decided yet; ask to cancel an approved one (each website's server actions) */
   actions: { withdraw: LeaveAct; askCancel: LeaveAct };
   paths?: LeavePaths;
@@ -89,151 +353,62 @@ export function MyLeaveTab({
           Search
         </button>
       </form>
-      <ListBar
-        page={d.page}
-        size={d.size}
-        total={d.total}
-        href={(p) => link(p)}
-        sizeHref={(s) => link(1, s)}
-        noun="leave applications"
-        files={d.employee ? { xlsx: file('xlsx'), pdf: file('pdf') } : null}
-      />
-      <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="My leave list">
-        <table className="ep-table">
-          <thead>
-            <tr>
-              <th scope="col">Sr No</th>
-              <th scope="col">Leave Id</th>
-              <th scope="col">Leave Type</th>
-              <th scope="col">Days</th>
-              <th scope="col">Attachment</th>
-              <th scope="col">Is Half Day</th>
-              <th scope="col">Reason</th>
-              <th scope="col">Applied Date</th>
-              <th scope="col">Action By</th>
-              <th scope="col">Action Date</th>
-              <th scope="col">Actions</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.rows.length ? (
-              d.rows.map((r, i) => (
-                <tr key={r.id}>
-                  <td>{(d.page - 1) * d.size + i + 1}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <a href={paths.request(r.id)}>{r.number}</a>
-                  </td>
-                  <td>
-                    {r.leaveType.code} — {r.leaveType.name}
-                  </td>
-                  <td>
-                    <DateChips r={r} />
-                  </td>
-                  <td>
-                    {r.documentFileId
-                      ? fileLink
-                        ? fileLink(r.documentFileId, `the document of ${r.number}`)
-                        : 'Attached'
-                      : '—'}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{halfWords(r)}</td>
-                  <td>{r.reason}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{when(r.appliedAt)}</td>
-                  <td>{r.decidedBy ?? (r.decidedAt ? 'System' : '')}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{when(r.decidedAt)}</td>
-                  <td>
-                    <div className="ep-rowacts">
-                      <a
-                        className="ep-btn ep-btn--ghost ep-btn--sm"
-                        href={paths.request(r.id)}
-                        aria-label={`View ${r.number}`}
-                      >
-                        View
-                      </a>
-                      {r.can.withdraw ? (
-                        <LeaveDialogButton
-                          id={`ml-wd-${r.id}`}
-                          label="Withdraw"
-                          title={`Withdraw ${r.number}`}
-                          className="ep-btn ep-btn--secondary ep-btn--sm"
-                        >
-                          <form
-                            action={actions.withdraw.bind(null, r.id)}
-                            className="ep-form-section__body"
-                          >
-                            <input type="hidden" name="back" value={back} />
-                            <p className="ep-field__help">
-                              It has not been decided yet: withdrawing it gives the days back.
-                            </p>
-                            <label className="ep-field" htmlFor={`ml-wd-${r.id}-why`}>
-                              <span className="ep-field__label">Why (optional)</span>
-                              <textarea
-                                id={`ml-wd-${r.id}-why`}
-                                name="reason"
-                                className="ep-input"
-                                rows={2}
-                                maxLength={500}
-                              />
-                            </label>
-                            <button type="submit" className="ep-btn ep-btn--danger ep-btn--sm">
-                              Withdraw the leave
-                            </button>
-                          </form>
-                        </LeaveDialogButton>
-                      ) : null}
-                      {r.can.requestCancel ? (
-                        <LeaveDialogButton
-                          id={`ml-cx-${r.id}`}
-                          label="Ask to cancel"
-                          title={`Ask to cancel ${r.number}`}
-                          className="ep-btn ep-btn--secondary ep-btn--sm"
-                        >
-                          <form
-                            action={actions.askCancel.bind(null, r.id)}
-                            className="ep-form-section__body"
-                          >
-                            <input type="hidden" name="back" value={back} />
-                            <p className="ep-field__help">
-                              It is approved: the cancellation goes to your approvers, as the leave
-                              did. The days come back once they approve it.
-                            </p>
-                            <label className="ep-field" htmlFor={`ml-cx-${r.id}-why`}>
-                              <span className="ep-field__label">Why</span>
-                              <textarea
-                                id={`ml-cx-${r.id}-why`}
-                                name="reason"
-                                className="ep-input"
-                                rows={2}
-                                minLength={3}
-                                maxLength={500}
-                                required
-                              />
-                            </label>
-                            <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
-                              Send the cancellation
-                            </button>
-                          </form>
-                        </LeaveDialogButton>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td>
-                    <LeaveStatusCell r={r} />
+      {feed ? (
+        <FeedBar
+          total={d.total}
+          noun="leave applications"
+          files={d.employee ? { xlsx: file('xlsx'), pdf: file('pdf') } : null}
+        />
+      ) : (
+        <ListBar
+          page={d.page}
+          size={d.size}
+          total={d.total}
+          href={(p) => link(p)}
+          sizeHref={(s) => link(1, s)}
+          noun="leave applications"
+          files={d.employee ? { xlsx: file('xlsx'), pdf: file('pdf') } : null}
+        />
+      )}
+      {feed ?? (
+        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="My leave list">
+          <table className="ep-table">
+            <thead>
+              <tr>
+                {MY_LEAVE_HEAD.map((h) => (
+                  <th key={h} scope="col">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {d.rows.length ? (
+                d.rows.map((r, i) => (
+                  <MyLeaveRow
+                    key={r.id}
+                    r={r}
+                    n={(d.page - 1) * d.size + i + 1}
+                    back={back}
+                    paths={paths}
+                    actions={actions}
+                    fileLink={fileLink}
+                  />
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={12}>
+                    {d.employee ? 'No Leave Records in these dates.' : 'No leave for this sign-in.'}
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={12}>
-                  {d.employee ? 'No Leave Records in these dates.' : 'No leave for this sign-in.'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <Pages page={d.page} size={d.size} total={d.total} href={(p) => link(p)} noun="leave" />
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {feed ? null : (
+        <Pages page={d.page} size={d.size} total={d.total} href={(p) => link(p)} noun="leave" />
+      )}
     </section>
   );
 }
@@ -261,8 +436,11 @@ export function TeamLeaveTab({
   actions,
   paths = ADMIN_LEAVE_PATHS,
   fileLink,
+  feed,
 }: {
   t: TeamLeave;
+  /** the staff website: its list that loads as it scrolls, in place of the table and its pages */
+  feed?: ReactNode;
   /** decide a leave, or its cancellation, at my level (each website's server actions) */
   actions: { decide: LeaveAct; decideCancel: LeaveAct };
   paths?: LeavePaths;
@@ -354,108 +532,62 @@ export function TeamLeaveTab({
           who report to you ({t.team}).
         </p>
       </form>
-      <ListBar
-        page={t.page}
-        size={t.size}
-        total={t.total}
-        href={(p) => link(p)}
-        sizeHref={(s) => link(1, s)}
-        noun="leave applications"
-        files={{ xlsx: file('xlsx'), pdf: file('pdf') }}
-      />
-      <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Reporties leave list">
-        <table className="ep-table">
-          <thead>
-            <tr>
-              <th scope="col">Sr.No.</th>
-              <th scope="col">Leave Id</th>
-              <th scope="col">Emp Name</th>
-              <th scope="col">Applied Date</th>
-              <th scope="col">Attachment</th>
-              <th scope="col">Days</th>
-              <th scope="col">Is Half Day</th>
-              <th scope="col">Leave Type</th>
-              <th scope="col">On Behalf?</th>
-              <th scope="col">On Behalf Created By</th>
-              <th scope="col">Reason</th>
-              <th scope="col">Action</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {t.rows.length ? (
-              t.rows.map((r, i) => (
-                <tr key={r.id}>
-                  <td>{(t.page - 1) * t.size + i + 1}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <a href={paths.request(r.id)}>{r.number}</a>
-                  </td>
-                  <td>
-                    <strong>{r.employee.name}</strong>
-                    <span className="ep-mr-col__desc">
-                      {r.employee.code}
-                      {r.employee.department ? ` · ${r.employee.department}` : ''}
-                    </span>
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{when(r.appliedAt)}</td>
-                  <td>
-                    {r.documentFileId
-                      ? fileLink
-                        ? fileLink(r.documentFileId, `the document of ${r.number}`)
-                        : 'Attached'
-                      : '—'}
-                  </td>
-                  <td>
-                    <DateChips r={r} />
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{halfWords(r)}</td>
-                  <td>
-                    {r.leaveType.code} — {r.leaveType.name}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{onBehalf(r.source)}</td>
-                  <td>{r.source === 'on_behalf' ? (r.appliedBy ?? '') : ''}</td>
-                  <td>
-                    {r.reason}
-                    {r.what === 'cancellation' && r.cancelReason ? (
-                      <span className="ep-mr-col__desc">To cancel: {r.cancelReason}</span>
-                    ) : null}
-                  </td>
-                  <td>
-                    {r.can.decide || r.can.decideCancel ? (
-                      <Decide
-                        actions={actions}
-                        id={r.id}
-                        number={r.number}
-                        name={r.employee.name}
-                        cancellation={!r.can.decide && r.can.decideCancel}
-                        back={back}
-                      />
-                    ) : (
-                      <a
-                        className="ep-btn ep-btn--ghost ep-btn--sm"
-                        href={paths.request(r.id)}
-                        aria-label={`View ${r.number}`}
-                      >
-                        View
-                      </a>
-                    )}
-                  </td>
-                  <td>
-                    <LeaveStatusCell r={r} />
+      {feed ? (
+        <FeedBar
+          total={t.total}
+          noun="leave applications"
+          files={{ xlsx: file('xlsx'), pdf: file('pdf') }}
+        />
+      ) : (
+        <ListBar
+          page={t.page}
+          size={t.size}
+          total={t.total}
+          href={(p) => link(p)}
+          sizeHref={(s) => link(1, s)}
+          noun="leave applications"
+          files={{ xlsx: file('xlsx'), pdf: file('pdf') }}
+        />
+      )}
+      {feed ?? (
+        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Reporties leave list">
+          <table className="ep-table">
+            <thead>
+              <tr>
+                {TEAM_LEAVE_HEAD.map((h) => (
+                  <th key={h} scope="col">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {t.rows.length ? (
+                t.rows.map((r, i) => (
+                  <TeamLeaveRow
+                    key={r.id}
+                    r={r}
+                    n={(t.page - 1) * t.size + i + 1}
+                    back={back}
+                    paths={paths}
+                    actions={actions}
+                    fileLink={fileLink}
+                  />
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={13}>
+                    {f.status === 'waiting' ? 'No Leaves waiting for you.' : 'No Leaves.'}
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={13}>
-                  {f.status === 'waiting' ? 'No Leaves waiting for you.' : 'No Leaves.'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <Pages page={t.page} size={t.size} total={t.total} href={(p) => link(p)} noun="leave" />
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {feed ? null : (
+        <Pages page={t.page} size={t.size} total={t.total} href={(p) => link(p)} noun="leave" />
+      )}
     </section>
   );
 }

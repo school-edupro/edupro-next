@@ -8,6 +8,7 @@ import '../family/common.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
+import '../ui/paged_feed.dart' show feedRoundProvider;
 import '../ui/widgets.dart';
 import 'data.dart';
 import 'leave_page.dart';
@@ -292,9 +293,9 @@ class _LeaveDetailScreenState extends ConsumerState<LeaveDetailScreen> {
   /// the lists the leave shows in, and this page, read again
   void _refresh() {
     ref.invalidate(leaveDetailProvider(widget.id));
-    ref.invalidate(myLeaveListProvider);
+    ref.read(feedRoundProvider('my-leave').notifier).bump();
     ref.invalidate(myLeaveProvider(widget.profile));
-    ref.invalidate(teamLeaveProvider);
+    ref.read(feedRoundProvider('team-leave').notifier).bump();
     ref.invalidate(leaveMenuProvider(widget.profile));
   }
 

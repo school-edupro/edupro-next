@@ -532,16 +532,31 @@ export class LeaveService {
           `(s.display_name ILIKE '%' || ${p} || '%' OR s.admission_no ILIKE '%' || ${p} || '%' OR l.number ILIKE '%' || ${p} || '%')`,
         );
       }
+      const size = q.page ? q.size : 300;
+      const skip = q.page ? (q.page - 1) * size : 0;
       const r = await c.query<Row>(
-        `${LEAVE} WHERE ${w.join(' AND ')} ORDER BY (l.status = 'pending') DESC, l.applied_at DESC LIMIT 300`,
+        `${LEAVE} WHERE ${w.join(' AND ')} ORDER BY (l.status = 'pending') DESC, l.applied_at DESC LIMIT ${String(size)} OFFSET ${String(skip)}`,
         params,
       );
+      const total = q.page
+        ? (
+            await c.query<{ n: number }>(
+              `SELECT count(*)::int AS n FROM (${LEAVE} WHERE ${w.join(' AND ')}) x`,
+              params,
+            )
+          ).rows[0]!.n
+        : null;
       const inbox = await c.query<{ n: number }>(
         `SELECT count(*)::int AS n FROM student_leaves l WHERE l.academic_year_id = $1 AND l.status = 'pending'
             AND EXISTS (SELECT 1 FROM student_leave_approvals a WHERE a.leave_id = l.id AND a.status = 'pending' AND app.current_user_id() = ANY(a.approver_user_ids))`,
         [yearId],
       );
-      return { data: r.rows.map(toLeave), inbox: inbox.rows[0]!.n, overseer: this.overseer(ctx) };
+      return {
+        data: r.rows.map(toLeave),
+        inbox: inbox.rows[0]!.n,
+        overseer: this.overseer(ctx),
+        page: q.page ? { number: q.page, size, total } : null,
+      };
     });
   }
 

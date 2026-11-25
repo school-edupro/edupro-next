@@ -1835,6 +1835,7 @@ class S {
   String get lvPdf => _t('PDF', 'पीडीएफ');
   String lvShowing(int a, int b, int n) =>
       _t('Showing $a – $b of $n', '$n में से $a – $b दिखाए गए');
+  String lvInAll(int n) => _t('$n in all', 'कुल $n');
   String lvApplied(String x) => _t('Applied $x', 'आवेदन $x');
   String lvActionBy(String who, String when) => _t('By $who $when', '$who द्वारा $when');
   String lvHalf(String session) =>

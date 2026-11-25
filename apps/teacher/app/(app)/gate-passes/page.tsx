@@ -1,90 +1,21 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import { Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { PASS_KIND, type Pass } from '@/lib/gate-pass';
 import { currentLang, t } from '@/lib/i18n';
 import { approveGatePass, cancelGatePass, decideGatePass, rejectGatePass } from './actions';
+import { GatePassFeed, type PassWords } from './GatePassFeed';
 
-interface Pass {
-  id: string;
-  number: string;
-  audience: 'student' | 'staff';
-  kind: 'early_leave' | 'late_arrival' | 'rgp' | 'nrgp' | 'hostel_home' | 'hostel_outing';
-  state: string;
-  stage: string;
-  onDate: string;
-  atTime: string | null;
-  returnBy: string | null;
-  reason: string;
-  destination: string | null;
-  student: string | null;
-  section: string | null;
-  admissionNo: string | null;
-  employee: string | null;
-  employeeCode: string | null;
-  escortName: string | null;
-  escortRelation: string | null;
-  approvedLevels: number;
-  levels: number;
-  approvalMode: 'sequence' | 'any';
-  approvalNeed: number;
-  waitingOn: string | null;
-  passNo: string | null;
-  items: number;
-  decisionNote: string | null;
-  outAt: string | null;
-  inAt: string | null;
-}
-const KIND: Record<Pass['kind'], string> = {
-  early_leave: 'Early leave',
-  late_arrival: 'Late arrival',
-  rgp: 'RGP · returnable',
-  nrgp: 'NRGP · non-returnable',
-  hostel_home: 'Hostel home leave',
-  hostel_outing: 'Hostel outing',
-};
-const TONE: Record<string, 'warning' | 'success' | 'danger' | 'info' | 'neutral'> = {
-  pending: 'warning',
-  approved: 'success',
-  rejected: 'danger',
-  cancelled: 'neutral',
-  handed_over: 'info',
-  out: 'info',
-  returned: 'neutral',
-};
+/** The first page of each list: 10; the rest load as the person scrolls. */
+const PAGE = 10;
+
 const OK: Record<string, string> = {
   approved: 'Approved at your level.',
   rejected: 'Rejected. The family or the employee has been told.',
   requested: 'Gate pass requested. It has gone for approval.',
   cancelled: 'Gate pass cancelled.',
 };
-const timeOf = (v: string) =>
-  new Date(v).toLocaleTimeString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-/** The return time, with its day when that is not the day the pass is for (hostel home leave). */
-const backBy = (p: { returnBy: string | null; onDate: string }) => {
-  if (!p.returnBy) return '';
-  const day = new Date(new Date(p.returnBy).getTime() + 5.5 * 3600 * 1000)
-    .toISOString()
-    .slice(0, 10);
-  return day === p.onDate
-    ? timeOf(p.returnBy)
-    : new Date(p.returnBy).toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-};
-const who = (p: Pass, adm: string) =>
-  p.audience === 'student'
-    ? `${p.student ?? ''}${p.section ? ` (${p.section})` : ''}${p.admissionNo ? ` · ${adm} ${p.admissionNo}` : ''}`
-    : `${p.employee ?? ''}${p.employeeCode ? ` · ${p.employeeCode}` : ''}`;
-
 /**
  * Gate passes in the teacher app (0069): the passes that wait for my approval (as class teacher,
  * coordinator, vice principal or principal), and my own passes to go out during school (RGP / NRGP).
@@ -96,18 +27,49 @@ export default async function GatePassesPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
-  let inbox: Pass[];
-  let mine: Pass[];
+  type List = { data: Pass[]; page: { total: number } | null };
+  let inbox: List & { waiting: number };
+  let mine: List;
   try {
     [inbox, mine] = await Promise.all([
-      bff.api.fetch<{ data: Pass[] }>('/gate-passes/inbox').then((r) => r.data),
-      bff.api.fetch<{ data: Pass[] }>('/gate-passes/staff?size=20').then((r) => r.data),
+      bff.api.fetch<List & { waiting: number }>(`/gate-passes/inbox?page=1&size=${String(PAGE)}`),
+      bff.api.fetch<List>(`/gate-passes/staff?page=1&size=${String(PAGE)}`),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     throw error;
   }
-  const adm = t(lang, 'Adm. no.');
+  const named = (rows: Pass[]) => rows.map((p) => ({ ...p, stageLabel: t(lang, p.stage) }));
+  const words: PassWords = {
+    kind: Object.fromEntries(
+      (Object.keys(PASS_KIND) as Pass['kind'][]).map((k) => [k, t(lang, PASS_KIND[k])]),
+    ) as Record<Pass['kind'], string>,
+    adm: t(lang, 'Adm. no.'),
+    backBy: t(lang, 'back by'),
+    with: t(lang, 'With'),
+    items: t(lang, 'item(s) carried out'),
+    details: t(lang, 'Details'),
+    note: t(lang, 'Note (needed to reject)'),
+    approve: t(lang, 'Approve'),
+    reject: t(lang, 'Reject'),
+    waitingOn: t(lang, 'Waiting on'),
+    gateOut: t(lang, 'Gate out'),
+    gateIn: t(lang, 'Gate in'),
+    pdf: t(lang, 'Download the pass (PDF)'),
+    cancel: t(lang, 'Cancel'),
+  };
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
+  const actions = {
+    decide: decideGatePass,
+    approve: approveGatePass,
+    reject: rejectGatePass,
+    cancel: cancelGatePass,
+  };
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
@@ -144,123 +106,35 @@ export default async function GatePassesPage({
         </div>
       ) : null}
       <h2 className="ep-cdash__h3">
-        {t(lang, 'To approve')} · {String(inbox.length)}
+        {t(lang, 'To approve')} · {String(inbox.waiting)}
       </h2>
-      {inbox.length === 0 ? (
+      {inbox.data.length === 0 ? (
         <Card style={{ marginBottom: 'var(--sp-3)' }}>{t(lang, 'Nothing waits for you.')}</Card>
-      ) : null}
-      {inbox.map((p) => (
-        <Card
-          key={p.id}
-          title={who(p, adm)}
-          actions={<Badge tone="warning">{t(lang, KIND[p.kind])}</Badge>}
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          <p style={{ marginTop: 0 }}>
-            {p.onDate}
-            {p.atTime ? `, ${p.atTime}` : ''}
-            {p.returnBy ? ` · ${t(lang, 'back by')} ${backBy(p)}` : ''} · {p.reason}
-          </p>
-          <p className="ep-field__help">
-            {[
-              p.escortName
-                ? `${t(lang, 'With')} ${p.escortName}${p.escortRelation ? ` (${p.escortRelation})` : ''}`
-                : null,
-              p.destination,
-              p.items ? `${String(p.items)} ${t(lang, 'item(s) carried out')}` : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-          <p style={{ margin: '0 0 var(--sp-2)' }}>
-            <a
-              className="ep-btn ep-btn--ghost ep-btn--sm"
-              href={`/gate-passes/${p.id}`}
-              aria-label={`${t(lang, 'Details')}: ${p.number}`}
-            >
-              {t(lang, 'Details')}
-            </a>
-          </p>
-          <form action={decideGatePass} style={{ display: 'grid', gap: 'var(--sp-2)' }}>
-            <input type="hidden" name="id" value={p.id} />
-            <label className="ep-field" htmlFor={`n-${p.id}`}>
-              <span className="ep-field__label">{t(lang, 'Note (needed to reject)')}</span>
-              <input id={`n-${p.id}`} name="note" className="ep-input" maxLength={300} />
-            </label>
-            <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-              <Button type="submit" formAction={approveGatePass} size="sm">
-                {t(lang, 'Approve')}
-              </Button>
-              <Button type="submit" formAction={rejectGatePass} size="sm" variant="secondary">
-                {t(lang, 'Reject')}
-              </Button>
-            </div>
-          </form>
-        </Card>
-      ))}
+      ) : (
+        <GatePassFeed
+          box="inbox"
+          first={named(inbox.data)}
+          more={PAGE < (inbox.page?.total ?? 0)}
+          words={words}
+          foot={foot}
+          actions={actions}
+        />
+      )}
       <h2 id="mine" className="ep-cdash__h3" style={{ marginTop: 'var(--sp-4)' }}>
         {t(lang, 'My gate passes')}
       </h2>
-      {mine.length === 0 ? <Card>{t(lang, 'You have not asked for a gate pass yet.')}</Card> : null}
-      {mine.map((p) => (
-        <Card
-          key={p.id}
-          title={`${p.number} · ${t(lang, KIND[p.kind])}`}
-          actions={<Badge tone={TONE[p.state] ?? 'neutral'}>{t(lang, p.stage)}</Badge>}
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          <p style={{ marginTop: 0 }}>
-            {p.onDate}
-            {p.atTime ? `, ${p.atTime}` : ''}
-            {p.returnBy ? ` · ${t(lang, 'back by')} ${backBy(p)}` : ''} · {p.reason}
-          </p>
-          <p className="ep-field__help">
-            {[
-              p.destination,
-              p.items ? `${String(p.items)} ${t(lang, 'item(s) carried out')}` : null,
-              p.state === 'pending' && p.waitingOn
-                ? `${t(lang, 'Waiting on')} ${p.waitingOn}`
-                : null,
-              p.outAt ? `${t(lang, 'Gate out')} ${timeOf(p.outAt)}` : null,
-              p.inAt ? `${t(lang, 'Gate in')} ${timeOf(p.inAt)}` : null,
-              p.decisionNote,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-          <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-            <a
-              className="ep-btn ep-btn--ghost ep-btn--sm"
-              href={`/gate-passes/${p.id}`}
-              aria-label={`${t(lang, 'Details')}: ${p.number}`}
-            >
-              {t(lang, 'Details')}
-            </a>
-            {p.passNo ? (
-              <a
-                className="ep-btn ep-btn--secondary ep-btn--sm"
-                href={`/api/gate-pass-card/${p.id}`}
-                aria-label={`${t(lang, 'Download the pass (PDF)')} ${p.number}`}
-              >
-                {t(lang, 'Download the pass (PDF)')}
-              </a>
-            ) : null}
-            {['pending', 'approved'].includes(p.state) ? (
-              <form action={cancelGatePass}>
-                <input type="hidden" name="id" value={p.id} />
-                <Button
-                  type="submit"
-                  size="sm"
-                  variant="secondary"
-                  aria-label={`${t(lang, 'Cancel')} ${p.number}`}
-                >
-                  {t(lang, 'Cancel')}
-                </Button>
-              </form>
-            ) : null}
-          </div>
-        </Card>
-      ))}
+      {mine.data.length === 0 ? (
+        <Card>{t(lang, 'You have not asked for a gate pass yet.')}</Card>
+      ) : (
+        <GatePassFeed
+          box="mine"
+          first={named(mine.data)}
+          more={PAGE < (mine.page?.total ?? 0)}
+          words={words}
+          foot={foot}
+          actions={actions}
+        />
+      )}
     </main>
   );
 }

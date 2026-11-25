@@ -93,8 +93,8 @@ class EduProApi {
       _t.file('GET', '/attendance/leaves/mine/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
 
   /// GET /attendance/leaves — Student leave that came to me (or all of it, for the coordinator’s office)
-  Future<dynamic> leaveList({String? tab, String? q}) =>
-      _t.send('GET', '/attendance/leaves', query: {if (tab != null) 'tab': tab, if (q != null) 'q': q});
+  Future<dynamic> leaveList({String? tab, String? q, int? page, int? size}) =>
+      _t.send('GET', '/attendance/leaves', query: {if (tab != null) 'tab': tab, if (q != null) 'q': q, if (page != null) 'page': page, if (size != null) 'size': size});
 
   /// GET /attendance/leaves/{id}
   Future<dynamic> leaveGet({required String id}) =>
@@ -969,8 +969,8 @@ class EduProApi {
       _t.file('GET', '/gate-passes/staff/${Uri.encodeComponent(id)}/card');
 
   /// GET /gate-passes/inbox — Gate passes waiting for my approval, and the ones I decided lately
-  Future<dynamic> gatePassInbox() =>
-      _t.send('GET', '/gate-passes/inbox');
+  Future<dynamic> gatePassInbox({int? page, int? size}) =>
+      _t.send('GET', '/gate-passes/inbox', query: {if (page != null) 'page': page, if (size != null) 'size': size});
 
   /// POST /gate-passes/{id}/decide — Approve or reject at my level (only when the pass waits on me)
   Future<dynamic> gatePassDecide({required PassDecideDto body, required String id}) =>

@@ -73,6 +73,9 @@ class School {
               'items': 0,
             },
           ],
+          // how many wait on me in all, as the API says (the tab's count)
+          'waiting': 1,
+          'decided': <Object>[],
         };
       case 'GET /gate-passes/staff':
         return {

@@ -11,6 +11,7 @@ import '../family/common.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
+import '../ui/paged_feed.dart';
 import '../ui/widgets.dart';
 import 'data.dart';
 
@@ -192,35 +193,26 @@ String _backBy(S s, Json p) {
       : '${s.date(day)}, ${_istTime(p['returnBy'])}';
 }
 
-/// The passes waiting for my approval.
-final staffGateInboxProvider = FutureProvider.autoDispose.family<Loaded<List<Json>>, Profile>((
-  ref,
-  p,
-) async {
-  final r = await cached('gate-inbox:${p.id}', () => ref.read(apiProvider).gatePassInbox());
-  return Loaded(asList(asJson(r.data)['data']), r.at, stale: r.stale);
-});
-
-/// My own passes (RGP / NRGP), latest first.
-final staffGateMineProvider = FutureProvider.autoDispose.family<Loaded<List<Json>>, Profile>((
-  ref,
-  p,
-) async {
-  final r = await cached('gate-mine:${p.id}', () => ref.read(apiProvider).gatePassStaff(size: 20));
-  return Loaded(asList(asJson(r.data)['data']), r.at, stale: r.stale);
-});
-
 /// Gate passes as on the staff website (0069): **To approve** — the passes that wait on me (as class teacher,
 /// coordinator, vice principal or principal), approve or reject with a note — and **My gate passes** — my own passes
 /// to go out during school (RGP / NRGP): follow, cancel, the pass card, and apply. No web page.
-class StaffGatePassesScreen extends ConsumerWidget {
+class StaffGatePassesScreen extends ConsumerStatefulWidget {
   const StaffGatePassesScreen({super.key, required this.profile});
   final Profile profile;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StaffGatePassesScreen> createState() => _StaffGatePassesScreenState();
+}
+
+class _StaffGatePassesScreenState extends ConsumerState<StaffGatePassesScreen> {
+  /// how many wait on me in all (each page of To approve says)
+  int _waiting = 0;
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    final waiting = ref.watch(staffGateInboxProvider(profile)).value?.data.length ?? 0;
+    final profile = widget.profile;
+    final waiting = _waiting;
     return DefaultTabController(
       length: 2,
       // Apply for a gate pass on both tabs (as the website's header button); a sent one shows under My gate passes.
@@ -267,7 +259,12 @@ class StaffGatePassesScreen extends ConsumerWidget {
                 Expanded(
                   child: TabBarView(
                     children: [
-                      _InboxTab(profile: profile),
+                      _InboxTab(
+                        profile: profile,
+                        onWaiting: (n) {
+                          if (mounted && n != _waiting) setState(() => _waiting = n);
+                        },
+                      ),
                       _MineTab(profile: profile),
                     ],
                   ),
@@ -295,28 +292,37 @@ String _when(S s, Json p) => [
   '${p['reason'] ?? ''}',
 ].where((x) => x.isNotEmpty).join(' · ');
 
+/// The passes waiting on me, the soonest 10 first and 10 more as I scroll (as the staff website).
 class _InboxTab extends ConsumerWidget {
-  const _InboxTab({required this.profile});
+  const _InboxTab({required this.profile, required this.onWaiting});
   final Profile profile;
+  final void Function(int waiting) onWaiting;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
-    return LoadedList<List<Json>>(
-      value: ref.watch(staffGateInboxProvider(profile)),
-      refresh: () => ref.refresh(staffGateInboxProvider(profile).future),
-      children: (rows) => [
-        if (rows.isEmpty) Notice(text: s.sgNothingWaits),
-        for (final p in rows) _InboxCard(profile: profile, pass: p),
-        // room for the floating Apply button
-        const SizedBox(height: 88),
-      ],
+    final round = ref.watch(feedRoundProvider('gate-inbox'));
+    return PagedFeed(
+      key: ValueKey('sgInboxFeed-$round'),
+      firstCacheKey: 'gate-inbox-feed:${profile.id}',
+      load: (page) => ref.read(apiProvider).gatePassInbox(page: page, size: 10),
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      onAnswer: (a) => onWaiting((a['waiting'] as num?)?.toInt() ?? 0),
+      empty: s.sgNothingWaits,
+      emptyCard: Notice(text: s.sgNothingWaits),
+      // room for the floating Apply button
+      endGap: 88,
+      item: (context, p, _) =>
+          _InboxCard(key: ValueKey('sgInboxCard-${p['id']}'), profile: profile, pass: p),
     );
   }
 }
 
 class _InboxCard extends ConsumerStatefulWidget {
-  const _InboxCard({required this.profile, required this.pass});
+  const _InboxCard({super.key, required this.profile, required this.pass});
   final Profile profile;
   final Json pass;
 
@@ -353,7 +359,7 @@ class _InboxCardState extends ConsumerState<_InboxCard> {
             id: '${widget.pass['id']}',
             body: PassDecideDto(outcome: outcome, note: note.isEmpty ? null : note),
           );
-      ref.invalidate(staffGateInboxProvider(widget.profile));
+      ref.read(feedRoundProvider('gate-inbox').notifier).bump();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(outcome == 'approved' ? s.sgApproved : s.sgRejected)),
@@ -446,6 +452,7 @@ class _InboxCardState extends ConsumerState<_InboxCard> {
   }
 }
 
+/// My own passes, the latest 10 first and 10 more as I scroll (as the staff website).
 class _MineTab extends ConsumerWidget {
   const _MineTab({required this.profile});
   final Profile profile;
@@ -453,15 +460,20 @@ class _MineTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
-    return LoadedList<List<Json>>(
-      value: ref.watch(staffGateMineProvider(profile)),
-      refresh: () => ref.refresh(staffGateMineProvider(profile).future),
-      children: (rows) => [
-        if (rows.isEmpty) Notice(text: s.sgNoneMine),
-        for (final p in rows) _MineCard(profile: profile, pass: p),
-        // room for the floating Apply button
-        const SizedBox(height: 88),
-      ],
+    final round = ref.watch(feedRoundProvider('gate-mine'));
+    return PagedFeed(
+      key: ValueKey('sgMineFeed-$round'),
+      firstCacheKey: 'gate-mine-feed:${profile.id}',
+      load: (page) => ref.read(apiProvider).gatePassStaff(page: page, size: 10),
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      empty: s.sgNoneMine,
+      emptyCard: Notice(text: s.sgNoneMine),
+      // room for the floating Apply button
+      endGap: 88,
+      item: (context, p, _) => _MineCard(profile: profile, pass: p),
     );
   }
 }
@@ -492,7 +504,7 @@ class _MineCard extends ConsumerWidget {
       await ref
           .read(apiProvider)
           .gatePassStaffCancel(id: '${pass['id']}', body: const PassCancelDto());
-      ref.invalidate(staffGateMineProvider(profile));
+      ref.read(feedRoundProvider('gate-mine').notifier).bump();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.sgCancelled)));
       }
@@ -638,7 +650,7 @@ class _StaffGatePassDetailState extends ConsumerState<StaffGatePassDetail> {
             id: widget.id,
             body: PassDecideDto(outcome: outcome, note: note.isEmpty ? null : note),
           );
-      ref.invalidate(staffGateInboxProvider(widget.profile));
+      ref.read(feedRoundProvider('gate-inbox').notifier).bump();
       ref.invalidate(staffGatePassProvider(widget.id));
       // the header's Approvals count reads again
       ref.invalidate(approvalsProvider);
@@ -1107,7 +1119,7 @@ class _StaffGatePassFormState extends ConsumerState<StaffGatePassForm> {
               ],
             ),
           );
-      ref.invalidate(staffGateMineProvider(widget.profile));
+      ref.read(feedRoundProvider('gate-mine').notifier).bump();
       if (!mounted) return;
       // the Gate passes screen says it was requested
       Navigator.of(context).pop(true);

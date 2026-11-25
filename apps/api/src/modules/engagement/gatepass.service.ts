@@ -889,12 +889,15 @@ export class GatePassService {
   }
 
   /** The passes that wait on me, and the ones I have decided lately. */
-  async inbox(ctx: RequestContext) {
+  async inbox(ctx: RequestContext, q: { page?: number; size?: number } = {}) {
+    // given a page: that page of the waiting ones (soonest first); else the first 200
+    const size = q.page ? (q.size ?? 10) : 200;
+    const skip = q.page ? (q.page - 1) * size : 0;
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const open = await c.query<Row>(
-        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; the numbers are whole numbers
         `${SELECT} WHERE p.state = 'pending' AND EXISTS (SELECT 1 FROM gate_pass_approvals a WHERE a.pass_id = p.id AND a.status = 'pending'
-              AND app.current_user_id() = ANY(a.approver_user_ids)) ORDER BY p.on_date, p.at_time NULLS LAST, p.id LIMIT 200`,
+              AND app.current_user_id() = ANY(a.approver_user_ids)) ORDER BY p.on_date, p.at_time NULLS LAST, p.id LIMIT ${String(size)} OFFSET ${String(skip)}`,
       );
       const done = await c.query<Row>(
         // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant
@@ -910,6 +913,7 @@ export class GatePassService {
         data: open.rows.map(toRow),
         waiting: waiting.rows[0]!.n,
         decided: done.rows.map(toRow),
+        page: q.page ? { number: q.page, size, total: waiting.rows[0]!.n } : null,
       };
     });
   }

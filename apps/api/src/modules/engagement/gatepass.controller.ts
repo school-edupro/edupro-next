@@ -14,6 +14,7 @@ import {
   HandoverDto,
   ListPassesDto,
   MyPassesDto,
+  PassInboxDto,
   PassCancelDto,
   PassDecideDto,
   StaffPassDto,
@@ -127,8 +128,8 @@ export class GatePassController {
   @Get('inbox')
   @AuthenticatedOnly()
   @ApiOperation({ summary: 'Gate passes waiting for my approval, and the ones I decided lately' })
-  inbox(@ReqCtx() ctx: RequestContext) {
-    return this.svc.inbox(ctx);
+  inbox(@ReqCtx() ctx: RequestContext, @Query() q: PassInboxDto) {
+    return this.svc.inbox(ctx, q);
   }
 
   @Post(':id/decide')
