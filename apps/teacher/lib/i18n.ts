@@ -671,6 +671,9 @@ const DICT: Record<string, string> = {
   'Welcome,': 'स्वागत है,',
   'permissions in this school': 'अनुमतियाँ इस विद्यालय में',
   'Sign out': 'साइन आउट',
+  'My children': 'मेरे बच्चे',
+  'Your children at this school, on the family website':
+    'इस विद्यालय में आपके बच्चे, परिवार वेबसाइट पर',
   Session: 'सत्र',
   View: 'देखें',
   'Viewing a previous session (read-only)': 'पिछला सत्र देख रहे हैं (केवल देखने के लिए)',

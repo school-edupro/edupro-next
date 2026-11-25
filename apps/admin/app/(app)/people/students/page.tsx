@@ -56,6 +56,7 @@ export default async function StudentsPage({
           importRun: can('people.import.run'),
           builder: can('reports.builder.use'),
           edit: can('people.student.edit'),
+          staffParents: can('people.guardian.edit'),
         }}
         reports={reports}
         actions={{

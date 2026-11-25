@@ -144,6 +144,11 @@ const STUDENTS: PeopleListConfig<StudentListView, StudentListResult> = {
   ),
   tools: (can) => (
     <>
+      {can.staffParents ? (
+        <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/people/students/staff-parents">
+          Staff parents
+        </a>
+      ) : null}
       {can.importRun ? (
         <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/people/students/bulk">
           Bulk update
@@ -176,7 +181,14 @@ export function StudentList(props: {
   fields: StudentListFields;
   initial: StudentListResult;
   initialView: StudentListView;
-  can: { create: boolean; importRun: boolean; builder: boolean; edit: boolean };
+  can: {
+    create: boolean;
+    importRun: boolean;
+    builder: boolean;
+    edit: boolean;
+    /** the list of parent records marked School staff (people.guardian.edit) */
+    staffParents: boolean;
+  };
   actions: {
     load: (q: StudentListQuery) => Promise<Result<StudentListResult>>;
     saveView: (v: StudentListView) => Promise<void>;

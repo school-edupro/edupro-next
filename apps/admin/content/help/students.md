@@ -112,6 +112,24 @@ On the same screen:
 Parents see Aadhaar, PAN and bank numbers of their own child in full; approvers without the
 "Sensitive data viewer" role see them masked.
 
+## Staff who are parents here
+
+When a father, mother or guardian works in the school, mark **School staff: Yes** in their section of
+the full profile and enter their **employee code**. Their child's record is then joined to the staff
+member's own login: in the app they switch between **Staff** and **Parent** with one sign-in, and the
+staff website shows **My children** (the family website, same sign-in).
+
+- Saving the profile (or a bulk Excel update) joins it by itself when the parent record has no login
+  of its own. If the employee has no login yet, it joins when they get one.
+- A parent record that already has its own login waits for you: **Use staff login** moves it to the
+  staff login, and the old login stops seeing those children. If someone else in the family uses it,
+  give them their own login (the other parent's record, for example).
+- **Undo** puts back the login the record had before. Setting School staff to **No**, or an employee
+  code no staff member has, also undoes the join.
+- **Students → Staff parents** lists these records, first those not joined yet, with the reason
+  (own login, staff member has no login, code not found). The **Guardians** card on the student's
+  Profile tab shows the same, with the same buttons.
+
 ## Approving profile changes
 
 **People → Profile approvals** lists what is waiting for you. Each row shows the value on file and the

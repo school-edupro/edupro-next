@@ -501,3 +501,19 @@ export const ReportingImportSchema = z.object({
   dryRun: z.boolean().default(true),
 });
 export class ReportingImportDto extends createZodDto(ReportingImportSchema) {}
+
+// ---- staff parents: a parent record marked School staff joined to the staff member's login --------------------
+export const StaffParentsQuerySchema = z.object({
+  q: z.string().trim().max(80).optional(),
+  /** todo: not joined yet (the default); joined; all */
+  state: z.enum(['todo', 'joined', 'all']).default('todo'),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class StaffParentsQueryDto extends createZodDto(StaffParentsQuerySchema) {}
+
+export const StaffParentJoinSchema = z.object({
+  /** also when the record has a login of its own (that login then stops seeing this record's children) */
+  move: z.boolean().default(false),
+});
+export class StaffParentJoinDto extends createZodDto(StaffParentJoinSchema) {}

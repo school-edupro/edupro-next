@@ -30,6 +30,7 @@ import {
   type ClassCorrectionSetup,
 } from '@/components/ClassCorrection';
 import { AdmissionCancel, type CancelItem, type CancelSetup } from '@/components/AdmissionCancel';
+import { StaffParentLogin } from '@/components/StaffParentLogin';
 import { StudentMerge, type MergeItem, type MergeSetup } from '@/components/StudentMerge';
 import {
   StudentCorrections,
@@ -454,6 +455,25 @@ export default async function StudentPage({
                   header: t('create.guardianMobile'),
                   render: (x) => x.mobile ?? x.email ?? '',
                 },
+                // a parent marked School staff: their login as staff and as this child's parent (0423)
+                ...(student.guardians.some((x) => x.staff)
+                  ? [
+                      {
+                        key: 'staff',
+                        header: 'Staff login',
+                        render: (x: GuardianLink) =>
+                          x.staff ? (
+                            <StaffParentLogin
+                              guardianId={x.guardianId}
+                              link={x.staff}
+                              relation={r(x.relation as (typeof relations)[number]).toLowerCase()}
+                              canEdit={can('people.guardian.edit')}
+                              back={`/people/students/${student.id}?tab=profile`}
+                            />
+                          ) : null,
+                      },
+                    ]
+                  : []),
                 {
                   key: 'actions',
                   header: '',

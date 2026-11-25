@@ -24,6 +24,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { QuickAddDto, UpdateProfileDto } from './people.dto';
 import { PEOPLE, correctionRequired } from './people.permissions';
+import { StaffParentsService } from './staff-parents.service';
 import { StudentsService } from './students.service';
 
 const invalid = (errors: Record<string, string>, detail = 'Some fields are not valid') =>
@@ -36,6 +37,7 @@ export class StudentProfileService {
     private readonly db: DbService,
     private readonly students: StudentsService,
     private readonly audit: AuditService,
+    private readonly staffParents: StaffParentsService,
   ) {}
 
   private canSeeSensitive(ctx: RequestContext): boolean {
@@ -152,7 +154,8 @@ export class StudentProfileService {
     dto: UpdateProfileDto,
   ): Promise<StudentProfileSnapshot> {
     const tenant = requireTenant(ctx);
-    return this.db.tenant(tenant, async (c) => {
+    let touched: string[] = [];
+    const saved = await this.db.tenant(tenant, async (c) => {
       await this.assertVisible(ctx, c, id);
       const lists = await loadProfileLists(c);
       const { values, errors } = validateChanges(dto.values, lists);
@@ -183,6 +186,8 @@ export class StudentProfileService {
         throw error;
       }
       await refreshCompleteness(c, id);
+      // a father, mother or guardian marked School staff with an employee code joins the staff login
+      touched = await this.staffParents.syncAfterSave(ctx, c, id, changed);
       const after = await readStudentProfile(c, id, {
         academicYearId: tenant.academicYearId ?? null,
         showSensitive: this.canSeeSensitive(ctx),
@@ -199,6 +204,8 @@ export class StudentProfileService {
       });
       return after!;
     });
+    await this.staffParents.refresh(tenant.schoolId, touched);
+    return saved;
   }
 
   /** Suggested admission number (last one + 1, prefix kept) and next roll number of a section. */

@@ -60,6 +60,12 @@ export function StaffShell({
   const school =
     me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0] ?? null;
   const back = encodeURIComponent(currentPath);
+  // a staff member who is also a parent here (their child's record joined to this login, 0423): the family website
+  // (the school the header shows: the one chosen, else the only one)
+  const parentHere = me.memberships.some(
+    (m) => m.schoolId === school?.schoolId && m.personType === 'guardian',
+  );
+  const familySite = (process.env.PARENT_APP_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
   return (
     <div className="ep-shell fp-shell">
       <aside className="ep-sidebar" aria-label={t(lang, 'Sidebar')}>
@@ -162,6 +168,15 @@ export function StaffShell({
           </div>
         </div>
         <div className="ep-header__context">
+          {parentHere ? (
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`${familySite}/`}
+              title={t(lang, 'Your children at this school, on the family website')}
+            >
+              {t(lang, 'My children')}
+            </a>
+          ) : null}
           <a
             className="ep-btn ep-btn--ghost ep-btn--sm"
             href={`/api/lang?to=${lang === 'hi' ? 'en' : 'hi'}&back=${back}`}

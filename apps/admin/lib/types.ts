@@ -279,6 +279,33 @@ export interface GuardianLink {
   relation: string;
   isPrimary: boolean;
   receivesNotifications: boolean;
+  /** marked School staff: where it stands with the staff member's login; null when not marked */
+  staff: StaffParentLink | null;
+}
+
+/**
+ * A parent record marked "School staff: Yes" and the staff member's login (0423): joined (one login, Staff and
+ * Parent); ready (Join); separate_login (Use staff login); staff_no_login; no_employee; no_code.
+ */
+export type StaffParentState =
+  'joined' | 'ready' | 'separate_login' | 'staff_no_login' | 'no_employee' | 'no_code';
+
+export interface StaffParentLink {
+  state: StaffParentState;
+  code: string | null;
+  employee: { id: string; code: string; name: string } | null;
+  canUndo: boolean;
+  joinedAt: string | null;
+}
+
+export interface StaffParentRow extends StaffParentLink {
+  guardianId: string;
+  guardianName: string;
+  relation: string;
+  studentId: string;
+  admissionNo: string;
+  studentName: string;
+  section: string | null;
 }
 
 export interface PersonDocument {

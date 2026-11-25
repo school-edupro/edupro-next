@@ -26,6 +26,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { readFile, type Cell } from '../masters/masters.service';
 import type { BulkTemplateQueryDto, BulkUploadDto } from './people.dto';
 import { PEOPLE } from './people.permissions';
+import { StaffParentsService } from './staff-parents.service';
 import { StudentsService } from './students.service';
 
 export type BulkMode = 'update' | 'create';
@@ -81,6 +82,7 @@ export class StudentBulkService {
     private readonly db: DbService,
     private readonly students: StudentsService,
     private readonly audit: AuditService,
+    private readonly staffParents: StaffParentsService,
   ) {}
 
   private assertAllowed(ctx: RequestContext, mode: BulkMode) {
@@ -614,7 +616,8 @@ export class StudentBulkService {
   /** Applies the validated rows; each row in a savepoint so one failure does not stop the rest. */
   async commit(ctx: RequestContext, id: string) {
     const tenant = requireTenant(ctx);
-    return this.db.tenant(tenant, async (c) => {
+    const touched: string[] = [];
+    const out = await this.db.tenant(tenant, async (c) => {
       const r = await c.query<{
         master: string;
         status: string;
@@ -658,6 +661,10 @@ export class StudentBulkService {
               values[`${parent}_mobile`] = values.sms_mobile;
           }
           await writeStudentProfile(c, studentId!, values);
+          // a father, mother or guardian marked School staff with an employee code joins the staff login
+          touched.push(
+            ...(await this.staffParents.syncAfterSave(ctx, c, studentId!, Object.keys(values))),
+          );
           if (mode === 'create')
             await this.enrol(
               c,
@@ -704,6 +711,9 @@ export class StudentBulkService {
       );
       return { id, mode, applied: done, failed: failures.length, failures };
     });
+    // the logins a staff parent join changed read their rights afresh
+    await this.staffParents.refresh(tenant.schoolId, touched);
+    return out;
   }
 
   private async enrol(

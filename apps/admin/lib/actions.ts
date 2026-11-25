@@ -646,6 +646,33 @@ export async function unlinkGuardian(fd: FormData) {
   );
 }
 
+/** Where a staff parent action returns: the student's page or the staff parents list (with its filters). */
+const staffParentBack = (fd: FormData) => {
+  const b = str(fd, 'back');
+  return /^\/people\/students\/(\d{1,18}(\?tab=profile)?|staff-parents(\?[\w=&%.+-]*)?)$/.test(b)
+    ? b
+    : '/people/students/staff-parents';
+};
+
+/** Joins a parent record marked School staff to the staff member's login (move: Use staff login). */
+export async function staffParentJoin(fd: FormData) {
+  const guardianId = str(fd, 'guardianId');
+  return run(staffParentBack(fd), () =>
+    apiFetch(`/people/staff-parents/${guardianId}/join`, {
+      method: 'POST',
+      body: JSON.stringify({ move: str(fd, 'move') === '1' }),
+    }),
+  );
+}
+
+/** Undoes a join: the login the parent record had before (or none) comes back. */
+export async function staffParentUndo(fd: FormData) {
+  const guardianId = str(fd, 'guardianId');
+  return run(staffParentBack(fd), () =>
+    apiFetch(`/people/staff-parents/${guardianId}/undo`, { method: 'POST', body: '{}' }),
+  );
+}
+
 export async function enrolStudent(fd: FormData) {
   const id = str(fd, 'id');
   return run(`/people/students/${id}`, () =>

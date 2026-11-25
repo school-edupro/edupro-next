@@ -16,6 +16,7 @@ import type {
   ReplaceDocumentDto,
   UpdateStudentDto,
 } from './people.dto';
+import { staffParentLinks, type StaffParentLink } from './staff-parents.links';
 import { PEOPLE, correctionRequired } from './people.permissions';
 
 /** Documents whose number is an ID number (masked like the profile). */
@@ -76,6 +77,8 @@ export interface GuardianLink {
   relation: string;
   isPrimary: boolean;
   receivesNotifications: boolean;
+  /** marked School staff: where it stands with the staff member's login; null when not marked */
+  staff: StaffParentLink | null;
 }
 
 export interface DocumentRow {
@@ -497,6 +500,10 @@ export class StudentsService {
         WHERE sg.student_id = $1 AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, g.display_name`,
       [studentId],
     );
+    const staff = await staffParentLinks(
+      c,
+      r.rows.map((x) => x.guardian_id),
+    );
     return r.rows.map((x) => ({
       linkId: x.link_id,
       guardianId: x.guardian_id,
@@ -507,6 +514,7 @@ export class StudentsService {
       relation: x.relation,
       isPrimary: x.is_primary,
       receivesNotifications: x.receives_notifications,
+      staff: staff.get(x.guardian_id) ?? null,
     }));
   }
 

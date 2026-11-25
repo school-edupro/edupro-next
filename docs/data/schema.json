@@ -1,6 +1,6 @@
 {
  "generated": "scripts/schema/schema-map.mjs — structure only",
- "migration": "0422_staff_help.sql",
+ "migration": "0423_staff_parent_login.sql",
  "enums": {
   "actor_type": [
    "user",
@@ -7168,7 +7168,7 @@
    "references": [
     {
      "columns": [
-      "staff_user_id"
+      "acked_by"
      ],
      "table": "users",
      "refColumns": [
@@ -7177,7 +7177,7 @@
     },
     {
      "columns": [
-      "acked_by"
+      "staff_user_id"
      ],
      "table": "users",
      "refColumns": [
@@ -7287,15 +7287,6 @@
    "references": [
     {
      "columns": [
-      "academic_year_id"
-     ],
-     "table": "academic_years",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "subject_id"
      ],
      "table": "subjects",
@@ -7317,6 +7308,15 @@
       "class_section_id"
      ],
      "table": "class_sections",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "academic_year_id"
+     ],
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -7497,8 +7497,8 @@
     "exam_type_subjects(academic_year_id)",
     "exams(academic_year_id)",
     "fee_adjustments(academic_year_id)",
-    "fee_carry_forwards(from_year_id)",
     "fee_carry_forwards(to_year_id)",
+    "fee_carry_forwards(from_year_id)",
     "fee_carry_runs(from_year_id)",
     "fee_carry_runs(to_year_id)",
     "fee_change_requests(academic_year_id)",
@@ -8041,18 +8041,18 @@
    "references": [
     {
      "columns": [
-      "section_id"
+      "form_id"
      ],
-     "table": "acr_form_sections",
+     "table": "acr_forms",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "form_id"
+      "section_id"
      ],
-     "table": "acr_forms",
+     "table": "acr_form_sections",
      "refColumns": [
       "id"
      ]
@@ -8253,18 +8253,18 @@
    "references": [
     {
      "columns": [
-      "employee_id"
+      "cycle_id"
      ],
-     "table": "employees",
+     "table": "acr_cycles",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "cycle_id"
+      "employee_id"
      ],
-     "table": "acr_cycles",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -8543,18 +8543,18 @@
    "references": [
     {
      "columns": [
-      "category_id"
+      "log_id"
      ],
-     "table": "activity_categories",
+     "table": "activity_logs",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "log_id"
+      "category_id"
      ],
-     "table": "activity_logs",
+     "table": "activity_categories",
      "refColumns": [
       "id"
      ]
@@ -8851,6 +8851,24 @@
    "references": [
     {
      "columns": [
+      "workflow_instance_id"
+     ],
+     "table": "workflow_instances",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "withdrawal_id"
+     ],
+     "table": "student_withdrawals",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "student_id"
      ],
      "table": "students",
@@ -8860,9 +8878,9 @@
     },
     {
      "columns": [
-      "workflow_instance_id"
+      "requested_by"
      ],
-     "table": "workflow_instances",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -8881,24 +8899,6 @@
       "academic_year_id"
      ],
      "table": "academic_years",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "requested_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "withdrawal_id"
-     ],
-     "table": "student_withdrawals",
      "refColumns": [
       "id"
      ]
@@ -9011,15 +9011,6 @@
    "references": [
     {
      "columns": [
-      "form_id"
-     ],
-     "table": "admission_forms",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "class_id"
      ],
      "table": "classes",
@@ -9032,6 +9023,15 @@
       "cycle_id"
      ],
      "table": "admission_cycles",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "form_id"
+     ],
+     "table": "admission_forms",
      "refColumns": [
       "id"
      ]
@@ -9111,18 +9111,18 @@
    "references": [
     {
      "columns": [
-      "application_id"
+      "created_by"
      ],
-     "table": "applications",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "created_by"
+      "application_id"
      ],
-     "table": "users",
+     "table": "applications",
      "refColumns": [
       "id"
      ]
@@ -9341,18 +9341,18 @@
    "references": [
     {
      "columns": [
-      "updated_by"
+      "class_id"
      ],
-     "table": "users",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "class_id"
+      "updated_by"
      ],
-     "table": "classes",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -9431,18 +9431,18 @@
    "references": [
     {
      "columns": [
-      "class_id"
+      "cycle_id"
      ],
-     "table": "classes",
+     "table": "admission_cycles",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "cycle_id"
+      "class_id"
      ],
-     "table": "admission_cycles",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
@@ -9611,27 +9611,27 @@
    "references": [
     {
      "columns": [
-      "created_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "application_id"
-     ],
-     "table": "applications",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "class_id"
      ],
      "table": "classes",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "rule_id"
+     ],
+     "table": "admission_enquiry_rules",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "cycle_id"
+     ],
+     "table": "admission_cycles",
      "refColumns": [
       "id"
      ]
@@ -9656,6 +9656,15 @@
     },
     {
      "columns": [
+      "created_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "counsellor_user_id"
      ],
      "table": "users",
@@ -9665,18 +9674,9 @@
     },
     {
      "columns": [
-      "rule_id"
+      "application_id"
      ],
-     "table": "admission_enquiry_rules",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "cycle_id"
-     ],
-     "table": "admission_cycles",
+     "table": "applications",
      "refColumns": [
       "id"
      ]
@@ -9742,18 +9742,18 @@
    "references": [
     {
      "columns": [
-      "enquiry_id"
+      "by_user_id"
      ],
-     "table": "admission_enquiries",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "by_user_id"
+      "enquiry_id"
      ],
-     "table": "users",
+     "table": "admission_enquiries",
      "refColumns": [
       "id"
      ]
@@ -10254,24 +10254,6 @@
    "references": [
     {
      "columns": [
-      "drawn_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "category_id"
-     ],
-     "table": "admission_fee_categories",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "class_id"
      ],
      "table": "classes",
@@ -10281,9 +10263,27 @@
     },
     {
      "columns": [
+      "drawn_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "cycle_id"
      ],
      "table": "admission_cycles",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "category_id"
+     ],
+     "table": "admission_fee_categories",
      "refColumns": [
       "id"
      ]
@@ -10669,18 +10669,18 @@
    "references": [
     {
      "columns": [
-      "cycle_id"
+      "class_id"
      ],
-     "table": "admission_cycles",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "class_id"
+      "cycle_id"
      ],
-     "table": "classes",
+     "table": "admission_cycles",
      "refColumns": [
       "id"
      ]
@@ -10967,15 +10967,6 @@
    "references": [
     {
      "columns": [
-      "stage_id"
-     ],
-     "table": "admission_stages",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "updated_by"
      ],
      "table": "users",
@@ -10988,6 +10979,15 @@
       "class_id"
      ],
      "table": "classes",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "stage_id"
+     ],
+     "table": "admission_stages",
      "refColumns": [
       "id"
      ]
@@ -11063,18 +11063,9 @@
    "references": [
     {
      "columns": [
-      "entered_by"
+      "stage_id"
      ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "application_id"
-     ],
-     "table": "applications",
+     "table": "admission_stages",
      "refColumns": [
       "id"
      ]
@@ -11090,9 +11081,18 @@
     },
     {
      "columns": [
-      "stage_id"
+      "application_id"
      ],
-     "table": "admission_stages",
+     "table": "applications",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "entered_by"
+     ],
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -11203,15 +11203,6 @@
    "references": [
     {
      "columns": [
-      "created_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "cycle_id"
      ],
      "table": "admission_cycles",
@@ -11221,7 +11212,16 @@
     },
     {
      "columns": [
-      "revoked_by"
+      "class_id"
+     ],
+     "table": "classes",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "created_by"
      ],
      "table": "users",
      "refColumns": [
@@ -11239,9 +11239,9 @@
     },
     {
      "columns": [
-      "class_id"
+      "revoked_by"
      ],
-     "table": "classes",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -11648,9 +11648,9 @@
    "references": [
     {
      "columns": [
-      "requested_by"
+      "voucher_file_id"
      ],
-     "table": "users",
+     "table": "files",
      "refColumns": [
       "id"
      ]
@@ -11693,9 +11693,9 @@
     },
     {
      "columns": [
-      "voucher_file_id"
+      "requested_by"
      ],
-     "table": "files",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -11785,18 +11785,9 @@
    "references": [
     {
      "columns": [
-      "by_user"
+      "cycle_id"
      ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "stage_id"
-     ],
-     "table": "admission_stages",
+     "table": "admission_cycles",
      "refColumns": [
       "id"
      ]
@@ -11812,9 +11803,18 @@
     },
     {
      "columns": [
-      "cycle_id"
+      "stage_id"
      ],
-     "table": "admission_cycles",
+     "table": "admission_stages",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "by_user"
+     ],
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -11901,18 +11901,9 @@
     },
     {
      "columns": [
-      "stage_id"
+      "cycle_id"
      ],
-     "table": "admission_stages",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "set_by"
-     ],
-     "table": "users",
+     "table": "admission_cycles",
      "refColumns": [
       "id"
      ]
@@ -11928,9 +11919,18 @@
     },
     {
      "columns": [
-      "cycle_id"
+      "stage_id"
      ],
-     "table": "admission_cycles",
+     "table": "admission_stages",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "set_by"
+     ],
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -12161,18 +12161,18 @@
     },
     {
      "columns": [
-      "slot_id"
+      "application_id"
      ],
-     "table": "admission_slots",
+     "table": "applications",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "application_id"
+      "slot_id"
      ],
-     "table": "applications",
+     "table": "admission_slots",
      "refColumns": [
       "id"
      ]
@@ -12246,6 +12246,15 @@
    "references": [
     {
      "columns": [
+      "cycle_id"
+     ],
+     "table": "admission_cycles",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "class_id"
      ],
      "table": "classes",
@@ -12258,15 +12267,6 @@
       "stage_id"
      ],
      "table": "admission_stages",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "cycle_id"
-     ],
-     "table": "admission_cycles",
      "refColumns": [
       "id"
      ]
@@ -12452,15 +12452,6 @@
    "references": [
     {
      "columns": [
-      "decided_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "application_id"
      ],
      "table": "applications",
@@ -12470,18 +12461,27 @@
     },
     {
      "columns": [
-      "stage_id"
+      "undone_by"
      ],
-     "table": "admission_stages",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "undone_by"
+      "decided_by"
      ],
      "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "stage_id"
+     ],
+     "table": "admission_stages",
      "refColumns": [
       "id"
      ]
@@ -12612,15 +12612,6 @@
    "references": [
     {
      "columns": [
-      "app_a"
-     ],
-     "table": "applications",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "app_b"
      ],
      "table": "applications",
@@ -12633,6 +12624,15 @@
       "class_id"
      ],
      "table": "classes",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "app_a"
+     ],
+     "table": "applications",
      "refColumns": [
       "id"
      ]
@@ -13489,18 +13489,18 @@
    "references": [
     {
      "columns": [
-      "changed_by"
+      "application_id"
      ],
-     "table": "users",
+     "table": "applications",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "application_id"
+      "changed_by"
      ],
-     "table": "applications",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -13693,18 +13693,18 @@
    "references": [
     {
      "columns": [
-      "application_id"
+      "stage_id"
      ],
-     "table": "job_applications",
+     "table": "recruitment_stages",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "stage_id"
+      "application_id"
      ],
-     "table": "recruitment_stages",
+     "table": "job_applications",
      "refColumns": [
       "id"
      ]
@@ -13993,24 +13993,6 @@
    "references": [
     {
      "columns": [
-      "entered_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "workflow_instance_id"
-     ],
-     "table": "workflow_instances",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "student_id"
      ],
      "table": "students",
@@ -14020,27 +14002,18 @@
     },
     {
      "columns": [
-      "registration_receipt_id"
+      "applicant_id"
      ],
-     "table": "misc_receipts",
+     "table": "applicants",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "process_id"
+      "workflow_instance_id"
      ],
-     "table": "admission_processes",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "possible_duplicate_of"
-     ],
-     "table": "applications",
+     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
@@ -14068,6 +14041,15 @@
       "form_id"
      ],
      "table": "admission_forms",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "entered_by"
+     ],
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -14110,16 +14092,7 @@
     },
     {
      "columns": [
-      "applicant_id"
-     ],
-     "table": "applicants",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "admission_receipt_id"
+      "registration_receipt_id"
      ],
      "table": "misc_receipts",
      "refColumns": [
@@ -14131,6 +14104,33 @@
       "admission_form_file_id"
      ],
      "table": "files",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "process_id"
+     ],
+     "table": "admission_processes",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "possible_duplicate_of"
+     ],
+     "table": "applications",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "admission_receipt_id"
+     ],
+     "table": "misc_receipts",
      "refColumns": [
       "id"
      ]
@@ -14146,8 +14146,8 @@
     "admission_slot_allotments(application_id)",
     "admission_stage_marks(application_id)",
     "admission_stage_results(application_id)",
-    "admission_twin_pairs(app_a)",
     "admission_twin_pairs(app_b)",
+    "admission_twin_pairs(app_a)",
     "application_answer_changes(application_id)",
     "application_events(application_id)",
     "applications(possible_duplicate_of)",
@@ -14231,18 +14231,18 @@
    "references": [
     {
      "columns": [
-      "actor_user_id"
+      "appointment_id"
      ],
-     "table": "users",
+     "table": "appointments",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "appointment_id"
+      "actor_user_id"
      ],
-     "table": "appointments",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -14783,63 +14783,9 @@
    "references": [
     {
      "columns": [
-      "applicant_id"
-     ],
-     "table": "applicants",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "workflow_instance_id"
-     ],
-     "table": "workflow_instances",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "with_employee_id"
-     ],
-     "table": "employees",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "visitor_log_id"
-     ],
-     "table": "visitor_log",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "student_id"
-     ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "qr_file_id"
+      "card_file_id"
      ],
      "table": "files",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "host_id"
-     ],
-     "table": "appointment_hosts",
      "refColumns": [
       "id"
      ]
@@ -14855,7 +14801,34 @@
     },
     {
      "columns": [
-      "card_file_id"
+      "booked_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "applicant_id"
+     ],
+     "table": "applicants",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "host_id"
+     ],
+     "table": "appointment_hosts",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "qr_file_id"
      ],
      "table": "files",
      "refColumns": [
@@ -14864,9 +14837,36 @@
     },
     {
      "columns": [
-      "booked_by"
+      "student_id"
      ],
-     "table": "users",
+     "table": "students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "visitor_log_id"
+     ],
+     "table": "visitor_log",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "with_employee_id"
+     ],
+     "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "workflow_instance_id"
+     ],
+     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
@@ -15107,33 +15107,6 @@
    "references": [
     {
      "columns": [
-      "from_store_id"
-     ],
-     "table": "stores",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "from_department_id"
-     ],
-     "table": "departments",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "created_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "from_custodian_id"
      ],
      "table": "employees",
@@ -15161,6 +15134,33 @@
     },
     {
      "columns": [
+      "created_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "from_store_id"
+     ],
+     "table": "stores",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "asset_id"
+     ],
+     "table": "assets",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "vendor_id"
      ],
      "table": "vendors",
@@ -15179,9 +15179,9 @@
     },
     {
      "columns": [
-      "asset_id"
+      "from_department_id"
      ],
-     "table": "assets",
+     "table": "departments",
      "refColumns": [
       "id"
      ]
@@ -15365,18 +15365,18 @@
    "references": [
     {
      "columns": [
-      "issue_line_id"
+      "department_id"
      ],
-     "table": "stock_issue_lines",
+     "table": "departments",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "opening_move_id"
+      "receipt_line_id"
      ],
-     "table": "stock_moves",
+     "table": "goods_receipt_lines",
      "refColumns": [
       "id"
      ]
@@ -15392,27 +15392,9 @@
     },
     {
      "columns": [
-      "transfer_line_id"
+      "issue_line_id"
      ],
-     "table": "stock_transfer_lines",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "created_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "department_id"
-     ],
-     "table": "departments",
+     "table": "stock_issue_lines",
      "refColumns": [
       "id"
      ]
@@ -15428,18 +15410,9 @@
     },
     {
      "columns": [
-      "vendor_id"
+      "opening_move_id"
      ],
-     "table": "vendors",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "store_id"
-     ],
-     "table": "stores",
+     "table": "stock_moves",
      "refColumns": [
       "id"
      ]
@@ -15455,9 +15428,36 @@
     },
     {
      "columns": [
-      "receipt_line_id"
+      "created_by"
      ],
-     "table": "goods_receipt_lines",
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "store_id"
+     ],
+     "table": "stores",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "transfer_line_id"
+     ],
+     "table": "stock_transfer_lines",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "vendor_id"
+     ],
+     "table": "vendors",
      "refColumns": [
       "id"
      ]
@@ -15706,18 +15706,18 @@
    "references": [
     {
      "columns": [
-      "class_section_id"
+      "route_id"
      ],
-     "table": "class_sections",
+     "table": "transport_routes",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "route_id"
+      "class_section_id"
      ],
-     "table": "transport_routes",
+     "table": "class_sections",
      "refColumns": [
       "id"
      ]
@@ -15813,18 +15813,9 @@
    "references": [
     {
      "columns": [
-      "period_id"
+      "subject_id"
      ],
-     "table": "timetable_periods",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "class_section_id"
-     ],
-     "table": "class_sections",
+     "table": "subjects",
      "refColumns": [
       "id"
      ]
@@ -15840,9 +15831,18 @@
     },
     {
      "columns": [
-      "subject_id"
+      "class_section_id"
      ],
-     "table": "subjects",
+     "table": "class_sections",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "period_id"
+     ],
+     "table": "timetable_periods",
      "refColumns": [
       "id"
      ]
@@ -16424,18 +16424,18 @@
    "references": [
     {
      "columns": [
-      "statement_id"
+      "misc_receipt_id"
      ],
-     "table": "bank_statements",
+     "table": "misc_receipts",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "misc_receipt_id"
+      "statement_id"
      ],
-     "table": "misc_receipts",
+     "table": "bank_statements",
      "refColumns": [
       "id"
      ]
@@ -16832,9 +16832,9 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "import_id"
      ],
-     "table": "students",
+     "table": "board_result_imports",
      "refColumns": [
       "id"
      ]
@@ -16850,9 +16850,9 @@
     },
     {
      "columns": [
-      "import_id"
+      "student_id"
      ],
-     "table": "board_result_imports",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -17217,15 +17217,6 @@
    "references": [
     {
      "columns": [
-      "candidate_id"
-     ],
-     "table": "board_candidates",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "academic_year_id"
      ],
      "table": "academic_years",
@@ -17235,18 +17226,27 @@
     },
     {
      "columns": [
-      "student_id"
+      "import_id"
      ],
-     "table": "students",
+     "table": "board_result_imports",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "import_id"
+      "candidate_id"
      ],
-     "table": "board_result_imports",
+     "table": "board_candidates",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "student_id"
+     ],
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -17321,18 +17321,18 @@
    "references": [
     {
      "columns": [
-      "updated_by"
+      "subject_id"
      ],
-     "table": "users",
+     "table": "subjects",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "subject_id"
+      "updated_by"
      ],
-     "table": "subjects",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -17538,7 +17538,7 @@
    "references": [
     {
      "columns": [
-      "created_by"
+      "updated_by"
      ],
      "table": "users",
      "refColumns": [
@@ -17547,7 +17547,7 @@
     },
     {
      "columns": [
-      "updated_by"
+      "created_by"
      ],
      "table": "users",
      "refColumns": [
@@ -17732,6 +17732,15 @@
    "references": [
     {
      "columns": [
+      "role_id"
+     ],
+     "table": "roles",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "user_id"
      ],
      "table": "users",
@@ -17744,15 +17753,6 @@
       "user_role_id"
      ],
      "table": "user_roles",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "role_id"
-     ],
-     "table": "roles",
      "refColumns": [
       "id"
      ]
@@ -18172,18 +18172,18 @@
    "references": [
     {
      "columns": [
-      "file_id"
+      "candidate_id"
      ],
-     "table": "files",
+     "table": "candidates",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "candidate_id"
+      "file_id"
      ],
-     "table": "candidates",
+     "table": "files",
      "refColumns": [
       "id"
      ]
@@ -18414,9 +18414,9 @@
    "references": [
     {
      "columns": [
-      "created_by"
+      "student_id"
      ],
-     "table": "users",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -18441,9 +18441,9 @@
     },
     {
      "columns": [
-      "student_id"
+      "created_by"
      ],
-     "table": "students",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -18817,7 +18817,7 @@
    "references": [
     {
      "columns": [
-      "updated_by"
+      "created_by"
      ],
      "table": "users",
      "refColumns": [
@@ -18826,7 +18826,7 @@
     },
     {
      "columns": [
-      "created_by"
+      "updated_by"
      ],
      "table": "users",
      "refColumns": [
@@ -18994,16 +18994,16 @@
    "references": [
     {
      "columns": [
-      "requested_by"
+      "employee_id"
      ],
-     "table": "users",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "decided_by"
+      "requested_by"
      ],
      "table": "users",
      "refColumns": [
@@ -19021,18 +19021,18 @@
     },
     {
      "columns": [
-      "student_id"
+      "decided_by"
      ],
-     "table": "students",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "employee_id"
+      "student_id"
      ],
-     "table": "employees",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -19120,15 +19120,6 @@
    "references": [
     {
      "columns": [
-      "template_version_id"
-     ],
-     "table": "document_template_versions",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "created_by"
      ],
      "table": "users",
@@ -19150,6 +19141,15 @@
       "certificate_id"
      ],
      "table": "certificates",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "template_version_id"
+     ],
+     "table": "document_template_versions",
      "refColumns": [
       "id"
      ]
@@ -19399,18 +19399,18 @@
    "references": [
     {
      "columns": [
-      "template_id"
+      "updated_by"
      ],
-     "table": "document_templates",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "updated_by"
+      "template_id"
      ],
-     "table": "users",
+     "table": "document_templates",
      "refColumns": [
       "id"
      ]
@@ -19662,9 +19662,9 @@
    "references": [
     {
      "columns": [
-      "request_id"
+      "cancelled_by"
      ],
-     "table": "certificate_requests",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -19680,54 +19680,9 @@
     },
     {
      "columns": [
-      "override_by"
+      "student_id"
      ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "original_id"
-     ],
-     "table": "certificates",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "batch_id"
-     ],
-     "table": "certificate_batches",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "issued_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "employee_id"
-     ],
-     "table": "employees",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "cancelled_by"
-     ],
-     "table": "users",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -19761,9 +19716,54 @@
     },
     {
      "columns": [
-      "student_id"
+      "batch_id"
      ],
-     "table": "students",
+     "table": "certificate_batches",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "override_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "original_id"
+     ],
+     "table": "certificates",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "issued_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "employee_id"
+     ],
+     "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "request_id"
+     ],
+     "table": "certificate_requests",
      "refColumns": [
       "id"
      ]
@@ -19847,6 +19847,15 @@
    "references": [
     {
      "columns": [
+      "template_id"
+     ],
+     "table": "document_templates",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "student_id"
      ],
      "table": "students",
@@ -19859,15 +19868,6 @@
       "export_id"
      ],
      "table": "exports",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "template_id"
-     ],
-     "table": "document_templates",
      "refColumns": [
       "id"
      ]
@@ -20038,27 +20038,18 @@
    "references": [
     {
      "columns": [
-      "student_id"
-     ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "requested_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "from_section_id"
      ],
      "table": "class_sections",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "academic_year_id"
+     ],
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -20083,9 +20074,18 @@
     },
     {
      "columns": [
-      "academic_year_id"
+      "requested_by"
      ],
-     "table": "academic_years",
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "student_id"
+     ],
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -20343,18 +20343,18 @@
    "references": [
     {
      "columns": [
-      "academic_year_id"
+      "class_id"
      ],
-     "table": "academic_years",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "class_id"
+      "academic_year_id"
      ],
-     "table": "classes",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -20506,9 +20506,9 @@
    "references": [
     {
      "columns": [
-      "subject_id"
+      "academic_year_id"
      ],
-     "table": "subjects",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -20524,18 +20524,18 @@
     },
     {
      "columns": [
-      "academic_year_id"
+      "group_id"
      ],
-     "table": "academic_years",
+     "table": "subject_groups",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "group_id"
+      "subject_id"
      ],
-     "table": "subject_groups",
+     "table": "subjects",
      "refColumns": [
       "id"
      ]
@@ -21064,18 +21064,18 @@
    "references": [
     {
      "columns": [
-      "visit_id"
+      "medicine_id"
      ],
-     "table": "clinic_visits",
+     "table": "clinic_medicines",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "medicine_id"
+      "visit_id"
      ],
-     "table": "clinic_medicines",
+     "table": "clinic_visits",
      "refColumns": [
       "id"
      ]
@@ -21221,9 +21221,9 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "employee_id"
      ],
-     "table": "students",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -21248,9 +21248,9 @@
     },
     {
      "columns": [
-      "employee_id"
+      "student_id"
      ],
-     "table": "employees",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -21501,18 +21501,18 @@
    "references": [
     {
      "columns": [
-      "user_id"
+      "group_id"
      ],
-     "table": "users",
+     "table": "comms_groups",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "group_id"
+      "user_id"
      ],
-     "table": "comms_groups",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -22273,6 +22273,15 @@
    "references": [
     {
      "columns": [
+      "item_id"
+     ],
+     "table": "purchase_items",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "store_id"
      ],
      "table": "stores",
@@ -22282,18 +22291,9 @@
     },
     {
      "columns": [
-      "move_id"
+      "asset_id"
      ],
-     "table": "stock_moves",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "item_id"
-     ],
-     "table": "purchase_items",
+     "table": "assets",
      "refColumns": [
       "id"
      ]
@@ -22309,9 +22309,9 @@
     },
     {
      "columns": [
-      "asset_id"
+      "move_id"
      ],
-     "table": "assets",
+     "table": "stock_moves",
      "refColumns": [
       "id"
      ]
@@ -22467,7 +22467,7 @@
    "references": [
     {
      "columns": [
-      "created_by"
+      "decided_by"
      ],
      "table": "users",
      "refColumns": [
@@ -22476,7 +22476,7 @@
     },
     {
      "columns": [
-      "decided_by"
+      "created_by"
      ],
      "table": "users",
      "refColumns": [
@@ -22794,27 +22794,9 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "employee_id"
      ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "form_id"
-     ],
-     "table": "consent_forms",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "instance_id"
-     ],
-     "table": "workflow_instances",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -22830,18 +22812,36 @@
     },
     {
      "columns": [
-      "payment_intent_id"
+      "instance_id"
      ],
-     "table": "payment_intents",
+     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "employee_id"
+      "form_id"
      ],
-     "table": "employees",
+     "table": "consent_forms",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "student_id"
+     ],
+     "table": "students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "payment_intent_id"
+     ],
+     "table": "payment_intents",
      "refColumns": [
       "id"
      ]
@@ -22951,18 +22951,18 @@
     },
     {
      "columns": [
-      "role_id"
+      "form_id"
      ],
-     "table": "roles",
+     "table": "consent_forms",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "form_id"
+      "role_id"
      ],
-     "table": "consent_forms",
+     "table": "roles",
      "refColumns": [
       "id"
      ]
@@ -23235,18 +23235,18 @@
    "references": [
     {
      "columns": [
-      "form_id"
+      "student_id"
      ],
-     "table": "consent_forms",
+     "table": "students",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "student_id"
+      "form_id"
      ],
-     "table": "students",
+     "table": "consent_forms",
      "refColumns": [
       "id"
      ]
@@ -23395,18 +23395,18 @@
    "references": [
     {
      "columns": [
-      "webhook_id"
+      "response_id"
      ],
-     "table": "consent_webhooks",
+     "table": "consent_form_responses",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "response_id"
+      "webhook_id"
      ],
-     "table": "consent_form_responses",
+     "table": "consent_webhooks",
      "refColumns": [
       "id"
      ]
@@ -23557,18 +23557,18 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "user_id"
      ],
-     "table": "students",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "user_id"
+      "student_id"
      ],
-     "table": "users",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -23707,7 +23707,7 @@
    "references": [
     {
      "columns": [
-      "signed_off_by"
+      "created_by"
      ],
      "table": "users",
      "refColumns": [
@@ -23716,7 +23716,7 @@
     },
     {
      "columns": [
-      "created_by"
+      "signed_off_by"
      ],
      "table": "users",
      "refColumns": [
@@ -23776,18 +23776,18 @@
    "references": [
     {
      "columns": [
-      "taken_by"
+      "run_id"
      ],
-     "table": "users",
+     "table": "cutover_runs",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "run_id"
+      "taken_by"
      ],
-     "table": "cutover_runs",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -23873,18 +23873,18 @@
    "references": [
     {
      "columns": [
-      "run_id"
+      "done_by"
      ],
-     "table": "cutover_runs",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "done_by"
+      "run_id"
      ],
-     "table": "users",
+     "table": "cutover_runs",
      "refColumns": [
       "id"
      ]
@@ -24002,9 +24002,9 @@
     },
     {
      "columns": [
-      "academic_year_id"
+      "posted_by_employee_id"
      ],
-     "table": "academic_years",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -24020,9 +24020,9 @@
     },
     {
      "columns": [
-      "posted_by_employee_id"
+      "academic_year_id"
      ],
-     "table": "employees",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -24061,18 +24061,18 @@
    "references": [
     {
      "columns": [
-      "file_id"
+      "daily_work_id"
      ],
-     "table": "files",
+     "table": "daily_work",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "daily_work_id"
+      "file_id"
      ],
-     "table": "daily_work",
+     "table": "files",
      "refColumns": [
       "id"
      ]
@@ -24234,7 +24234,7 @@
    "references": [
     {
      "columns": [
-      "handled_by"
+      "requested_by_user"
      ],
      "table": "users",
      "refColumns": [
@@ -24243,7 +24243,7 @@
     },
     {
      "columns": [
-      "requested_by_user"
+      "handled_by"
      ],
      "table": "users",
      "refColumns": [
@@ -24359,18 +24359,18 @@
     },
     {
      "columns": [
-      "role_id"
+      "to_user_id"
      ],
-     "table": "roles",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "to_user_id"
+      "role_id"
      ],
-     "table": "users",
+     "table": "roles",
      "refColumns": [
       "id"
      ]
@@ -24466,8 +24466,8 @@
     }
    ],
    "referencedBy": [
-    "asset_movements(from_department_id)",
     "asset_movements(to_department_id)",
+    "asset_movements(from_department_id)",
     "assets(department_id)",
     "purchase_department_approvals(department_id)",
     "purchase_department_rules(department_id)",
@@ -24545,11 +24545,11 @@
    "unique": [
     [
      "school_id",
-     "name"
+     "code"
     ],
     [
      "school_id",
-     "code"
+     "name"
     ]
    ],
    "references": [],
@@ -24627,18 +24627,18 @@
    "references": [
     {
      "columns": [
-      "file_id"
+      "created_by"
      ],
-     "table": "files",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "created_by"
+      "file_id"
      ],
-     "table": "users",
+     "table": "files",
      "refColumns": [
       "id"
      ]
@@ -24993,18 +24993,18 @@
    "references": [
     {
      "columns": [
-      "employee_id"
+      "requested_by_user_id"
      ],
-     "table": "employees",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "requested_by_user_id"
+      "employee_id"
      ],
-     "table": "users",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -25171,9 +25171,9 @@
    "references": [
     {
      "columns": [
-      "file_id"
+      "type_id"
      ],
-     "table": "files",
+     "table": "employee_document_types",
      "refColumns": [
       "id"
      ]
@@ -25189,9 +25189,9 @@
     },
     {
      "columns": [
-      "type_id"
+      "file_id"
      ],
-     "table": "employee_document_types",
+     "table": "files",
      "refColumns": [
       "id"
      ]
@@ -25570,24 +25570,6 @@
    "references": [
     {
      "columns": [
-      "employee_id"
-     ],
-     "table": "employees",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "workflow_instance_id"
-     ],
-     "table": "workflow_instances",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "raised_by"
      ],
      "table": "users",
@@ -25606,9 +25588,27 @@
     },
     {
      "columns": [
+      "employee_id"
+     ],
+     "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "decided_by"
      ],
      "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "workflow_instance_id"
+     ],
+     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
@@ -25800,16 +25800,7 @@
    "references": [
     {
      "columns": [
-      "prepared_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "paid_by"
+      "decided_by"
      ],
      "table": "users",
      "refColumns": [
@@ -25827,7 +25818,16 @@
     },
     {
      "columns": [
-      "decided_by"
+      "prepared_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "paid_by"
      ],
      "table": "users",
      "refColumns": [
@@ -26261,18 +26261,18 @@
    "references": [
     {
      "columns": [
-      "subject_id"
+      "employee_id"
      ],
-     "table": "subjects",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "employee_id"
+      "subject_id"
      ],
-     "table": "employees",
+     "table": "subjects",
      "refColumns": [
       "id"
      ]
@@ -26726,6 +26726,7 @@
     "gate_pass_levels(employee_id)",
     "gate_passes(employee_id)",
     "goods_receipt_signoffs(employee_id)",
+    "guardians(staff_employee_id)",
     "hostel_wardens(employee_id)",
     "job_applications(employee_id)",
     "leave_approval_levels(employee_id)",
@@ -27001,18 +27002,18 @@
     },
     {
      "columns": [
-      "exam_id"
+      "opened_by"
      ],
-     "table": "exams",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "opened_by"
+      "exam_id"
      ],
-     "table": "users",
+     "table": "exams",
      "refColumns": [
       "id"
      ]
@@ -27171,6 +27172,15 @@
    "references": [
     {
      "columns": [
+      "class_id"
+     ],
+     "table": "classes",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "grade_scale_id"
      ],
      "table": "grade_scales",
@@ -27183,15 +27193,6 @@
       "exam_id"
      ],
      "table": "exams",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "class_id"
-     ],
-     "table": "classes",
      "refColumns": [
       "id"
      ]
@@ -27347,18 +27348,18 @@
    "references": [
     {
      "columns": [
-      "exam_subject_id"
+      "class_section_id"
      ],
-     "table": "exam_subjects",
+     "table": "class_sections",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "class_section_id"
+      "exam_subject_id"
      ],
-     "table": "class_sections",
+     "table": "exam_subjects",
      "refColumns": [
       "id"
      ]
@@ -27409,18 +27410,18 @@
    "references": [
     {
      "columns": [
-      "set_id"
+      "exam_id"
      ],
-     "table": "indicator_sets",
+     "table": "exams",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "exam_id"
+      "set_id"
      ],
-     "table": "exams",
+     "table": "indicator_sets",
      "refColumns": [
       "id"
      ]
@@ -27499,15 +27500,6 @@
    "references": [
     {
      "columns": [
-      "category_id"
-     ],
-     "table": "remark_categories",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "exam_id"
      ],
      "table": "exams",
@@ -27520,6 +27512,15 @@
       "student_id"
      ],
      "table": "students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "category_id"
+     ],
+     "table": "remark_categories",
      "refColumns": [
       "id"
      ]
@@ -27725,24 +27726,6 @@
    "references": [
     {
      "columns": [
-      "class_section_id"
-     ],
-     "table": "class_sections",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "student_id"
-     ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "exam_id"
      ],
      "table": "exams",
@@ -27755,6 +27738,24 @@
       "class_id"
      ],
      "table": "classes",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "class_section_id"
+     ],
+     "table": "class_sections",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "student_id"
+     ],
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -28076,9 +28077,9 @@
     },
     {
      "columns": [
-      "class_id"
+      "subject_id"
      ],
-     "table": "classes",
+     "table": "subjects",
      "refColumns": [
       "id"
      ]
@@ -28094,9 +28095,9 @@
     },
     {
      "columns": [
-      "subject_id"
+      "class_id"
      ],
-     "table": "subjects",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
@@ -28286,18 +28287,18 @@
    "references": [
     {
      "columns": [
-      "exam_type_id"
+      "academic_year_id"
      ],
-     "table": "exam_types",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "academic_year_id"
+      "exam_type_id"
      ],
-     "table": "academic_years",
+     "table": "exam_types",
      "refColumns": [
       "id"
      ]
@@ -28459,18 +28460,18 @@
    "references": [
     {
      "columns": [
-      "acted_by"
+      "exit_id"
      ],
-     "table": "users",
+     "table": "employee_exits",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "exit_id"
+      "acted_by"
      ],
-     "table": "employee_exits",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -28637,7 +28638,7 @@
    "references": [
     {
      "columns": [
-      "published_by"
+      "draft_updated_by"
      ],
      "table": "users",
      "refColumns": [
@@ -28646,7 +28647,7 @@
     },
     {
      "columns": [
-      "draft_updated_by"
+      "published_by"
      ],
      "table": "users",
      "refColumns": [
@@ -28847,7 +28848,7 @@
    "references": [
     {
      "columns": [
-      "created_by"
+      "updated_by"
      ],
      "table": "users",
      "refColumns": [
@@ -28856,7 +28857,7 @@
     },
     {
      "columns": [
-      "updated_by"
+      "created_by"
      ],
      "table": "users",
      "refColumns": [
@@ -29104,6 +29105,33 @@
    "references": [
     {
      "columns": [
+      "charge_demand_id"
+     ],
+     "table": "fee_demands",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "workflow_instance_id"
+     ],
+     "table": "workflow_instances",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "undo_workflow_instance_id"
+     ],
+     "table": "workflow_instances",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "student_id"
      ],
      "table": "students",
@@ -29131,36 +29159,9 @@
     },
     {
      "columns": [
-      "charge_demand_id"
-     ],
-     "table": "fee_demands",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "academic_year_id"
      ],
      "table": "academic_years",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "workflow_instance_id"
-     ],
-     "table": "workflow_instances",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "undo_workflow_instance_id"
-     ],
-     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
@@ -29254,9 +29255,9 @@
    "references": [
     {
      "columns": [
-      "from_year_id"
+      "student_id"
      ],
-     "table": "academic_years",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -29272,18 +29273,18 @@
     },
     {
      "columns": [
-      "student_id"
+      "run_id"
      ],
-     "table": "students",
+     "table": "fee_carry_runs",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "run_id"
+      "from_year_id"
      ],
-     "table": "fee_carry_runs",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -29487,9 +29488,9 @@
    "references": [
     {
      "columns": [
-      "workflow_instance_id"
+      "academic_year_id"
      ],
-     "table": "workflow_instances",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -29505,18 +29506,9 @@
     },
     {
      "columns": [
-      "payment_id"
+      "student_id"
      ],
-     "table": "fee_payments",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "academic_year_id"
-     ],
-     "table": "academic_years",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -29532,9 +29524,18 @@
     },
     {
      "columns": [
-      "student_id"
+      "workflow_instance_id"
      ],
-     "table": "students",
+     "table": "workflow_instances",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "payment_id"
+     ],
+     "table": "fee_payments",
      "refColumns": [
       "id"
      ]
@@ -29609,18 +29610,18 @@
    "references": [
     {
      "columns": [
-      "class_id"
+      "academic_year_id"
      ],
-     "table": "classes",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "academic_year_id"
+      "class_id"
      ],
-     "table": "academic_years",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
@@ -29784,18 +29785,18 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "academic_year_id"
      ],
-     "table": "students",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "academic_year_id"
+      "student_id"
      ],
-     "table": "academic_years",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -29910,6 +29911,24 @@
    "references": [
     {
      "columns": [
+      "student_id"
+     ],
+     "table": "students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "head_id"
+     ],
+     "table": "fee_heads",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "academic_year_id"
      ],
      "table": "academic_years",
@@ -29934,29 +29953,11 @@
      "refColumns": [
       "id"
      ]
-    },
-    {
-     "columns": [
-      "head_id"
-     ],
-     "table": "fee_heads",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "student_id"
-     ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
     }
    ],
    "referencedBy": [
-    "fee_adjustments(demand_id)",
     "fee_adjustments(charge_demand_id)",
+    "fee_adjustments(demand_id)",
     "fee_payment_allocations(demand_id)"
    ]
   },
@@ -30049,18 +30050,18 @@
    "references": [
     {
      "columns": [
-      "academic_year_id"
+      "bank_account_id"
      ],
-     "table": "academic_years",
+     "table": "school_bank_accounts",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "bank_account_id"
+      "academic_year_id"
      ],
-     "table": "school_bank_accounts",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -30595,6 +30596,15 @@
    "references": [
     {
      "columns": [
+      "academic_year_id"
+     ],
+     "table": "academic_years",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "period_id"
      ],
      "table": "fee_periods",
@@ -30607,15 +30617,6 @@
       "student_id"
      ],
      "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "academic_year_id"
-     ],
-     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -30695,18 +30696,18 @@
    "references": [
     {
      "columns": [
-      "period_id"
+      "student_id"
      ],
-     "table": "fee_periods",
+     "table": "students",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "student_id"
+      "academic_year_id"
      ],
-     "table": "students",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -30722,9 +30723,9 @@
     },
     {
      "columns": [
-      "academic_year_id"
+      "period_id"
      ],
-     "table": "academic_years",
+     "table": "fee_periods",
      "refColumns": [
       "id"
      ]
@@ -30986,18 +30987,18 @@
    "references": [
     {
      "columns": [
-      "demand_id"
+      "payment_id"
      ],
-     "table": "fee_demands",
+     "table": "fee_payments",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "payment_id"
+      "demand_id"
      ],
-     "table": "fee_payments",
+     "table": "fee_demands",
      "refColumns": [
       "id"
      ]
@@ -31242,6 +31243,24 @@
    "references": [
     {
      "columns": [
+      "deposit_slip_id"
+     ],
+     "table": "fee_deposit_slips",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "bank_account_id"
+     ],
+     "table": "school_bank_accounts",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "academic_year_id"
      ],
      "table": "academic_years",
@@ -31260,15 +31279,6 @@
     },
     {
      "columns": [
-      "student_id"
-     ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "settlement_line_id"
      ],
      "table": "payment_settlement_lines",
@@ -31278,27 +31288,9 @@
     },
     {
      "columns": [
-      "bank_account_id"
+      "student_id"
      ],
-     "table": "school_bank_accounts",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "bank_line_id"
-     ],
-     "table": "bank_statement_lines",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "deposit_slip_id"
-     ],
-     "table": "fee_deposit_slips",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -31308,6 +31300,15 @@
       "financial_year_id"
      ],
      "table": "financial_years",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "bank_line_id"
+     ],
+     "table": "bank_statement_lines",
      "refColumns": [
       "id"
      ]
@@ -31434,18 +31435,18 @@
    "references": [
     {
      "columns": [
-      "class_id"
+      "period_id"
      ],
-     "table": "classes",
+     "table": "fee_periods",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "period_id"
+      "class_id"
      ],
-     "table": "fee_periods",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
@@ -31510,7 +31511,7 @@
    "references": [
     {
      "columns": [
-      "locked_by"
+      "released_by"
      ],
      "table": "users",
      "refColumns": [
@@ -31519,7 +31520,7 @@
     },
     {
      "columns": [
-      "released_by"
+      "locked_by"
      ],
      "table": "users",
      "refColumns": [
@@ -31747,9 +31748,18 @@
    "references": [
     {
      "columns": [
-      "academic_year_id"
+      "student_id"
      ],
-     "table": "academic_years",
+     "table": "students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "workflow_instance_id"
+     ],
+     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
@@ -31765,18 +31775,9 @@
     },
     {
      "columns": [
-      "student_id"
+      "academic_year_id"
      ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "workflow_instance_id"
-     ],
-     "table": "workflow_instances",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -31981,6 +31982,15 @@
    "references": [
     {
      "columns": [
+      "academic_year_id"
+     ],
+     "table": "academic_years",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "workflow_instance_id"
      ],
      "table": "workflow_instances",
@@ -31999,15 +32009,6 @@
     },
     {
      "columns": [
-      "payment_id"
-     ],
-     "table": "fee_payments",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "hostel_withdrawal_id"
      ],
      "table": "hostel_withdrawals",
@@ -32017,9 +32018,9 @@
     },
     {
      "columns": [
-      "academic_year_id"
+      "payment_id"
      ],
-     "table": "academic_years",
+     "table": "fee_payments",
      "refColumns": [
       "id"
      ]
@@ -32087,9 +32088,9 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "misc_fee_id"
      ],
-     "table": "students",
+     "table": "misc_fees",
      "refColumns": [
       "id"
      ]
@@ -32105,9 +32106,9 @@
     },
     {
      "columns": [
-      "misc_fee_id"
+      "student_id"
      ],
-     "table": "misc_fees",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -32211,9 +32212,9 @@
    "references": [
     {
      "columns": [
-      "class_id"
+      "head_id"
      ],
-     "table": "classes",
+     "table": "fee_heads",
      "refColumns": [
       "id"
      ]
@@ -32229,9 +32230,9 @@
     },
     {
      "columns": [
-      "head_id"
+      "class_id"
      ],
-     "table": "fee_heads",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
@@ -32451,18 +32452,18 @@
    "references": [
     {
      "columns": [
-      "employee_id"
+      "note_id"
      ],
-     "table": "employees",
+     "table": "file_notes",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "note_id"
+      "employee_id"
      ],
-     "table": "file_notes",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -32679,8 +32680,8 @@
     "admission_refunds(voucher_file_id)",
     "applications(pdf_file_id)",
     "applications(admission_form_file_id)",
-    "appointments(qr_file_id)",
     "appointments(card_file_id)",
+    "appointments(qr_file_id)",
     "candidate_files(file_id)",
     "daily_work_files(file_id)",
     "disposals(file_id)",
@@ -32954,18 +32955,18 @@
    "references": [
     {
      "columns": [
-      "album_id"
+      "file_id"
      ],
-     "table": "gallery_albums",
+     "table": "files",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "file_id"
+      "album_id"
      ],
-     "table": "files",
+     "table": "gallery_albums",
      "refColumns": [
       "id"
      ]
@@ -33559,18 +33560,18 @@
    "references": [
     {
      "columns": [
-      "workflow_instance_id"
+      "employee_id"
      ],
-     "table": "workflow_instances",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "employee_id"
+      "workflow_instance_id"
      ],
-     "table": "employees",
+     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
@@ -33747,18 +33748,18 @@
    "references": [
     {
      "columns": [
-      "employee_id"
+      "receipt_id"
      ],
-     "table": "employees",
+     "table": "goods_receipts",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "receipt_id"
+      "employee_id"
      ],
-     "table": "goods_receipts",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -33900,9 +33901,9 @@
    "references": [
     {
      "columns": [
-      "file_id"
+      "decided_by"
      ],
-     "table": "files",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -33918,15 +33919,6 @@
     },
     {
      "columns": [
-      "workflow_instance_id"
-     ],
-     "table": "workflow_instances",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "created_by"
      ],
      "table": "users",
@@ -33936,9 +33928,18 @@
     },
     {
      "columns": [
-      "decided_by"
+      "workflow_instance_id"
      ],
-     "table": "users",
+     "table": "workflow_instances",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "file_id"
+     ],
+     "table": "files",
      "refColumns": [
       "id"
      ]
@@ -34399,6 +34400,26 @@
     {
      "name": "photo_file_id",
      "type": "bigint"
+    },
+    {
+     "name": "staff_employee_id",
+     "type": "bigint",
+     "comment": "the staff member (School staff: Yes, employee code) whose login this parent record was joined to; NULL when not joined"
+    },
+    {
+     "name": "staff_prior_user_id",
+     "type": "bigint",
+     "comment": "the login the record had before it was joined to the staff login (NULL: none); Undo puts it back"
+    },
+    {
+     "name": "staff_joined_at",
+     "type": "timestamp with time zone",
+     "comment": "when the record was joined to the staff login"
+    },
+    {
+     "name": "staff_joined_by",
+     "type": "bigint",
+     "comment": "who joined it (the office user, or NULL when the staff member's new login joined it)"
     }
    ],
    "primaryKey": [
@@ -34417,9 +34438,27 @@
     },
     {
      "columns": [
+      "staff_prior_user_id"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "user_id"
      ],
      "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "staff_employee_id"
+     ],
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -34709,6 +34748,15 @@
    "references": [
     {
      "columns": [
+      "student_id"
+     ],
+     "table": "students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "camp_id"
      ],
      "table": "health_camps",
@@ -34739,15 +34787,6 @@
       "doctor_id"
      ],
      "table": "clinic_masters",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "student_id"
-     ],
-     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -35094,18 +35133,18 @@
    "references": [
     {
      "columns": [
-      "academic_year_id"
+      "campus_id"
      ],
-     "table": "academic_years",
+     "table": "campuses",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "campus_id"
+      "academic_year_id"
      ],
-     "table": "campuses",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -35189,18 +35228,18 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "bed_id"
      ],
-     "table": "students",
+     "table": "hostel_beds",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "bed_id"
+      "student_id"
      ],
-     "table": "hostel_beds",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -35781,18 +35820,18 @@
    "references": [
     {
      "columns": [
-      "hostel_id"
+      "student_id"
      ],
-     "table": "hostels",
+     "table": "students",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "student_id"
+      "hostel_id"
      ],
-     "table": "students",
+     "table": "hostels",
      "refColumns": [
       "id"
      ]
@@ -35871,18 +35910,18 @@
    "references": [
     {
      "columns": [
-      "meal_id"
+      "student_id"
      ],
-     "table": "hostel_meals",
+     "table": "students",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "student_id"
+      "meal_id"
      ],
-     "table": "students",
+     "table": "hostel_meals",
      "refColumns": [
       "id"
      ]
@@ -35996,18 +36035,18 @@
    "references": [
     {
      "columns": [
-      "mark_id"
+      "student_id"
      ],
-     "table": "hostel_meal_marks",
+     "table": "students",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "student_id"
+      "mark_id"
      ],
-     "table": "students",
+     "table": "hostel_meal_marks",
      "refColumns": [
       "id"
      ]
@@ -36280,18 +36319,18 @@
    "references": [
     {
      "columns": [
-      "bed_id"
+      "student_id"
      ],
-     "table": "hostel_beds",
+     "table": "students",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "student_id"
+      "bed_id"
      ],
-     "table": "students",
+     "table": "hostel_beds",
      "refColumns": [
       "id"
      ]
@@ -36975,18 +37014,18 @@
    "references": [
     {
      "columns": [
-      "withdrawal_id"
+      "item_id"
      ],
-     "table": "hostel_withdrawals",
+     "table": "hostel_checkout_items",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "item_id"
+      "withdrawal_id"
      ],
-     "table": "hostel_checkout_items",
+     "table": "hostel_withdrawals",
      "refColumns": [
       "id"
      ]
@@ -37332,6 +37371,24 @@
    "references": [
     {
      "columns": [
+      "allotment_id"
+     ],
+     "table": "hostel_allotments",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "revoke_bed_id"
+     ],
+     "table": "hostel_beds",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "revoke_workflow_instance_id"
      ],
      "table": "workflow_instances",
@@ -37359,9 +37416,18 @@
     },
     {
      "columns": [
-      "revoke_bed_id"
+      "academic_year_id"
      ],
-     "table": "hostel_beds",
+     "table": "academic_years",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "damage_misc_fee_id"
+     ],
+     "table": "misc_fees",
      "refColumns": [
       "id"
      ]
@@ -37380,33 +37446,6 @@
       "exit_request_id"
      ],
      "table": "hostel_exit_requests",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "damage_misc_fee_id"
-     ],
-     "table": "misc_fees",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "allotment_id"
-     ],
-     "table": "hostel_allotments",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "academic_year_id"
-     ],
-     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -37775,18 +37814,18 @@
    "references": [
     {
      "columns": [
-      "author"
+      "issue_id"
      ],
-     "table": "users",
+     "table": "hypercare_issues",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "issue_id"
+      "author"
      ],
-     "table": "hypercare_issues",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -37872,7 +37911,7 @@
    "references": [
     {
      "columns": [
-      "actor_user_id"
+      "target_user_id"
      ],
      "table": "users",
      "refColumns": [
@@ -37881,7 +37920,7 @@
     },
     {
      "columns": [
-      "target_user_id"
+      "actor_user_id"
      ],
      "table": "users",
      "refColumns": [
@@ -38093,18 +38132,18 @@
     },
     {
      "columns": [
-      "indicator_id"
+      "student_id"
      ],
-     "table": "indicators",
+     "table": "students",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "student_id"
+      "indicator_id"
      ],
-     "table": "students",
+     "table": "indicators",
      "refColumns": [
       "id"
      ]
@@ -38216,18 +38255,18 @@
    "references": [
     {
      "columns": [
-      "class_id"
+      "set_id"
      ],
-     "table": "classes",
+     "table": "indicator_sets",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "set_id"
+      "class_id"
      ],
-     "table": "indicator_sets",
+     "table": "classes",
      "refColumns": [
       "id"
      ]
@@ -38544,18 +38583,18 @@
    "references": [
     {
      "columns": [
-      "item_id"
+      "store_id"
      ],
-     "table": "purchase_items",
+     "table": "stores",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "store_id"
+      "item_id"
      ],
-     "table": "stores",
+     "table": "purchase_items",
      "refColumns": [
       "id"
      ]
@@ -38759,18 +38798,18 @@
     },
     {
      "columns": [
-      "employee_id"
+      "pdf_file_id"
      ],
-     "table": "employees",
+     "table": "files",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "pdf_file_id"
+      "employee_id"
      ],
-     "table": "files",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -39287,9 +39326,18 @@
    "references": [
     {
      "columns": [
-      "workflow_instance_id"
+      "employee_id"
      ],
-     "table": "workflow_instances",
+     "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "academic_year_id"
+     ],
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -39305,15 +39353,6 @@
     },
     {
      "columns": [
-      "employee_id"
-     ],
-     "table": "employees",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "class_section_id"
      ],
      "table": "class_sections",
@@ -39323,9 +39362,9 @@
     },
     {
      "columns": [
-      "academic_year_id"
+      "workflow_instance_id"
      ],
-     "table": "academic_years",
+     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
@@ -39581,18 +39620,18 @@
    "references": [
     {
      "columns": [
-      "academic_year_id"
+      "employee_id"
      ],
-     "table": "academic_years",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "employee_id"
+      "academic_year_id"
      ],
-     "table": "employees",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -40033,9 +40072,9 @@
    "references": [
     {
      "columns": [
-      "loan_id"
+      "found_request_id"
      ],
-     "table": "library_loans",
+     "table": "misc_fee_requests",
      "refColumns": [
       "id"
      ]
@@ -40060,18 +40099,18 @@
     },
     {
      "columns": [
-      "found_request_id"
+      "copy_id"
      ],
-     "table": "misc_fee_requests",
+     "table": "library_copies",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "copy_id"
+      "loan_id"
      ],
-     "table": "library_copies",
+     "table": "library_loans",
      "refColumns": [
       "id"
      ]
@@ -40214,9 +40253,9 @@
    "references": [
     {
      "columns": [
-      "library_id"
+      "title_id"
      ],
-     "table": "library_libraries",
+     "table": "library_titles",
      "refColumns": [
       "id"
      ]
@@ -40232,18 +40271,18 @@
     },
     {
      "columns": [
-      "vendor_id"
+      "library_id"
      ],
-     "table": "library_vendors",
+     "table": "library_libraries",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "title_id"
+      "vendor_id"
      ],
-     "table": "library_titles",
+     "table": "library_vendors",
      "refColumns": [
       "id"
      ]
@@ -40966,18 +41005,18 @@
    "references": [
     {
      "columns": [
-      "copy_id"
+      "fine_receipt_id"
      ],
-     "table": "library_copies",
+     "table": "misc_receipts",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "fine_receipt_id"
+      "copy_id"
      ],
-     "table": "misc_receipts",
+     "table": "library_copies",
      "refColumns": [
       "id"
      ]
@@ -41597,18 +41636,18 @@
     },
     {
      "columns": [
-      "misc_receipt_id"
+      "misc_fee_id"
      ],
-     "table": "misc_receipts",
+     "table": "misc_fees",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "misc_fee_id"
+      "misc_receipt_id"
      ],
-     "table": "misc_fees",
+     "table": "misc_receipts",
      "refColumns": [
       "id"
      ]
@@ -42071,18 +42110,18 @@
    "references": [
     {
      "columns": [
-      "copy_id"
+      "check_id"
      ],
-     "table": "library_copies",
+     "table": "library_stock_checks",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "check_id"
+      "copy_id"
      ],
-     "table": "library_stock_checks",
+     "table": "library_copies",
      "refColumns": [
       "id"
      ]
@@ -42488,9 +42527,9 @@
     },
     {
      "columns": [
-      "periodical_id"
+      "vendor_id"
      ],
-     "table": "library_periodicals",
+     "table": "library_vendors",
      "refColumns": [
       "id"
      ]
@@ -42506,9 +42545,9 @@
     },
     {
      "columns": [
-      "vendor_id"
+      "periodical_id"
      ],
-     "table": "library_vendors",
+     "table": "library_periodicals",
      "refColumns": [
       "id"
      ]
@@ -42568,18 +42607,18 @@
    "references": [
     {
      "columns": [
-      "author_id"
+      "title_id"
      ],
-     "table": "library_authors",
+     "table": "library_titles",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "title_id"
+      "author_id"
      ],
-     "table": "library_titles",
+     "table": "library_authors",
      "refColumns": [
       "id"
      ]
@@ -42755,24 +42794,6 @@
     },
     {
      "columns": [
-      "publisher_id"
-     ],
-     "table": "library_publishers",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "material_type_id"
-     ],
-     "table": "library_material_types",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "language_id"
      ],
      "table": "library_languages",
@@ -42782,9 +42803,27 @@
     },
     {
      "columns": [
+      "publisher_id"
+     ],
+     "table": "library_publishers",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "class_id"
      ],
      "table": "classes",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "material_type_id"
+     ],
+     "table": "library_material_types",
      "refColumns": [
       "id"
      ]
@@ -43091,18 +43130,18 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "exam_subject_id"
      ],
-     "table": "students",
+     "table": "exam_subjects",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "exam_subject_id"
+      "student_id"
      ],
-     "table": "exam_subjects",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -43166,18 +43205,18 @@
    "references": [
     {
      "columns": [
-      "student_id"
+      "part_id"
      ],
-     "table": "students",
+     "table": "exam_subject_parts",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "part_id"
+      "student_id"
      ],
-     "table": "exam_subject_parts",
+     "table": "students",
      "refColumns": [
       "id"
      ]
@@ -43700,15 +43739,6 @@
    "references": [
     {
      "columns": [
-      "request_id"
-     ],
-     "table": "message_requests",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "student_id"
      ],
      "table": "students",
@@ -43718,18 +43748,27 @@
     },
     {
      "columns": [
-      "user_id"
+      "message_id"
      ],
-     "table": "users",
+     "table": "comms_messages",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "message_id"
+      "request_id"
      ],
-     "table": "comms_messages",
+     "table": "message_requests",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "user_id"
+     ],
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -44084,18 +44123,18 @@
     },
     {
      "columns": [
-      "workflow_instance_id"
+      "receipt_id"
      ],
-     "table": "workflow_instances",
+     "table": "misc_receipts",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "receipt_id"
+      "workflow_instance_id"
      ],
-     "table": "misc_receipts",
+     "table": "workflow_instances",
      "refColumns": [
       "id"
      ]
@@ -44183,23 +44222,14 @@
    "unique": [
     [
      "misc_fee_id",
-     "employee_id"
+     "student_id"
     ],
     [
      "misc_fee_id",
-     "student_id"
+     "employee_id"
     ]
    ],
    "references": [
-    {
-     "columns": [
-      "employee_id"
-     ],
-     "table": "employees",
-     "refColumns": [
-      "id"
-     ]
-    },
     {
      "columns": [
       "student_id"
@@ -44214,6 +44244,15 @@
       "misc_fee_id"
      ],
      "table": "misc_fees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "employee_id"
+     ],
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -44316,18 +44355,18 @@
    "references": [
     {
      "columns": [
-      "academic_year_id"
+      "head_id"
      ],
-     "table": "academic_years",
+     "table": "fee_heads",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "head_id"
+      "academic_year_id"
      ],
-     "table": "fee_heads",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -44337,8 +44376,8 @@
     "consent_forms(misc_fee_id)",
     "fee_reminders(misc_fee_id)",
     "hostel_withdrawal_clearances(charge_misc_fee_id)",
-    "hostel_withdrawals(mess_misc_fee_id)",
     "hostel_withdrawals(damage_misc_fee_id)",
+    "hostel_withdrawals(mess_misc_fee_id)",
     "library_charges(misc_fee_id)",
     "library_sale_orders(misc_fee_id)",
     "misc_fee_requests(misc_fee_id)",
@@ -44511,54 +44550,9 @@
    "references": [
     {
      "columns": [
-      "academic_year_id"
-     ],
-     "table": "academic_years",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "student_id"
-     ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "misc_fee_student_id"
-     ],
-     "table": "misc_fee_students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "head_id"
-     ],
-     "table": "fee_heads",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "financial_year_id"
      ],
      "table": "financial_years",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "employee_id"
-     ],
-     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -44583,9 +44577,54 @@
     },
     {
      "columns": [
+      "student_id"
+     ],
+     "table": "students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "application_id"
      ],
      "table": "applications",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "employee_id"
+     ],
+     "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "academic_year_id"
+     ],
+     "table": "academic_years",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "misc_fee_student_id"
+     ],
+     "table": "misc_fee_students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "head_id"
+     ],
+     "table": "fee_heads",
      "refColumns": [
       "id"
      ]
@@ -44696,7 +44735,7 @@
    "references": [
     {
      "columns": [
-      "user_id"
+      "revoked_by"
      ],
      "table": "users",
      "refColumns": [
@@ -44705,7 +44744,7 @@
     },
     {
      "columns": [
-      "revoked_by"
+      "user_id"
      ],
      "table": "users",
      "refColumns": [
@@ -44773,18 +44812,18 @@
    "references": [
     {
      "columns": [
-      "user_id"
+      "session_id"
      ],
-     "table": "users",
+     "table": "mobile_sessions",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "session_id"
+      "user_id"
      ],
-     "table": "mobile_sessions",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -44821,18 +44860,18 @@
    "references": [
     {
      "columns": [
-      "notice_id"
+      "file_id"
      ],
-     "table": "notices",
+     "table": "files",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "file_id"
+      "notice_id"
      ],
-     "table": "files",
+     "table": "notices",
      "refColumns": [
       "id"
      ]
@@ -45235,27 +45274,9 @@
    "references": [
     {
      "columns": [
-      "student_id"
-     ],
-     "table": "students",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "applicant_id"
      ],
      "table": "applicants",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "academic_year_id"
-     ],
-     "table": "academic_years",
      "refColumns": [
       "id"
      ]
@@ -45271,27 +45292,18 @@
     },
     {
      "columns": [
-      "application_id"
+      "academic_year_id"
      ],
-     "table": "applications",
+     "table": "academic_years",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "assigned_user_id"
+      "hostel_id"
      ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "employee_id"
-     ],
-     "table": "employees",
+     "table": "hostels",
      "refColumns": [
       "id"
      ]
@@ -45307,9 +45319,36 @@
     },
     {
      "columns": [
-      "hostel_id"
+      "student_id"
      ],
-     "table": "hostels",
+     "table": "students",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "employee_id"
+     ],
+     "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "assigned_user_id"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "application_id"
+     ],
+     "table": "applications",
      "refColumns": [
       "id"
      ]
@@ -46164,18 +46203,9 @@
    "references": [
     {
      "columns": [
-      "fee_payment_id"
+      "created_by"
      ],
-     "table": "fee_payments",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "pay_head_id"
-     ],
-     "table": "payroll_pay_heads",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -46191,6 +46221,15 @@
     },
     {
      "columns": [
+      "pay_head_id"
+     ],
+     "table": "payroll_pay_heads",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
       "paid_in_record_id"
      ],
      "table": "payroll_records",
@@ -46200,18 +46239,9 @@
     },
     {
      "columns": [
-      "deleted_by"
+      "fee_payment_id"
      ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "created_by"
-     ],
-     "table": "users",
+     "table": "fee_payments",
      "refColumns": [
       "id"
      ]
@@ -46221,6 +46251,15 @@
       "employee_id"
      ],
      "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "deleted_by"
+     ],
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -46323,9 +46362,18 @@
     },
     {
      "columns": [
-      "employee_id"
+      "paid_in_record_id"
      ],
-     "table": "employees",
+     "table": "payroll_records",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "pay_head_id"
+     ],
+     "table": "payroll_pay_heads",
      "refColumns": [
       "id"
      ]
@@ -46341,18 +46389,9 @@
     },
     {
      "columns": [
-      "paid_in_record_id"
+      "employee_id"
      ],
-     "table": "payroll_records",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "pay_head_id"
-     ],
-     "table": "payroll_pay_heads",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -46519,7 +46558,7 @@
     },
     {
      "columns": [
-      "finalised_by"
+      "updated_by"
      ],
      "table": "users",
      "refColumns": [
@@ -46528,7 +46567,7 @@
     },
     {
      "columns": [
-      "updated_by"
+      "finalised_by"
      ],
      "table": "users",
      "refColumns": [
@@ -46727,9 +46766,9 @@
    "references": [
     {
      "columns": [
-      "rejected_by"
+      "batch_id"
      ],
-     "table": "users",
+     "table": "payroll_bank_batches",
      "refColumns": [
       "id"
      ]
@@ -46745,9 +46784,9 @@
     },
     {
      "columns": [
-      "batch_id"
+      "rejected_by"
      ],
-     "table": "payroll_bank_batches",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -46888,9 +46927,9 @@
    "references": [
     {
      "columns": [
-      "bank_account_id"
+      "confirmed_by"
      ],
-     "table": "payroll_bank_accounts",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -46915,9 +46954,9 @@
     },
     {
      "columns": [
-      "confirmed_by"
+      "run_id"
      ],
-     "table": "users",
+     "table": "payroll_runs",
      "refColumns": [
       "id"
      ]
@@ -46933,9 +46972,9 @@
     },
     {
      "columns": [
-      "run_id"
+      "bank_account_id"
      ],
-     "table": "payroll_runs",
+     "table": "payroll_bank_accounts",
      "refColumns": [
       "id"
      ]
@@ -47174,24 +47213,6 @@
    "references": [
     {
      "columns": [
-      "message_id"
-     ],
-     "table": "comms_messages",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "made_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "file_id"
      ],
      "table": "files",
@@ -47201,9 +47222,9 @@
     },
     {
      "columns": [
-      "employee_id"
+      "released_by"
      ],
-     "table": "employees",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -47219,7 +47240,25 @@
     },
     {
      "columns": [
-      "released_by"
+      "message_id"
+     ],
+     "table": "comms_messages",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "employee_id"
+     ],
+     "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "made_by"
      ],
      "table": "users",
      "refColumns": [
@@ -47331,45 +47370,9 @@
    "references": [
     {
      "columns": [
-      "adhoc_id"
+      "proof_file_id"
      ],
-     "table": "payroll_adhoc",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "created_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "decided_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "employee_id"
-     ],
-     "table": "employees",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "paid_in_record_id"
-     ],
-     "table": "payroll_records",
+     "table": "files",
      "refColumns": [
       "id"
      ]
@@ -47385,9 +47388,18 @@
     },
     {
      "columns": [
-      "proof_file_id"
+      "paid_in_record_id"
      ],
-     "table": "files",
+     "table": "payroll_records",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "employee_id"
+     ],
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -47395,6 +47407,33 @@
     {
      "columns": [
       "updated_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "created_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "adhoc_id"
+     ],
+     "table": "payroll_adhoc",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "decided_by"
      ],
      "table": "users",
      "refColumns": [
@@ -47620,7 +47659,7 @@
    "references": [
     {
      "columns": [
-      "switched_by"
+      "rolled_back_by"
      ],
      "table": "users",
      "refColumns": [
@@ -47638,7 +47677,7 @@
     },
     {
      "columns": [
-      "rolled_back_by"
+      "switched_by"
      ],
      "table": "users",
      "refColumns": [
@@ -47754,18 +47793,18 @@
    "references": [
     {
      "columns": [
-      "decided_by"
+      "employee_id"
      ],
-     "table": "users",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "employee_id"
+      "decided_by"
      ],
-     "table": "employees",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -47961,15 +48000,6 @@
    "references": [
     {
      "columns": [
-      "approved_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "created_by"
      ],
      "table": "users",
@@ -47980,6 +48010,15 @@
     {
      "columns": [
       "withdrawn_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "approved_by"
      ],
      "table": "users",
      "refColumns": [
@@ -48072,7 +48111,7 @@
    "references": [
     {
      "columns": [
-      "created_by"
+      "updated_by"
      ],
      "table": "users",
      "refColumns": [
@@ -48090,7 +48129,7 @@
     },
     {
      "columns": [
-      "updated_by"
+      "created_by"
      ],
      "table": "users",
      "refColumns": [
@@ -48166,18 +48205,18 @@
    "references": [
     {
      "columns": [
-      "batch_id"
+      "countersigned_by"
      ],
-     "table": "payroll_parity_batches",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "countersigned_by"
+      "batch_id"
      ],
-     "table": "users",
+     "table": "payroll_parity_batches",
      "refColumns": [
       "id"
      ]
@@ -48265,15 +48304,6 @@
    "references": [
     {
      "columns": [
-      "updated_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "employee_id"
      ],
      "table": "employees",
@@ -48284,6 +48314,15 @@
     {
      "columns": [
       "created_by"
+     ],
+     "table": "users",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "updated_by"
      ],
      "table": "users",
      "refColumns": [
@@ -48463,18 +48502,18 @@
    "references": [
     {
      "columns": [
-      "employee_id"
+      "created_by"
      ],
-     "table": "employees",
+     "table": "users",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "created_by"
+      "employee_id"
      ],
-     "table": "users",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -48594,9 +48633,9 @@
    "references": [
     {
      "columns": [
-      "employee_id"
+      "source_record_id"
      ],
-     "table": "employees",
+     "table": "payroll_records",
      "refColumns": [
       "id"
      ]
@@ -48612,9 +48651,9 @@
     },
     {
      "columns": [
-      "source_record_id"
+      "created_by"
      ],
-     "table": "payroll_records",
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -48639,18 +48678,18 @@
     },
     {
      "columns": [
-      "arrear_pf_id"
+      "employee_id"
      ],
-     "table": "payroll_arrears",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
     },
     {
      "columns": [
-      "created_by"
+      "arrear_pf_id"
      ],
-     "table": "users",
+     "table": "payroll_arrears",
      "refColumns": [
       "id"
      ]
@@ -48803,7 +48842,7 @@
     },
     {
      "columns": [
-      "updated_by"
+      "withdrawn_by"
      ],
      "table": "users",
      "refColumns": [
@@ -48812,7 +48851,7 @@
     },
     {
      "columns": [
-      "withdrawn_by"
+      "updated_by"
      ],
      "table": "users",
      "refColumns": [
@@ -49024,15 +49063,6 @@
    "references": [
     {
      "columns": [
-      "updated_by"
-     ],
-     "table": "users",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
       "adhoc_id"
      ],
      "table": "payroll_adhoc",
@@ -49063,6 +49093,15 @@
       "employee_id"
      ],
      "table": "employees",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "updated_by"
+     ],
+     "table": "users",
      "refColumns": [
       "id"
      ]
@@ -61213,8 +61252,8 @@
     "admission_hand_draws(school_id)",
     "admission_level_digests(school_id)",
     "admission_localities(school_id)",
-    "admission_moves(to_school_id)",
     "admission_moves(from_school_id)",
+    "admission_moves(to_school_id)",
     "admission_no_changes(school_id)",
     "admission_number_series(school_id)",
     "admission_offers(school_id)",
@@ -66164,9 +66203,18 @@
     },
     {
      "columns": [
-      "taken_by_employee_id"
+      "store_id"
      ],
-     "table": "employees",
+     "table": "stores",
+     "refColumns": [
+      "id"
+     ]
+    },
+    {
+     "columns": [
+      "requisition_id"
+     ],
+     "table": "purchase_requisitions",
      "refColumns": [
       "id"
      ]
@@ -66191,18 +66239,9 @@
     },
     {
      "columns": [
-      "requisition_id"
+      "taken_by_employee_id"
      ],
-     "table": "purchase_requisitions",
-     "refColumns": [
-      "id"
-     ]
-    },
-    {
-     "columns": [
-      "store_id"
-     ],
-     "table": "stores",
+     "table": "employees",
      "refColumns": [
       "id"
      ]
@@ -69446,8 +69485,8 @@
     "exam_results(student_id)",
     "fee_adjustments(student_id)",
     "fee_carry_forwards(student_id)",
-    "fee_change_requests(to_student_id)",
     "fee_change_requests(student_id)",
+    "fee_change_requests(to_student_id)",
     "fee_demand_runs(student_id)",
     "fee_demands(student_id)",
     "fee_late_fee_overrides(student_id)",
@@ -73099,10 +73138,10 @@
    ],
    "references": [],
    "referencedBy": [
-    "academic_acks(staff_user_id)",
     "academic_acks(acked_by)",
-    "admission_cancellations(decided_by)",
+    "academic_acks(staff_user_id)",
     "admission_cancellations(requested_by)",
+    "admission_cancellations(decided_by)",
     "admission_corrections(created_by)",
     "admission_draw_settings(updated_by)",
     "admission_enquiries(created_by)",
@@ -73115,22 +73154,22 @@
     "admission_part_marks(entered_by)",
     "admission_passcodes(created_by)",
     "admission_passcodes(revoked_by)",
-    "admission_refunds(requested_by)",
     "admission_refunds(decided_by)",
     "admission_refunds(paid_by)",
+    "admission_refunds(requested_by)",
     "admission_result_release_log(by_user)",
-    "admission_result_releases(set_by)",
     "admission_result_releases(told_by)",
+    "admission_result_releases(set_by)",
     "admission_stage_marks(updated_by)",
-    "admission_stage_results(decided_by)",
     "admission_stage_results(undone_by)",
+    "admission_stage_results(decided_by)",
     "admission_twin_pairs(set_by)",
     "ai_conversations(user_id)",
     "ai_model_settings(updated_by)",
     "api_idempotency(user_id)",
     "application_answer_changes(changed_by)",
-    "applications(entered_by)",
     "applications(points_confirmed_by)",
+    "applications(entered_by)",
     "appointment_events(actor_user_id)",
     "appointments(decided_by)",
     "appointments(booked_by)",
@@ -73144,8 +73183,8 @@
     "board_layouts(created_by)",
     "board_subjects(updated_by)",
     "board_teacher_overrides(created_by)",
-    "board_year_figures(created_by)",
     "board_year_figures(updated_by)",
+    "board_year_figures(created_by)",
     "breach_log(owner)",
     "breach_log(reported_by)",
     "break_glass_events(user_id)",
@@ -73154,32 +73193,32 @@
     "certificate_batches(created_by)",
     "certificate_book_series(updated_by)",
     "certificate_cutover(brought_by)",
-    "certificate_imports(updated_by)",
     "certificate_imports(created_by)",
+    "certificate_imports(updated_by)",
     "certificate_requests(requested_by)",
     "certificate_requests(decided_by)",
     "certificate_revisions(created_by)",
     "certificate_settings(updated_by)",
     "certificate_types(updated_by)",
+    "certificates(cancelled_by)",
     "certificates(override_by)",
     "certificates(issued_by)",
-    "certificates(cancelled_by)",
-    "class_corrections(requested_by)",
     "class_corrections(decided_by)",
+    "class_corrections(requested_by)",
     "comms_group_members(user_id)",
     "comms_inbox_reads(user_id)",
     "comms_messages(recipient_user_id)",
     "condemnation_signoffs(user_id)",
-    "condemnations(created_by)",
     "condemnations(decided_by)",
+    "condemnations(created_by)",
     "consent_form_shares(user_id)",
     "consents(user_id)",
-    "cutover_runs(signed_off_by)",
     "cutover_runs(created_by)",
+    "cutover_runs(signed_off_by)",
     "cutover_snapshots(taken_by)",
     "cutover_steps(done_by)",
-    "data_subject_requests(handled_by)",
     "data_subject_requests(requested_by_user)",
+    "data_subject_requests(handled_by)",
     "delegations(from_user_id)",
     "delegations(to_user_id)",
     "disposals(created_by)",
@@ -73187,99 +73226,100 @@
     "employee_exits(raised_by)",
     "employee_exits(decided_by)",
     "employee_exits(closed_by)",
+    "employee_fnf(decided_by)",
     "employee_fnf(prepared_by)",
     "employee_fnf(paid_by)",
-    "employee_fnf(decided_by)",
     "employees(user_id)",
     "exam_area_entry_opens(closed_by)",
     "exam_area_entry_opens(opened_by)",
     "exit_clearances(acted_by)",
-    "family_app_layouts(published_by)",
     "family_app_layouts(draft_updated_by)",
+    "family_app_layouts(published_by)",
     "family_help_headings(updated_by)",
     "family_help_headings(created_by)",
-    "family_help_questions(created_by)",
     "family_help_questions(updated_by)",
+    "family_help_questions(created_by)",
     "family_help_votes(user_id)",
     "fee_month_closes(reopened_by)",
     "fee_month_closes(closed_by)",
-    "fee_period_locks(locked_by)",
     "fee_period_locks(released_by)",
+    "fee_period_locks(locked_by)",
     "feedback_entries(user_id)",
     "file_note_events(by_user)",
     "file_note_levels(user_id)",
     "file_notes(created_by)",
     "goods_receipt_signoffs(user_id)",
-    "goods_receipts(created_by)",
     "goods_receipts(decided_by)",
+    "goods_receipts(created_by)",
     "grade_register_access(user_id)",
+    "guardians(staff_prior_user_id)",
     "guardians(user_id)",
     "helpdesk_levels(user_id)",
     "hypercare_issues(assigned_user)",
     "hypercare_issues(reporter_user)",
     "hypercare_updates(author)",
-    "impersonation_sessions(actor_user_id)",
     "impersonation_sessions(target_user_id)",
+    "impersonation_sessions(actor_user_id)",
     "login_events(user_id)",
     "mark_scheme_access(user_id)",
     "message_request_recipients(user_id)",
-    "mobile_sessions(user_id)",
     "mobile_sessions(revoked_by)",
+    "mobile_sessions(user_id)",
     "mobile_web_handoffs(user_id)",
     "parent_queries(raised_by_user_id)",
     "parent_queries(assigned_user_id)",
+    "payroll_adhoc(created_by)",
     "payroll_adhoc(updated_by)",
     "payroll_adhoc(deleted_by)",
-    "payroll_adhoc(created_by)",
     "payroll_arrears(created_by)",
     "payroll_attendance(created_by)",
-    "payroll_attendance(finalised_by)",
     "payroll_attendance(updated_by)",
+    "payroll_attendance(finalised_by)",
     "payroll_bank_accounts(updated_by)",
     "payroll_bank_accounts(created_by)",
     "payroll_bank_batch_lines(rejected_by)",
+    "payroll_bank_batches(confirmed_by)",
     "payroll_bank_batches(uploaded_by)",
     "payroll_bank_batches(cancelled_by)",
-    "payroll_bank_batches(confirmed_by)",
     "payroll_bank_batches(created_by)",
     "payroll_bonus_postings(created_by)",
     "payroll_bonus_rules(updated_by)",
-    "payroll_certificates(made_by)",
     "payroll_certificates(released_by)",
+    "payroll_certificates(made_by)",
+    "payroll_claims(updated_by)",
     "payroll_claims(created_by)",
     "payroll_claims(decided_by)",
-    "payroll_claims(updated_by)",
     "payroll_compliance(done_by)",
-    "payroll_cutover(switched_by)",
-    "payroll_cutover(prepared_by)",
     "payroll_cutover(rolled_back_by)",
+    "payroll_cutover(prepared_by)",
+    "payroll_cutover(switched_by)",
     "payroll_cutover(committed_by)",
     "payroll_declarations(decided_by)",
     "payroll_declarations(created_by)",
-    "payroll_esi_settings(approved_by)",
     "payroll_esi_settings(created_by)",
     "payroll_esi_settings(withdrawn_by)",
+    "payroll_esi_settings(approved_by)",
     "payroll_esi_settings(updated_by)",
-    "payroll_formula_tests(created_by)",
     "payroll_formula_tests(updated_by)",
+    "payroll_formula_tests(created_by)",
     "payroll_golive_signoffs(countersigned_by)",
     "payroll_golive_signoffs(signed_by)",
-    "payroll_holds(updated_by)",
     "payroll_holds(created_by)",
+    "payroll_holds(updated_by)",
     "payroll_loans(created_by)",
     "payroll_loans(updated_by)",
     "payroll_lop_reversals(updated_by)",
-    "payroll_lop_reversals(approved_by)",
     "payroll_lop_reversals(created_by)",
+    "payroll_lop_reversals(approved_by)",
     "payroll_lwf_settings(approved_by)",
     "payroll_lwf_settings(created_by)",
-    "payroll_lwf_settings(updated_by)",
     "payroll_lwf_settings(withdrawn_by)",
+    "payroll_lwf_settings(updated_by)",
     "payroll_nominees(updated_by)",
     "payroll_nominees(created_by)",
-    "payroll_ot_entries(updated_by)",
     "payroll_ot_entries(created_by)",
     "payroll_ot_entries(deleted_by)",
+    "payroll_ot_entries(updated_by)",
     "payroll_ot_rates(approved_by)",
     "payroll_ot_rates(updated_by)",
     "payroll_ot_rates(withdrawn_by)",

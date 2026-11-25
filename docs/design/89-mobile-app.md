@@ -1083,3 +1083,25 @@ more as the user scrolls down").
   - Tests: API `library-reservations` (a page of 1 for the history and the catalogue); app `queries_test`,
     `gate_pass_test`, `library_test` (the first page of 10, the next by itself); a browser check on a throwaway test
     school (12 queries, 12 passes, 12 loans, 12 books: 10, then 12, desktop and phone, axe) and on Alpha read-only.
+- **Staff who are parents here (25 Nov 2026)**: a staff member whose child is in the school sees the child with the
+  staff login (Staff and Parent profiles, one sign-in; the switcher already did this when the parent record and the
+  staff login were one login, which happened only when the record's mobile or e-mail matched the staff login).
+  - The parent record's **School staff: Yes** and **employee code** (father, mother or guardian section; office-only
+    fields) now join it to that staff member's login. Migration 0423: `guardians.staff_employee_id`,
+    `staff_prior_user_id` (the login before, for Undo), `staff_joined_at/by`; `app.guardian_staff_join(guardian,
+    move)`, `app.guardian_staff_undo(guardian)`, `app.student_staff_parents_sync(student, relations)` (after the office
+    saves the profile or a bulk Excel update with those fields), and a trigger on `employees.user_id` (a staff member
+    who gets a login is joined to the records naming them that have no login). Joining opens the guardian membership
+    and the parent role on the staff login; the last record leaving closes them (the parent role only when a join gave
+    it). A record with a login of its own is joined only with **Use staff login** (`move`): that login's guardian
+    membership closes when no record is left on it; Undo opens it again.
+  - API: `GET /people/staff-parents` (to do, joined; people.guardian.edit), `POST /people/staff-parents/:id/join`
+    (`move`), `/undo`; the student 360's guardians carry `staff` (state, code, staff member, canUndo). The logins a
+    join changes have their rights cache cleared (the parent role shows at once).
+  - Admin: **Students → Staff parents** (from the Students list) and a **Staff login** column on the student's
+    Guardians card (`StaffParentLogin`: Join, Use staff login with a dialog, Undo). Staff website: **My children** in
+    the header when the login is also a parent in the school (the family website). The app needed no change.
+  - Tests: API `staff-parents` (father and mother, on save and by Excel, a staff member who gets a login later, own
+    login with Use staff login and Undo, School staff No / a wrong code, rights, the school boundary); a browser check
+    on a throwaway test school (the list, the Guardians card, the dialogs, My children; desktop and phone, axe).
+
