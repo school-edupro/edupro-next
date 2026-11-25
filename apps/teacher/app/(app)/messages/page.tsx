@@ -4,7 +4,9 @@ import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { EnablePush } from './EnablePush';
-import { MessageItem, type InboxItem } from './MessageItem';
+import { MessageFeed } from './MessageFeed';
+import type { InboxItem } from './MessageItem';
+import { NoticeFeed, type NoticeView } from '@/components/NoticeFeed';
 
 interface Inbox {
   data: InboxItem[];
@@ -13,22 +15,32 @@ interface Inbox {
 }
 
 /**
- * Messages from the school in the teacher app (communication v2): every SMS, WhatsApp and email sent
- * to this employee, with the full text, the formatted email, attachments and delivery state.
+ * Messages from the school on the staff website (communication v2): **Messages** — every SMS, WhatsApp and email
+ * sent to this employee, with the full text, the formatted email, attachments and delivery state — and **Notices**
+ * — the notices, circulars and office orders for staff. Each shows the latest 10; 10 more load as the person scrolls.
  */
 export default async function MessagesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ child?: string; page?: string }>;
+  searchParams: Promise<{ child?: string; tab?: string }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
-  const page = Math.max(1, Number(sp.page) || 1);
-  const q = new URLSearchParams({ page: String(page), size: '20' });
+  const tab = sp.tab === 'notices' ? 'notices' : 'messages';
+  // the latest 10 of each; more load as the person scrolls
+  const q = new URLSearchParams({ page: '1', size: '10' });
   if (sp.child && /^\d+$/.test(sp.child)) q.set('studentId', sp.child);
   let inbox: Inbox;
+  let notices: { data: NoticeView[]; page: { total: number } } = {
+    data: [],
+    page: { total: 0 },
+  };
   try {
     inbox = await bff.api.fetch<Inbox>(`/comms/inbox?${q.toString()}`);
+    if (tab === 'notices')
+      notices = await bff.api
+        .fetch<{ data: NoticeView[]; page: { total: number } }>('/academics/notices?page=1&size=10')
+        .catch(() => notices);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && (error.status === 403 || error.status === 404))
@@ -40,8 +52,12 @@ export default async function MessagesPage({
       );
     throw error;
   }
-  const link = (p: number) =>
-    `/messages?page=${String(p)}${sp.child ? `&child=${encodeURIComponent(sp.child)}` : ''}`;
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   const status: Record<string, string> = {
     delivered: t(lang, 'Delivered'),
     sent: t(lang, 'Sent'),
@@ -62,7 +78,19 @@ export default async function MessagesPage({
           </a>
         }
       />
-      {inbox.children.length > 1 ? (
+      <nav
+        className="ep-tabs-links"
+        aria-label={t(lang, 'Messages')}
+        style={{ marginBottom: 'var(--sp-3)' }}
+      >
+        <a href="/messages" aria-current={tab === 'messages' ? 'page' : undefined}>
+          {t(lang, 'Messages')}
+        </a>
+        <a href="/messages?tab=notices" aria-current={tab === 'notices' ? 'page' : undefined}>
+          {t(lang, 'Notices')}
+        </a>
+      </nav>
+      {tab === 'messages' && inbox.children.length > 1 ? (
         <nav className="fp-msg__children" aria-label={t(lang, 'All children')}>
           <a href="/messages" aria-current={!sp.child ? 'page' : undefined}>
             {t(lang, 'All children')}
@@ -93,33 +121,43 @@ export default async function MessagesPage({
           failed: t(lang, 'Notifications could not be turned on. Try again.'),
         }}
       />
-      {inbox.data.length === 0 ? <Card>{t(lang, 'No messages yet.')}</Card> : null}
-      <div className="fp-msg__list">
-        {inbox.data.map((m) => (
-          <MessageItem
-            key={m.id}
-            item={m}
-            labels={{
-              unread: t(lang, 'Unread'),
-              open: t(lang, 'Open the email'),
-              attachment: t(lang, 'Attachment'),
-              status,
+      {tab === 'notices' ? (
+        notices.data.length === 0 ? (
+          <Card>{t(lang, 'No notices now.')}</Card>
+        ) : (
+          <NoticeFeed
+            first={notices.data}
+            more={notices.data.length < notices.page.total}
+            foot={foot}
+            words={{
+              kinds: {
+                notice: t(lang, 'Notice'),
+                circular: t(lang, 'Circular'),
+                office_order: t(lang, 'Office order'),
+              },
+              pinned: t(lang, 'Pinned'),
+              attachments: t(lang, 'Attachments'),
+              acknowledge: t(lang, 'Acknowledge'),
+              acknowledged: t(lang, 'You acknowledged this'),
+              failed: t(lang, 'That did not work. Please try again.'),
             }}
           />
-        ))}
-      </div>
-      <div className="fp-msg__pager">
-        {page > 1 ? (
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={link(page - 1)}>
-            ← {t(lang, 'Newer messages')}
-          </a>
-        ) : null}
-        {inbox.page.more ? (
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={link(page + 1)}>
-            {t(lang, 'Older messages')} →
-          </a>
-        ) : null}
-      </div>
+        )
+      ) : inbox.data.length === 0 ? (
+        <Card>{t(lang, 'No messages yet.')}</Card>
+      ) : (
+        <MessageFeed
+          first={inbox.data}
+          more={inbox.page.more}
+          foot={foot}
+          labels={{
+            unread: t(lang, 'Unread'),
+            open: t(lang, 'Open the email'),
+            attachment: t(lang, 'Attachment'),
+            status,
+          }}
+        />
+      )}
     </main>
   );
 }

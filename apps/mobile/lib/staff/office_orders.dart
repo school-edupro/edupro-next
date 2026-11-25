@@ -3,12 +3,11 @@ import 'package:material_ui/material_ui.dart';
 
 import '../api/api_transport.dart' show ApiException;
 import '../app_services.dart';
-import '../family/common.dart';
 import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
-import '../ui/widgets.dart';
 import '../family/messages.dart' show NoticeTile;
+import '../ui/paged_feed.dart';
 import 'data.dart';
 
 /// The words of Office orders (as the staff website's, in English and Hindi).
@@ -92,33 +91,64 @@ class OfficeOrdersScreen extends ConsumerWidget {
   }
 }
 
-class _List extends ConsumerWidget {
+class _List extends ConsumerStatefulWidget {
   const _List({required this.profile, required this.all});
   final Profile profile;
   final bool all;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_List> createState() => _ListState();
+}
+
+/// One tab: the latest 10, then 10 more as the list scrolls (as the staff website); back from a notice (it may have
+/// been acknowledged there) the list reads again from the newest.
+class _ListState extends ConsumerState<_List> {
+  int _round = 0;
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
-    final key = (profile, all);
-    return LoadedList<List<Json>>(
-      value: ref.watch(officeOrdersProvider(key)),
-      refresh: () => ref.refresh(officeOrdersProvider(key).future),
-      children: (rows) => [
+    final p = widget.profile;
+    return PagedFeed(
+      key: ValueKey('ooFeed-${widget.all}-$_round'),
+      firstCacheKey: 'office-orders-feed:${p.id}:${widget.all}',
+      load: (page) async {
+        try {
+          return await ref
+              .read(apiProvider)
+              .noticesList(kind: widget.all ? null : 'office_order', page: page, size: 10);
+        } on ApiException catch (e) {
+          // as the website: no right to read them is an empty list
+          if (e.status == 403) {
+            return {
+              'data': <Object>[],
+              'page': {'total': 0},
+            };
+          }
+          rethrow;
+        }
+      },
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      header: (_) => [
         Text(s.ooHelp, style: const TextStyle(fontSize: 13)),
         const SizedBox(height: Tokens.sp3),
-        if (rows.isEmpty) Notice(text: s.ooNone),
-        // as the notices' card: date block, tags, first lines, for whom, attachments, Details (the text, files
-        // and Acknowledge open there)
-        for (final n in rows)
-          NoticeTile(
-            key: Key('ooOrder-${n['id']}'),
-            profile: profile,
-            notice: n,
-            pending: n['ackRequired'] == true && n['ackedByMe'] != true,
-            onClosed: () => ref.invalidate(officeOrdersProvider),
-          ),
       ],
+      // as the notices' card: date block, tags, first lines, for whom, attachments, Details (the text, files and
+      // Acknowledge open there)
+      item: (context, n, _) => NoticeTile(
+        key: Key('ooOrder-${n['id']}'),
+        profile: p,
+        notice: n,
+        pending: n['ackRequired'] == true && n['ackedByMe'] != true,
+        onClosed: () {
+          ref.invalidate(officeOrdersProvider);
+          setState(() => _round++);
+        },
+      ),
+      empty: s.ooNone,
     );
   }
 }

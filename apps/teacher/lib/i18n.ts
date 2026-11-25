@@ -80,6 +80,18 @@ const DICT: Record<string, string> = {
   'with an approver now': 'अभी किसी अनुमोदक के पास',
   'waiting for the creator to correct': 'बनाने वाले के सुधार की प्रतीक्षा',
   'none approved yet': 'अभी कोई स्वीकृत नहीं',
+  'Show more': 'और दिखाएँ',
+  'Loading…': 'लोड हो रहा है…',
+  'Could not load more.': 'और लोड नहीं हो सका।',
+  'That is everything.': 'बस इतना ही।',
+  'No notices now.': 'अभी कोई सूचना नहीं।',
+  Notice: 'सूचना',
+  Circular: 'परिपत्र',
+  'Office order': 'कार्यालय आदेश',
+  Pinned: 'पिन किया',
+  Acknowledge: 'स्वीकार करें',
+  'You acknowledged this': 'आपने इसे स्वीकार किया',
+  'Nothing has been issued yet.': 'अभी कुछ जारी नहीं हुआ।',
   // purchase indents (docs/design/83)
   'Not open to you': 'आपके लिए खुला नहीं',
   'The school put these in this tab; your role does not give you the right to open them. Ask the office if you need one.':

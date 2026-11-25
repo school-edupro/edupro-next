@@ -952,3 +952,24 @@ web page"). Staff hold `files.movement.raise` (every staff role, migration 0090)
 - Tests: `staff_files_test.dart` (list, filters, files; deciding; correcting a file sent back; raising; the dashboard;
   a11y light / dark / Hindi; 2× text); `teacher-a11y` gets the `/files` pages.
 
+## As built — Messages: the latest 10, more as you scroll (25 Nov 2026)
+
+Asked by the user ("staff mobile app and web portal, Message (message and notice): show the latest 10 records, then
+more as the user scrolls down").
+
+- **Staff app**: Messages → Messages and Notices are lists that load as they scroll (`lib/ui/paged_feed.dart`
+  `PagedFeed`): the latest 10 (`comms/inbox?page=1&size=10`, `academics/notices?page=1&size=10`), the next 10 by
+  themselves as the person nears the end (a **Show more** button too), "That is everything." at the end, pull down to
+  start again; the first page kept on the phone for reading offline. Notices: pinned first, the total, the type,
+  dates and words sent to the API (a change starts again from the newest); back from a notice the list reads again.
+  The parents' app lists are unchanged.
+- **Staff website** `/messages`: tabs **Messages** and **Notices** (`?tab=notices`, the office orders' cards with
+  Acknowledge in place); each shows the latest 10 and loads 10 more as the foot comes into view (server actions
+  `loadInbox` / `loadNotices`; `MoreOnScroll` with a Show more button for keyboards and screen readers). The old
+  Newer / Older pages are gone.
+- **Office orders** (the staff notice section), app and website, the same: both tabs (Office orders, All notices
+  for staff) show the latest 10 and load 10 more as they scroll (`OfficeOrdersScreen` on `PagedFeed`; the website's
+  `components/NoticeFeed.tsx` with `kind`, shared with Messages → Notices; `lib/feed-actions.ts`); Acknowledge in
+  place on the website.
+- Tests: `staff_feed_test.dart` (10 first, the next pages on scroll, the end; a notice type from page 1; Office orders' two tabs; a11y light /
+  dark / Hindi); `teacher-a11y` gets `/messages` and `/messages?tab=notices`.

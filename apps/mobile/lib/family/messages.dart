@@ -8,6 +8,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/widgets.dart';
+import '../ui/paged_feed.dart';
 import 'common.dart';
 import 'data.dart';
 import 'queries.dart';
@@ -72,6 +73,35 @@ class InboxList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
+    if (profile.isStaff) {
+      // the staff app: the latest 10 messages, then 10 more as the person scrolls (as the staff website)
+      final muted = Theme.of(context).brightness == Brightness.dark
+          ? Tokens.mobGray300
+          : Tokens.textMuted;
+      return PagedFeed(
+        key: const Key('inboxFeed'),
+        firstCacheKey: 'inbox-feed:${profile.id}',
+        load: (page) => ref.read(apiProvider).commsInboxList(page: page, size: 10),
+        parse: (a, _) =>
+            (items: asList(a['data']), more: asJson(a['page'])['more'] == true, total: null),
+        header: (_) => [
+          Text(
+            s.messagesTitle,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+          ),
+          Text(s.messagesHelp, style: TextStyle(color: muted, fontSize: 14)),
+          const SizedBox(height: Tokens.sp3),
+        ],
+        item: (context, m, replace) => MessageCard(
+          message: m,
+          onOpen: () {
+            _InboxPage._open(context, ref, profile, m);
+            if (m['unread'] == true) replace({...m, 'unread': false});
+          },
+        ),
+        empty: s.noMessagesYet,
+      );
+    }
     final first = (profile, 1);
     return LoadedList<Json>(
       value: ref.watch(inboxProvider(first)),
@@ -290,6 +320,8 @@ class _NoticesListState extends ConsumerState<NoticesList> {
   DateTime? _from;
   DateTime? _to;
   final _words = TextEditingController();
+  // the staff list starts again from the newest after a notice was opened
+  int _round = 0;
 
   @override
   void dispose() {
@@ -310,6 +342,89 @@ class _NoticesListState extends ConsumerState<NoticesList> {
     if (d != null) setState(() => from ? _from = d : _to = d);
   }
 
+  /// The filters: the type, the dates and words in the notice.
+  Widget _filters(S s) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(Tokens.sp3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            label: s.notices,
+            container: true,
+            explicitChildNodes: true,
+            child: Wrap(
+              spacing: Tokens.sp2,
+              runSpacing: Tokens.sp2,
+              children: [
+                for (final (v, label) in [
+                  ('', s.noticeKindAll),
+                  ('notice', s.notices),
+                  ('circular', s.circulars),
+                ])
+                  ChoiceChip(
+                    key: Key('noticeKind-${v.isEmpty ? 'all' : v}'),
+                    label: Text(label),
+                    selected: _kind == v,
+                    showCheckmark: false,
+                    onSelected: (_) => setState(() => _kind = v),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Tokens.sp2),
+          Wrap(
+            spacing: Tokens.sp2,
+            runSpacing: Tokens.sp2,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('noticeFrom'),
+                icon: const Icon(Icons.event),
+                label: Text('${s.fromWord}: ${_from == null ? '—' : s.date(_from!)}'),
+                onPressed: () => _pick(true),
+              ),
+              OutlinedButton.icon(
+                key: const Key('noticeTo'),
+                icon: const Icon(Icons.event),
+                label: Text('${s.givenTo}: ${_to == null ? '—' : s.date(_to!)}'),
+                onPressed: () => _pick(false),
+              ),
+            ],
+          ),
+          const SizedBox(height: Tokens.sp2),
+          TextField(
+            key: const Key('noticeWords'),
+            controller: _words,
+            maxLength: 80,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              labelText: s.wordsInNotice,
+              prefixIcon: const Icon(Icons.search),
+              border: const OutlineInputBorder(),
+              counterText: '',
+            ),
+            onSubmitted: (v) => setState(() => _q = v.trim()),
+          ),
+          if (_filtered)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton(
+                key: const Key('noticeClear'),
+                onPressed: () => setState(() {
+                  _kind = '';
+                  _q = '';
+                  _from = null;
+                  _to = null;
+                  _words.clear();
+                }),
+                child: Text(s.clearDates),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(stringsProvider);
@@ -317,6 +432,53 @@ class _NoticesListState extends ConsumerState<NoticesList> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
     final arg = (p, _kind, _q);
+    if (p.isStaff) {
+      // the staff app: the latest 10 notices, then 10 more as the person scrolls (as the staff website); the type,
+      // the dates and the words go to the API
+      final from = _from == null ? null : ymd(_from!);
+      final to = _to == null ? null : ymd(_to!);
+      return PagedFeed(
+        key: ValueKey('noticesFeed-$_kind-$_q-$from-$to-$_round'),
+        firstCacheKey: _filtered ? null : 'notices-feed:${p.id}',
+        load: (page) => ref
+            .read(apiProvider)
+            .noticesList(
+              kind: _kind.isEmpty ? null : _kind,
+              q: _q.isEmpty ? null : _q,
+              from: from,
+              to: to,
+              page: page,
+              size: 10,
+            ),
+        parse: (a, page) {
+          final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+          return (items: asList(a['data']), more: page * 10 < total, total: total);
+        },
+        header: (total) => [
+          Text(
+            s.noticesTitle,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+          ),
+          if (total != null)
+            Text(
+              s.noticesCount(total, _filtered, 0),
+              key: const Key('noticesCount'),
+              style: TextStyle(color: muted, fontSize: 14),
+            ),
+          const SizedBox(height: Tokens.sp3),
+          _filters(s),
+          const SizedBox(height: Tokens.sp2),
+        ],
+        item: (context, n, _) => NoticeTile(
+          profile: p,
+          notice: n,
+          pending: n['ackRequired'] == true && n['ackedByMe'] != true,
+          // back from a notice (it may have been acknowledged there): the list starts again from the newest
+          onClosed: () => setState(() => _round++),
+        ),
+        empty: _filtered ? s.nothingMatches : s.noNoticesNow,
+      );
+    }
     return LoadedList<List<Json>>(
       value: ref.watch(noticesFilteredProvider(arg)),
       refresh: () => ref.refresh(noticesFilteredProvider(arg).future),
@@ -342,87 +504,7 @@ class _NoticesListState extends ConsumerState<NoticesList> {
             style: TextStyle(color: muted, fontSize: 14),
           ),
           const SizedBox(height: Tokens.sp3),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(Tokens.sp3),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Semantics(
-                    label: s.notices,
-                    container: true,
-                    explicitChildNodes: true,
-                    child: Wrap(
-                      spacing: Tokens.sp2,
-                      runSpacing: Tokens.sp2,
-                      children: [
-                        for (final (v, label) in [
-                          ('', s.noticeKindAll),
-                          ('notice', s.notices),
-                          ('circular', s.circulars),
-                        ])
-                          ChoiceChip(
-                            key: Key('noticeKind-${v.isEmpty ? 'all' : v}'),
-                            label: Text(label),
-                            selected: _kind == v,
-                            showCheckmark: false,
-                            onSelected: (_) => setState(() => _kind = v),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: Tokens.sp2),
-                  Wrap(
-                    spacing: Tokens.sp2,
-                    runSpacing: Tokens.sp2,
-                    children: [
-                      OutlinedButton.icon(
-                        key: const Key('noticeFrom'),
-                        icon: const Icon(Icons.event),
-                        label: Text('${s.fromWord}: ${_from == null ? '—' : s.date(_from!)}'),
-                        onPressed: () => _pick(true),
-                      ),
-                      OutlinedButton.icon(
-                        key: const Key('noticeTo'),
-                        icon: const Icon(Icons.event),
-                        label: Text('${s.givenTo}: ${_to == null ? '—' : s.date(_to!)}'),
-                        onPressed: () => _pick(false),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: Tokens.sp2),
-                  TextField(
-                    key: const Key('noticeWords'),
-                    controller: _words,
-                    maxLength: 80,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      labelText: s.wordsInNotice,
-                      prefixIcon: const Icon(Icons.search),
-                      border: const OutlineInputBorder(),
-                      counterText: '',
-                    ),
-                    onSubmitted: (v) => setState(() => _q = v.trim()),
-                  ),
-                  if (_filtered)
-                    Align(
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: TextButton(
-                        key: const Key('noticeClear'),
-                        onPressed: () => setState(() {
-                          _kind = '';
-                          _q = '';
-                          _from = null;
-                          _to = null;
-                          _words.clear();
-                        }),
-                        child: Text(s.clearDates),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+          _filters(s),
           const SizedBox(height: Tokens.sp2),
           if (list.isEmpty) EmptyLine(_filtered ? s.nothingMatches : s.noNoticesNow),
           for (final n in list) NoticeTile(profile: p, notice: n, pending: pending(n)),

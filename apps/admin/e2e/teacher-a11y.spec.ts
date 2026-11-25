@@ -52,6 +52,10 @@ const PAGES = [
   '/files/new',
   '/files/11',
   '/files/dashboard',
+  // Messages: messages and notices, 10 at a time
+  '/messages',
+  '/messages?tab=notices',
+  '/office-orders?tab=all',
   '/library',
   '/library?view=history',
   '/library?view=find&q=a',
