@@ -1023,3 +1023,25 @@ more as the user scrolls down").
     header); a render check that the admin's leave tables are the same HTML before and after the row split; a
     browser check on a throwaway test school (12 student leaves, 12 own passes, 12 to approve: 10, then 12) and on
     Alpha read-only (a coordinator's approved reporties' leave: 10, then 16), desktop and phone, axe.
+- **Lesson plans (Lesson Report), Session plan, curriculum, date sheet (the class documents), Daily work (Report)**
+  (staff), app and website, the same: the latest 10, then 10 more as the person scrolls; a filter starts again from
+  the newest.
+  - API: `/academics/lessons` was already paged; `/academics/documents` takes `page` and `size` (10, at most 100)
+    and answers with `page.total` (without `page` as before: the latest 500, the office's list and the files);
+    `/academics/daily-work` takes `mode` (daily: homework and classwork; assignment) for the report's Show.
+  - Daily work's Report (the user's choice, 25 Nov 2026): one list by date instead of two sections — the latest 10
+    posts first, a card (app) or a row (website) a day, class and subject, each post with its kind; groups may grow as
+    the next page comes. The website's `WorkReport` (packages/ui) gains `mode="all"` (homework, classwork and
+    assignment side by side); the admin's daily and assignment reports render the same HTML as before.
+  - App: `LessonReportTab` (the counts and filters from each page's answer; 403 says the report is not part of the
+    role; the filters stay open while the list loads again), `DocumentsListTab` and `WorkReportTab` on `PagedFeed`,
+    which gains `group` (all the loaded items drawn at once, for the grouped report); `feedRoundProvider('lessons' |
+    'documents')` reloads after an upload, a decision or a removal.
+  - Website: the shared `LessonReport` takes a `feed` in place of its table and pages (rows split into `LessonRow` /
+    `LESSON_HEAD`; the admin's page renders the same HTML); `LessonFeed`, `DocumentFeed` and `WorkReportFeed` load 10
+    more as the foot comes into view (`loadLessons`, `loadDocuments`, `loadWork`).
+  - Tests: API `work-sheet` (documents pages) and `daily-academics` (daily + assignment = all); app
+    `staff_lists_test` (23 rows: 10 → 20 → 23 for documents, lessons and the daily work report); render checks that
+    the admin's lesson report and work reports are the same HTML; a browser check on a throwaway test school (12
+    lessons, 12 documents: 10, then 12) and on Alpha read-only (a teacher's daily work since April: 10, then 25),
+    desktop and phone, axe.

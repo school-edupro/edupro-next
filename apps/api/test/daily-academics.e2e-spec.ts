@@ -298,6 +298,15 @@ describe('daily academics and student lifecycle (e2e)', () => {
     expect(otherSection.statusCode).toBe(403);
     const all = await inject({ method: 'GET', url: '/academics/daily-work', headers: h });
     expect(all.json().page.total).toBe(2);
+    // the report's Show (25 Nov 2026): daily work, or assignments; together they are all
+    const byMode = async (mode: string) =>
+      (
+        await inject({ method: 'GET', url: `/academics/daily-work?mode=${mode}`, headers: h })
+      ).json() as { data: Array<{ kind: string }>; page: { total: number } };
+    const [daily, assignments] = [await byMode('daily'), await byMode('assignment')];
+    expect(daily.data.every((x) => x.kind !== 'assignment')).toBe(true);
+    expect(assignments.data.every((x) => x.kind === 'assignment')).toBe(true);
+    expect(daily.page.total + assignments.page.total).toBe(2);
     const post = await inject({
       method: 'POST',
       url: '/academics/daily-work',

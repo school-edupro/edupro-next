@@ -86,7 +86,7 @@ export class DocumentsService {
     private readonly files: FilesService,
   ) {}
 
-  async list(ctx: RequestContext, q: ListDocumentsQueryDto) {
+  async list(ctx: RequestContext, q: ListDocumentsQueryDto & { page?: number; size?: number }) {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
     const v = await this.viewer.resolve(ctx, DAILY.workView);
@@ -121,12 +121,24 @@ export class DocumentsService {
           `(d.publish_at AT TIME ZONE 'Asia/Kolkata')::date <= $${String(params.length)}::date`,
         );
       }
+      // given a page: that page of the latest first and how many in all; else the latest 500 (the admin, the files)
+      const size = q.page ? (q.size ?? 10) : 500;
+      const skip = q.page ? (q.page - 1) * size : 0;
       const r = await c.query<Row>(
-        `${DOC} WHERE ${w.join(' AND ')} ORDER BY d.publish_at DESC, d.id DESC LIMIT 500`,
+        `${DOC} WHERE ${w.join(' AND ')} ORDER BY d.publish_at DESC, d.id DESC LIMIT ${String(size)} OFFSET ${String(skip)}`,
         params,
       );
+      const total = q.page
+        ? (
+            await c.query<{ n: number }>(
+              `SELECT count(*)::int AS n FROM (${DOC} WHERE ${w.join(' AND ')}) x`,
+              params,
+            )
+          ).rows[0]!.n
+        : null;
       return {
         data: r.rows.map(toDoc),
+        page: q.page ? { number: q.page, size, total } : null,
         // the magazine and the almanac are the office's to upload
         kinds: Object.entries(DOCUMENT_KIND)
           .filter(([value]) => office || !OFFICE_KINDS.includes(value))

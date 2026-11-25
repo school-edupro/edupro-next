@@ -154,6 +154,9 @@ export class DailyWorkService {
         params.push(q.kind);
         where.push(`w.kind = $${params.length}::daily_work_kind`);
       }
+      // the report's Show: daily work (homework and classwork) or assignments
+      if (q.mode === 'daily') where.push(`w.kind <> 'assignment'`);
+      else if (q.mode === 'assignment') where.push(`w.kind = 'assignment'`);
       if (q.from) {
         params.push(q.from);
         where.push(`w.assigned_on >= $${params.length}::date`);

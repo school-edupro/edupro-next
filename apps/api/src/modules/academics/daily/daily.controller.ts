@@ -33,7 +33,7 @@ import {
   AckStatusQueryDto,
   CreateDocumentDto,
   DocumentReportQueryDto,
-  ListDocumentsQueryDto,
+  ListDocumentsPageDto,
   NoticeAudienceFileDto,
   NoticeReachDto,
   NoticeReportQueryDto,
@@ -412,7 +412,7 @@ export class DocumentsController {
   @Get('documents')
   @ApiOperation({ summary: 'Class documents the viewer may see (families from the publish time)' })
   @RequirePermission(DAILY.workView)
-  list(@ReqCtx() ctx: RequestContext, @Query() q: ListDocumentsQueryDto) {
+  list(@ReqCtx() ctx: RequestContext, @Query() q: ListDocumentsPageDto) {
     return this.docs.list(ctx, q);
   }
 

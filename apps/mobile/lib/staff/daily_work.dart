@@ -10,6 +10,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
+import '../ui/paged_feed.dart';
 import 'data.dart';
 
 /// Daily work as on the staff website (docs/design/96): the day's sheet of homework and classwork, the same sheet for
@@ -585,8 +586,10 @@ class _Banner extends StatelessWidget {
   }
 }
 
-/// What was posted between two dates (as the website's Report): by date, class and subject — homework and classwork,
-/// then assignments — with their files, when they publish, who posted and how many acknowledged; Excel and PDF.
+/// What was posted between two dates (as the website's Report): one list by date — the latest 10 posts first, 10 more
+/// as the teacher scrolls — a card a day, class and subject with each post's kind (homework, classwork, assignment),
+/// its files, when it publishes, who posted and how many acknowledged; Show picks daily work or assignments; Excel
+/// and PDF.
 class WorkReportTab extends ConsumerStatefulWidget {
   const WorkReportTab({super.key, required this.profile});
   final Profile profile;
@@ -600,48 +603,9 @@ class _WorkReportTabState extends ConsumerState<WorkReportTab> with AutomaticKee
   late String _to = ymd(DateTime.now());
   String _section = '';
   String _kind = '';
-  List<Json>? _items;
-  String? _error;
-  bool _loading = true;
 
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final r = asJson(
-        await ref
-            .read(apiProvider)
-            .dailyWorkList(
-              from: _from,
-              to: _to,
-              classSectionId: _section.isEmpty ? null : _section,
-              size: 200,
-            ),
-      );
-      if (!mounted) return;
-      setState(() {
-        _items = [for (final x in asList(r['data'])) asJson(x)];
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = errorText(ref.read(stringsProvider), e);
-        _loading = false;
-      });
-    }
-  }
 
   Future<void> _pick(bool from) async {
     final d = await showDatePicker(
@@ -652,7 +616,6 @@ class _WorkReportTabState extends ConsumerState<WorkReportTab> with AutomaticKee
     );
     if (d == null) return;
     setState(() => from ? _from = ymd(d) : _to = ymd(d));
-    await _load();
   }
 
   void _file(String format) {
@@ -681,11 +644,27 @@ class _WorkReportTabState extends ConsumerState<WorkReportTab> with AutomaticKee
     final s = ref.watch(stringsProvider);
     final options = ref.watch(workOptionsProvider(widget.profile)).value?.data ?? const <Json>[];
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    final items = _items ?? const <Json>[];
-    return ListView(
-      key: const Key('workReport'),
-      padding: const EdgeInsets.all(Tokens.sp4),
-      children: [
+    return PagedFeed(
+      key: ValueKey('wrFeed-$_from-$_to-$_section-$_kind'),
+      listKey: const Key('workReport'),
+      load: (page) => ref
+          .read(apiProvider)
+          .dailyWorkList(
+            from: _from,
+            to: _to,
+            classSectionId: _section.isEmpty ? null : _section,
+            mode: _kind.isEmpty ? null : _kind,
+            page: page,
+            size: 10,
+          ),
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      empty: s.nothingPostedDays,
+      emptyCard: Text(s.nothingPostedDays, style: TextStyle(color: muted)),
+      group: (context, items) => _cards(s, items, muted),
+      header: (_, _) => [
         Wrap(
           spacing: Tokens.sp3,
           runSpacing: Tokens.sp3,
@@ -707,10 +686,7 @@ class _WorkReportTabState extends ConsumerState<WorkReportTab> with AutomaticKee
               key: const Key('reportClass'),
               label: Text(s.classWord),
               initialSelection: _section,
-              onSelected: (v) {
-                _section = v ?? '';
-                _load();
-              },
+              onSelected: (v) => setState(() => _section = v ?? ''),
               dropdownMenuEntries: [
                 DropdownMenuEntry(value: '', label: s.allMyClasses),
                 for (final o in options)
@@ -749,38 +725,21 @@ class _WorkReportTabState extends ConsumerState<WorkReportTab> with AutomaticKee
           ],
         ),
         const SizedBox(height: Tokens.sp3),
-        if (_loading) const LinearProgressIndicator(),
-        if (_error != null) _Banner(text: _error!, ok: false),
-        if (!_loading && _error == null) ...[
-          if (_kind != 'assignment') ..._group(s, items, false, muted),
-          if (_kind != 'daily') ..._group(s, items, true, muted),
-        ],
       ],
     );
   }
 
-  List<Widget> _group(S s, List<Json> items, bool assignment, Color muted) {
+  /// The posts loaded so far, a card a day, class and subject (latest day first), each post with its kind.
+  List<Widget> _cards(S s, List<Json> items, Color muted) {
     final lines = <String, List<Json>>{};
     for (final it in items) {
-      if (assignment != (it['kind'] == 'assignment')) continue;
       final k = '${it['assignedOn']}|${it['section']}|${it['subjectName'] ?? ''}';
       (lines[k] ??= []).add(it);
     }
-    final title = assignment ? s.assignmentsTab : s.homeworkAndClasswork;
     return [
-      Padding(
-        padding: const EdgeInsets.only(top: Tokens.sp3, bottom: Tokens.sp2),
-        child: Semantics(
-          header: true,
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwSemibold),
-          ),
-        ),
-      ),
-      if (lines.isEmpty) Text(s.nothingPostedDays, style: TextStyle(color: muted)),
-      for (final list in lines.values)
+      for (final MapEntry(key: k, value: list) in lines.entries)
         Card(
+          key: Key('wrCard-$k'),
           child: Padding(
             padding: const EdgeInsets.all(Tokens.sp3),
             child: Column(
@@ -794,7 +753,7 @@ class _WorkReportTabState extends ConsumerState<WorkReportTab> with AutomaticKee
                   ].join(' · '),
                   style: const TextStyle(fontWeight: Tokens.fwSemibold),
                 ),
-                for (final kind in assignment ? ['assignment'] : ['homework', 'classwork'])
+                for (final kind in ['homework', 'classwork', 'assignment'])
                   for (final x in list.where((x) => x['kind'] == kind)) _entry(s, x, kind, muted),
               ],
             ),

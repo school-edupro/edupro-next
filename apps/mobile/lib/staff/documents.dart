@@ -10,6 +10,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
+import '../ui/paged_feed.dart';
 import 'data.dart';
 
 /// The kinds a teacher uploads (the website's Upload), and the ones the list also shows (the school's own).
@@ -173,7 +174,7 @@ class _UploadTabState extends ConsumerState<_UploadTab> with AutomaticKeepAliveC
         _ack = false;
         _publish = DateTime.now();
       });
-      ref.invalidate(staffDocumentsProvider);
+      ref.read(feedRoundProvider('documents').notifier).bump();
     } catch (e) {
       if (mounted) setState(() => _error = errorText(s, e));
     } finally {
@@ -345,24 +346,6 @@ class _Note extends StatelessWidget {
 /// The filters of the Uploaded list.
 typedef DocsFilter = ({String kind, String section, String from, String to});
 
-/// The documents the teacher's classes have (the website's Uploaded), by the filter.
-final staffDocumentsProvider = FutureProvider.autoDispose.family<List<Json>, DocsFilter>((
-  ref,
-  f,
-) async {
-  final r = asJson(
-    await ref
-        .read(apiProvider)
-        .documentsList(
-          kind: f.kind.isEmpty ? null : f.kind,
-          classSectionId: f.section.isEmpty ? null : f.section,
-          from: f.from.isEmpty ? null : f.from,
-          to: f.to.isEmpty ? null : f.to,
-        ),
-  );
-  return [for (final x in asList(r['data'])) asJson(x)];
-});
-
 class DocumentsListTab extends ConsumerStatefulWidget {
   const DocumentsListTab({super.key, required this.profile});
   final Profile profile;
@@ -436,7 +419,7 @@ class _DocumentsListTabState extends ConsumerState<DocumentsListTab>
       await ref.read(apiProvider).documentsRemove(id: '${d['id']}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.removedDone)));
-      ref.invalidate(staffDocumentsProvider(_f));
+      ref.read(feedRoundProvider('documents').notifier).bump();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(s, e))));
@@ -448,12 +431,31 @@ class _DocumentsListTabState extends ConsumerState<DocumentsListTab>
     super.build(context);
     final s = ref.watch(stringsProvider);
     final sections = ref.watch(workOptionsProvider(widget.profile)).value?.data ?? const <Json>[];
-    final docs = ref.watch(staffDocumentsProvider(_f));
+    final round = ref.watch(feedRoundProvider('documents'));
+    final f = _f;
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return ListView(
-      key: const Key('docsList'),
-      padding: const EdgeInsets.all(Tokens.sp4),
-      children: [
+    // the documents the teacher's classes have (the website's Uploaded): the latest 10, then 10 more as they scroll
+    return PagedFeed(
+      key: ValueKey('docsFeed-${f.kind}-${f.section}-${f.from}-${f.to}-$round'),
+      listKey: const Key('docsList'),
+      load: (page) => ref
+          .read(apiProvider)
+          .documentsList(
+            kind: f.kind.isEmpty ? null : f.kind,
+            classSectionId: f.section.isEmpty ? null : f.section,
+            from: f.from.isEmpty ? null : f.from,
+            to: f.to.isEmpty ? null : f.to,
+            page: page,
+            size: 10,
+          ),
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      empty: s.nothingUploaded,
+      emptyCard: Text(s.nothingUploaded, style: TextStyle(color: muted)),
+      item: (context, d, _) => _docCard(s, d, muted),
+      header: (_, _) => [
         Wrap(
           spacing: Tokens.sp3,
           runSpacing: Tokens.sp3,
@@ -522,13 +524,6 @@ class _DocumentsListTabState extends ConsumerState<DocumentsListTab>
           ],
         ),
         const SizedBox(height: Tokens.sp3),
-        ...docs.when(
-          loading: () => [const LinearProgressIndicator()],
-          error: (e, _) => [_Note(text: errorText(s, e), ok: false)],
-          data: (list) => list.isEmpty
-              ? [Text(s.nothingUploaded, style: TextStyle(color: muted))]
-              : [for (final d in list) _docCard(s, d, muted)],
-        ),
       ],
     );
   }

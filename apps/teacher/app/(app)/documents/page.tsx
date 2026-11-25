@@ -1,5 +1,4 @@
 import {
-  Badge,
   Button,
   Card,
   ClassSectionPicker,
@@ -9,25 +8,15 @@ import {
 } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
-import { FileLinks } from '@/components/FileLinks';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { postDocument, removeDocument } from '../daily-work/actions';
+import { DocumentFeed, type ClassDoc } from './DocumentFeed';
 
-interface Doc {
-  id: string;
-  kind: string;
-  kindLabel: string;
-  title: string;
-  remark: string | null;
-  section: string | null;
-  subject: string | null;
-  fileIds: string[];
-  publishAt: string;
-  scheduled: boolean;
-  ackRequired: boolean;
-  ackCount: number;
-  postedBy: string | null;
-}
+/** The first page: the latest 10; the rest load as the teacher scrolls. */
+const PAGE = 10;
+
+type Doc = ClassDoc;
 const KINDS: Array<[string, string]> = [
   ['session_plan', 'Session plan'],
   ['curriculum', 'Curriculum / syllabus'],
@@ -35,16 +24,6 @@ const KINDS: Array<[string, string]> = [
   ['other', 'Other'],
 ];
 const nowLocal = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 16);
-const when = (iso: string) =>
-  new Date(iso).toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
 /**
  * Class documents: the teacher uploads a session plan, the curriculum or a date sheet (with a remark and
  * attachments) for the classes and subjects they hold. Parents and students see each from its publish
@@ -71,10 +50,15 @@ export default async function DocumentsPage({
     if (/^\d{4}-\d{2}-\d{2}$/.test(sp[k] ?? '')) query.set(k, sp[k]!);
   const filters = query.toString();
   let docs: Doc[] = [];
+  let total = 0;
   let sections: ClassSectionOption[] = [];
   try {
-    [docs, sections] = await Promise.all([
-      bff.api.fetch<{ data: Doc[] }>(`/academics/documents?${filters}`).then((r) => r.data),
+    [[docs, total], sections] = await Promise.all([
+      bff.api
+        .fetch<{ data: Doc[]; page: { total: number } }>(
+          `/academics/documents?${filters}${filters ? '&' : ''}page=1&size=${String(PAGE)}`,
+        )
+        .then((r) => [r.data, r.page.total] as const),
       bff.api
         .fetch<{ data: ClassSectionOption[] }>('/academics/daily-work/sheet/options')
         .then((r) => r.data),
@@ -83,6 +67,13 @@ export default async function DocumentsPage({
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (!(error instanceof ApiError && error.status === 403)) throw error;
   }
+  const lang = await currentLang();
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 960, margin: '0 auto' }}>
       <PageHeader
@@ -240,82 +231,14 @@ export default async function DocumentsPage({
             Nothing uploaded yet.
           </p>
         ) : (
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Class documents">
-            <table className="ep-table ep-table--dense">
-              <caption className="ep-sr-only">Class documents</caption>
-              <thead>
-                <tr>
-                  <th scope="col">What</th>
-                  <th scope="col">Title</th>
-                  <th scope="col">Class</th>
-                  <th scope="col">Files</th>
-                  <th scope="col">Published</th>
-                  <th scope="col">Acknowledged</th>
-                  <th scope="col">
-                    <span className="ep-sr-only">Remove</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {docs.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.kindLabel}</td>
-                    <th scope="row">
-                      {d.title}
-                      {d.remark ? (
-                        <div
-                          className="ep-richtext ep-field__help"
-                          dangerouslySetInnerHTML={{ __html: d.remark }}
-                        />
-                      ) : null}
-                    </th>
-                    <td>{d.section ?? 'Whole school'}</td>
-                    <td>
-                      {d.fileIds.map((f, i) => (
-                        <FileLinks
-                          key={f}
-                          url={`/api/doc-file/document/${d.id}/${f}`}
-                          saveUrl={`/api/doc-file/document/${d.id}/${f}?save=1`}
-                          label={`attachment ${String(i + 1)} of ${d.title}`}
-                        />
-                      ))}
-                    </td>
-                    <td>
-                      {when(d.publishAt)}{' '}
-                      {d.scheduled ? <Badge tone="warning">Scheduled</Badge> : null}
-                    </td>
-                    <td>
-                      {d.ackRequired && d.section ? (
-                        <a
-                          href={`/acknowledgements?type=document&id=${d.id}`}
-                          style={{ textDecoration: 'underline' }}
-                          aria-label={`Who acknowledged ${d.title}`}
-                        >
-                          {d.ackCount} · view
-                        </a>
-                      ) : (
-                        '–'
-                      )}
-                    </td>
-                    <td>
-                      {d.section ? (
-                        <form action={removeDocument}>
-                          <input type="hidden" name="id" value={d.id} />
-                          <button
-                            type="submit"
-                            className="ep-btn ep-btn--ghost ep-btn--sm"
-                            aria-label={`Remove ${d.title}`}
-                          >
-                            Remove
-                          </button>
-                        </form>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DocumentFeed
+            key={filters}
+            first={docs}
+            more={PAGE < total}
+            filters={Object.fromEntries(query.entries())}
+            remove={removeDocument}
+            foot={foot}
+          />
         )}
       </Card>
     </main>

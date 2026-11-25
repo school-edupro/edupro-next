@@ -13,6 +13,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/tokens.g.dart';
 import '../ui/file_screen.dart';
+import '../ui/paged_feed.dart';
 import 'data.dart';
 
 /// Plain text typed on the phone as the website's description (paragraphs, the characters escaped).
@@ -73,25 +74,6 @@ LessonQuery _with(
 );
 
 String? _opt(String v) => v.isEmpty ? null : v;
-
-/// The lessons of the report for the filters (the website's Lesson Report).
-final lessonListProvider = FutureProvider.autoDispose.family<Json, LessonQuery>((ref, f) async {
-  return asJson(
-    await ref
-        .read(apiProvider)
-        .lessonUploadsList(
-          by: f.by,
-          q: _opt(f.q),
-          from: _opt(f.from),
-          to: _opt(f.to),
-          status: _opt(f.status),
-          level: int.tryParse(f.level),
-          record: f.record,
-          mine: _opt(f.mine),
-          page: f.page,
-        ),
-  );
-});
 
 /// The classes and sections the teacher uploads lessons for; none when uploading is not part of the role.
 final lessonOptionsProvider = FutureProvider.autoDispose.family<Json, Profile>((ref, p) async {
@@ -286,7 +268,7 @@ class _UploadTabState extends ConsumerState<_UploadTab> with AutomaticKeepAliveC
         _files.clear();
         _date = DateTime.now();
       });
-      ref.invalidate(lessonListProvider);
+      ref.read(feedRoundProvider('lessons').notifier).bump();
       // as the website: the lesson opens, saying it went for approval
       pushPage(context, s.lpRequest(id), LessonDetailScreen(id: id, notice: s.lpUploaded));
     } catch (e) {
@@ -467,6 +449,9 @@ class _LessonReportTabState extends ConsumerState<LessonReportTab>
   LessonQuery _edit = blankLessonQuery;
   final _keyword = TextEditingController();
 
+  /// the filters stay open while the list loads again for them
+  bool _filtersOpen = false;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -535,30 +520,67 @@ class _LessonReportTabState extends ConsumerState<LessonReportTab>
   Widget build(BuildContext context) {
     super.build(context);
     final s = ref.watch(stringsProvider);
-    final list = ref.watch(lessonListProvider(_f));
+    final round = ref.watch(feedRoundProvider('lessons'));
+    final f = _f;
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    final denied = list.error is ApiException && (list.error! as ApiException).status == 403;
-    if (denied) {
-      return ListView(
-        padding: const EdgeInsets.all(Tokens.sp4),
-        children: [
-          Text(
-            s.lpNotYourRole,
-            key: const Key('lpNotRole'),
-            style: TextStyle(color: muted),
-          ),
-        ],
-      );
-    }
-    final data = list.value;
-    final counts = asJson(data?['counts']);
-    final office = data?['office'] == true;
-    return RefreshIndicator(
-      onRefresh: () => ref.refresh(lessonListProvider(_f).future),
-      child: ListView(
-        key: const Key('lpReport'),
-        padding: const EdgeInsets.all(Tokens.sp4),
-        children: [
+    // the lessons for the filters: the latest 10, then 10 more as the teacher scrolls (as the staff website)
+    return PagedFeed(
+      key: ValueKey(
+        'lpFeed-${f.by}-${f.q}-${f.from}-${f.to}-${f.status}-${f.level}-${f.record}-${f.mine}-$round',
+      ),
+      listKey: const Key('lpReport'),
+      load: (page) async {
+        try {
+          return await ref
+              .read(apiProvider)
+              .lessonUploadsList(
+                by: f.by,
+                q: _opt(f.q),
+                from: _opt(f.from),
+                to: _opt(f.to),
+                status: _opt(f.status),
+                level: int.tryParse(f.level),
+                record: f.record,
+                mine: _opt(f.mine),
+                page: page,
+                size: 10,
+              );
+        } on ApiException catch (e) {
+          // the report is not part of the role
+          if (e.status == 403) {
+            return {
+              'data': <Object>[],
+              'page': {'total': 0},
+              'denied': true,
+            };
+          }
+          rethrow;
+        }
+      },
+      parse: (a, page) {
+        final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+        return (items: asList(a['data']), more: page * 10 < total, total: total);
+      },
+      empty: s.lpNone,
+      emptyCard: Text(
+        s.lpNone,
+        key: const Key('lpNone'),
+        style: TextStyle(color: muted),
+      ),
+      item: (context, r, _) => _row(s, r, muted),
+      header: (_, a) {
+        if (a?['denied'] == true) {
+          return [
+            Text(
+              s.lpNotYourRole,
+              key: const Key('lpNotRole'),
+              style: TextStyle(color: muted),
+            ),
+          ];
+        }
+        final counts = asJson(a?['counts']);
+        final office = a?['office'] == true;
+        return [
           // the four counts; each shows its lessons (as the website's tiles and status tabs)
           _tiles(s, counts),
           const SizedBox(height: Tokens.sp3),
@@ -583,55 +605,8 @@ class _LessonReportTabState extends ConsumerState<LessonReportTab>
             ],
           ),
           const SizedBox(height: Tokens.sp3),
-          ...list.when(
-            loading: () => [const LinearProgressIndicator()],
-            error: (e, _) => [_Note(text: errorText(s, e), ok: false)],
-            data: (d) {
-              final rows = [for (final x in asList(d['data'])) asJson(x)];
-              if (rows.isEmpty) {
-                return [
-                  Text(
-                    s.lpNone,
-                    key: const Key('lpNone'),
-                    style: TextStyle(color: muted),
-                  ),
-                ];
-              }
-              final page = asJson(d['page']);
-              final number = (page['number'] as num?)?.toInt() ?? 1;
-              final size = (page['size'] as num?)?.toInt() ?? 50;
-              final total = (page['total'] as num?)?.toInt() ?? rows.length;
-              return [
-                for (final r in rows) _row(s, r, muted),
-                if (total > size)
-                  Padding(
-                    padding: const EdgeInsets.only(top: Tokens.sp2),
-                    child: Wrap(
-                      alignment: WrapAlignment.end,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: Tokens.sp3,
-                      children: [
-                        if (number > 1)
-                          OutlinedButton(
-                            key: const Key('lpPrev'),
-                            onPressed: () => setState(() => _f = _with(_f, page: number - 1)),
-                            child: Text('‹ ${s.lpPrevious}'),
-                          ),
-                        Text(s.pageOf(number, (total / size).ceil())),
-                        if (number * size < total)
-                          OutlinedButton(
-                            key: const Key('lpNext'),
-                            onPressed: () => setState(() => _f = _with(_f, page: number + 1)),
-                            child: Text('${s.lpNext} ›'),
-                          ),
-                      ],
-                    ),
-                  ),
-              ];
-            },
-          ),
-        ],
-      ),
+        ];
+      },
     );
   }
 
@@ -744,6 +719,8 @@ class _LessonReportTabState extends ConsumerState<LessonReportTab>
       margin: EdgeInsets.zero,
       child: ExpansionTile(
         key: const Key('lpFilters'),
+        initiallyExpanded: _filtersOpen,
+        onExpansionChanged: (open) => _filtersOpen = open,
         title: Text(s.lpFilters),
         subtitle: active == 0 ? null : Text('$active'),
         leading: const Icon(Icons.filter_list),
@@ -959,7 +936,7 @@ class _LessonDetailScreenState extends ConsumerState<LessonDetailScreen> {
       _remark.clear();
       setState(() => _notice = action == 'reject' ? s.lpRejectedDone : s.lpAcknowledgedDone);
       ref.invalidate(lessonProvider(widget.id));
-      ref.invalidate(lessonListProvider);
+      ref.read(feedRoundProvider('lessons').notifier).bump();
     } catch (e) {
       if (mounted) setState(() => _error = errorText(s, e));
     } finally {
@@ -988,7 +965,7 @@ class _LessonDetailScreenState extends ConsumerState<LessonDetailScreen> {
     try {
       await ref.read(apiProvider).lessonUploadsRemove(id: widget.id);
       if (!mounted) return;
-      ref.invalidate(lessonListProvider);
+      ref.read(feedRoundProvider('lessons').notifier).bump();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.lpDeletedDone)));
       Navigator.of(context).pop();
     } catch (e) {

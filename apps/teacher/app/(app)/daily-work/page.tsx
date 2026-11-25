@@ -1,16 +1,14 @@
-import {
-  Card,
-  PageHeader,
-  WorkReport,
-  WorkSheet,
-  type WorkReportItem,
-  type WorkSheetData,
-} from '@edupro/ui';
+import { Card, PageHeader, WorkSheet, type WorkReportItem, type WorkSheetData } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { FileLinks } from '@/components/FileLinks';
+import { currentLang, t } from '@/lib/i18n';
 import { saveSheet } from './actions';
+import { WorkReportFeed } from './WorkReportFeed';
+
+/** The report's first page: the latest 10 posts; the rest load as the teacher scrolls. */
+const PAGE = 10;
 
 type View = 'sheet' | 'assignments' | 'report';
 
@@ -53,16 +51,22 @@ export default async function DailyWorkPage({
   const kind = sp.kind === 'daily' || sp.kind === 'assignment' ? sp.kind : '';
   let sheet: WorkSheetData;
   let items: WorkReportItem[] = [];
+  let total = 0;
+  // the report's filters, as the next pages ask for them too (Show: daily work or assignments)
+  const reportFilters: Record<string, string> = { from, to };
+  if (/^\d{1,18}$/.test(sp.classSectionId ?? '')) reportFilters.classSectionId = sp.classSectionId!;
+  if (kind) reportFilters.mode = kind;
   try {
     sheet = await bff.api.fetch<WorkSheetData>(
       `/academics/daily-work/sheet?mode=${mode}&date=${date}${classId ? `&classId=${classId}` : ''}${chosen.length ? `&sections=${chosen.join(',')}` : ''}`,
     );
     if (view === 'report') {
-      const q = new URLSearchParams({ size: '200', from, to });
-      if (/^\d{1,18}$/.test(sp.classSectionId ?? '')) q.set('classSectionId', sp.classSectionId!);
-      items = (
-        await bff.api.fetch<{ data: WorkReportItem[] }>(`/academics/daily-work?${q.toString()}`)
-      ).data;
+      const q = new URLSearchParams({ ...reportFilters, page: '1', size: String(PAGE) });
+      const r = await bff.api.fetch<{ data: WorkReportItem[]; page: { total: number } }>(
+        `/academics/daily-work?${q.toString()}`,
+      );
+      items = r.data;
+      total = r.page.total;
     }
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
@@ -93,6 +97,13 @@ export default async function DailyWorkPage({
   );
   const exportQuery = `from=${from}&to=${to}${sp.classSectionId ? `&classSectionId=${sp.classSectionId}` : ''}${kind ? `&kind=${kind}` : ''}`;
   const [created, updated] = (sp.ok ?? '').split('-').map(Number);
+  const lang = await currentLang();
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 1180, margin: '0 auto' }}>
       <PageHeader
@@ -203,31 +214,14 @@ export default async function DailyWorkPage({
               PDF
             </a>
           </form>
-          {kind !== 'assignment' ? (
-            <>
-              <h2 className="ep-card__title">Homework and classwork</h2>
-              <WorkReport
-                items={items}
-                mode="daily"
-                fileLinks={fileLinks}
-                extra={(w) =>
-                  w.ackRequired ? (
-                    <a href={`/acknowledgements?type=daily_work&id=${w.id}`}>
-                      · {w.ackCount} acknowledged
-                    </a>
-                  ) : null
-                }
-              />
-            </>
-          ) : null}
-          {kind !== 'daily' ? (
-            <>
-              <h2 className="ep-card__title" style={{ marginTop: 'var(--sp-4)' }}>
-                Assignments
-              </h2>
-              <WorkReport items={items} mode="assignment" fileLinks={fileLinks} />
-            </>
-          ) : null}
+          <WorkReportFeed
+            key={JSON.stringify(reportFilters)}
+            first={items}
+            more={PAGE < total}
+            filters={reportFilters}
+            mode={kind || 'all'}
+            foot={foot}
+          />
         </Card>
       ) : (
         <Card>

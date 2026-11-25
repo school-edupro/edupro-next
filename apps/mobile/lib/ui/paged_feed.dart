@@ -43,7 +43,8 @@ class PagedFeed extends ConsumerStatefulWidget {
     super.key,
     required this.load,
     required this.parse,
-    required this.item,
+    this.item,
+    this.group,
     required this.empty,
     this.header,
     this.firstCacheKey,
@@ -53,7 +54,7 @@ class PagedFeed extends ConsumerStatefulWidget {
     this.endGap = 0,
     this.nested = false,
     this.listKey,
-  });
+  }) : assert(item != null || group != null, 'an item or a group');
 
   /// the API's answer for a page (1, 2, …)
   final Future<dynamic> Function(int page) load;
@@ -62,7 +63,11 @@ class PagedFeed extends ConsumerStatefulWidget {
   final FeedPage Function(Json answer, int page) parse;
 
   /// one item; [replace] puts a changed copy in its place (read, acknowledged)
-  final Widget Function(BuildContext context, Json item, void Function(Json) replace) item;
+  final Widget Function(BuildContext context, Json item, void Function(Json) replace)? item;
+
+  /// instead of [item]: every item loaded so far at once (a list grouped by date, class and subject, whose groups
+  /// may grow as the next page comes)
+  final List<Widget> Function(BuildContext context, List<Json> items)? group;
 
   /// what stands above the items (a title, the filters, figures), given the total and the latest answer once known
   final List<Widget> Function(int? total, Json? answer)? header;
@@ -208,8 +213,11 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
       children: [
         if (_staleAt != null) ...[StaleLine(at: _staleAt!), const SizedBox(height: Tokens.sp3)],
         ...?widget.header?.call(_total, _answer),
-        for (var i = 0; i < _items.length; i++)
-          widget.item(context, _items[i], (changed) => setState(() => _items[i] = changed)),
+        if (widget.group != null)
+          ...widget.group!(context, _items)
+        else
+          for (var i = 0; i < _items.length; i++)
+            widget.item!(context, _items[i], (changed) => setState(() => _items[i] = changed)),
         if (_busy)
           Padding(
             padding: const EdgeInsets.all(Tokens.sp4),

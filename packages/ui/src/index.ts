@@ -75,6 +75,8 @@ export {
   type LessonListRow,
   type LessonFilters,
   type LessonDetailData,
+  LessonRow,
+  LESSON_HEAD,
 } from './components/LessonReport';
 export { CodeLoginForm, OtpCodeForm } from './components/OtpSignIn';
 export { FeeReceiptSheet, type FeeReceipt } from './components/FeeReceiptSheet';

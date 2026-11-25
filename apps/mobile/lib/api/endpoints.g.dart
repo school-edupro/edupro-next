@@ -149,8 +149,8 @@ class EduProApi {
       _t.send('GET', '/academics/daily-work/viewer');
 
   /// GET /academics/daily-work — Homework, classwork and assignments (scoped: teachers by section, families by child)
-  Future<dynamic> dailyWorkList({String? classSectionId, String? subjectId, String? kind, String? from, String? to, int? page, int? size}) =>
-      _t.send('GET', '/academics/daily-work', query: {if (classSectionId != null) 'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId, if (kind != null) 'kind': kind, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
+  Future<dynamic> dailyWorkList({String? classSectionId, String? subjectId, String? kind, String? mode, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/academics/daily-work', query: {if (classSectionId != null) 'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId, if (kind != null) 'kind': kind, if (mode != null) 'mode': mode, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
 
   /// GET /academics/daily-work/{id}/files/{fileId}
   Future<ApiFile> dailyWorkFile({required String id, required String fileId}) =>
@@ -161,8 +161,8 @@ class EduProApi {
       _t.send('POST', '/academics/acks', body: body.toJson());
 
   /// GET /academics/documents — Class documents the viewer may see (families from the publish time)
-  Future<dynamic> documentsList({String? kind, String? classSectionId, String? from, String? to}) =>
-      _t.send('GET', '/academics/documents', query: {if (kind != null) 'kind': kind, if (classSectionId != null) 'classSectionId': classSectionId, if (from != null) 'from': from, if (to != null) 'to': to});
+  Future<dynamic> documentsList({String? kind, String? classSectionId, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/academics/documents', query: {if (kind != null) 'kind': kind, if (classSectionId != null) 'classSectionId': classSectionId, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
 
   /// GET /academics/documents/{id}/files/{fileId}
   Future<ApiFile> documentsFile({required String id, required String fileId}) =>

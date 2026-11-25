@@ -10,10 +10,15 @@ import {
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { uploadLesson } from './actions';
+import { LessonFeed } from './LessonFeed';
+
+/** The report's first page: the latest 10; the rest load as the teacher scrolls. */
+const PAGE = 10;
 
 const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
-const KEYS = ['by', 'q', 'from', 'to', 'status', 'level', 'record', 'mine', 'page'] as const;
+const KEYS = ['by', 'q', 'from', 'to', 'status', 'level', 'record', 'mine'] as const;
 
 /**
  * Lesson planner for the teacher: Upload Lesson (date, classes, topic, description, attachments) and
@@ -32,8 +37,10 @@ export default async function LessonPlansPage({
     const v = (sp[k] ?? '').slice(0, 80);
     if (!v) continue;
     q.set(k, v);
-    if (k !== 'page') filters[k] = v;
+    filters[k] = v;
   }
+  q.set('page', '1');
+  q.set('size', String(PAGE));
   let options: LessonOptions = { classes: [], sections: [], maxFiles: 2 };
   let list: LessonListData | null = null;
   try {
@@ -44,6 +51,13 @@ export default async function LessonPlansPage({
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (!(error instanceof ApiError && (error.status === 403 || error.status === 400))) throw error;
   }
+  const lang = await currentLang();
+  const foot = {
+    more: t(lang, 'Show more'),
+    loading: t(lang, 'Loading…'),
+    failed: t(lang, 'Could not load more.'),
+    end: t(lang, 'That is everything.'),
+  };
   const link = (v: string, label: string) => (
     <a
       key={v}
@@ -108,6 +122,15 @@ export default async function LessonPlansPage({
           keep={{ tab: 'report' }}
           exportPath="/api/lesson-report"
           detailHref={(id) => `/lesson-plans/${id}`}
+          feed={
+            <LessonFeed
+              key={JSON.stringify(filters)}
+              first={list.data}
+              more={PAGE < list.page.total}
+              filters={filters as Record<string, string>}
+              foot={foot}
+            />
+          }
         />
       ) : (
         <Card>The lesson report is not part of your role.</Card>

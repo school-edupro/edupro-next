@@ -1,7 +1,8 @@
 'use server';
 /**
  * The staff website's lists that load as they scroll (Messages: messages and notices; Office orders; Forms and
- * declarations; Queries; File movement; Purchase indents; leave; Student leave; Gate passes): the next page of 10,
+ * declarations; Queries; File movement; Purchase indents; leave; Student leave; Gate passes; class documents; the
+ * lesson report; daily work): the next page of 10,
  * and acknowledging a notice in place.
  */
 import { bff } from './bff';
@@ -180,6 +181,60 @@ export async function loadStaffLeave(
       `/leave/${which === 'mine' ? 'mine' : 'self/team'}?${qs}&page=${String(page)}&size=${String(PAGE)}`,
     );
     return { ok: true, data: r.rows, more: page * PAGE < r.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of class documents (session plan, curriculum, date sheet…), with the page's filters. */
+export async function loadDocuments(
+  page: number,
+  filters: Record<string, string>,
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  const qs = filterQuery(filters, ['kind', 'classSectionId', 'from', 'to']);
+  if (qs === null) return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ data: unknown[]; page: { total: number } }>(
+      `/academics/documents?${qs}&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.data, more: page * PAGE < r.page.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of the lesson report, with the report's filters. */
+export async function loadLessons(
+  page: number,
+  filters: Record<string, string>,
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  const qs = filterQuery(filters, ['by', 'q', 'from', 'to', 'status', 'level', 'record', 'mine']);
+  if (qs === null) return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ data: unknown[]; page: { total: number } }>(
+      `/academics/lessons?${qs}&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.data, more: page * PAGE < r.page.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of what was posted (daily work and assignments), with the report's filters. */
+export async function loadWork(
+  page: number,
+  filters: Record<string, string>,
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  const qs = filterQuery(filters, ['from', 'to', 'classSectionId', 'mode']);
+  if (qs === null) return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ data: unknown[]; page: { total: number } }>(
+      `/academics/daily-work?${qs}&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.data, more: page * PAGE < r.page.total };
   } catch {
     return { ok: false };
   }

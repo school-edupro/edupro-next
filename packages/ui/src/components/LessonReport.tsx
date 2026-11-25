@@ -39,6 +39,81 @@ const STATUS = { pending: 'Pending', acknowledged: 'Acknowledged', rejected: 'Re
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
 
+/** The report's columns (the admin's table and the staff website's list that loads as it scrolls). */
+export const LESSON_HEAD = [
+  'S.no',
+  'Request ID',
+  'Employee details',
+  'Class',
+  'Topic',
+  'Request date',
+  'Status',
+  'Current approver',
+  'Action',
+] as const;
+
+/** One lesson of the report: its row. */
+export function LessonRow({
+  r,
+  n,
+  detailHref,
+}: {
+  r: LessonListRow;
+  /** its number on the list */
+  n: number;
+  detailHref: (id: string) => string;
+}) {
+  return (
+    <tr>
+      <td>{n}</td>
+      <th scope="row">
+        <a href={detailHref(r.id)} style={{ textDecoration: 'underline' }}>
+          #{r.id}
+        </a>
+      </th>
+      <td>
+        <strong>{r.employee}</strong>
+        <span className="ep-sheet__meta">
+          {r.employeeCode}
+          {r.department ? ` · ${r.department}` : ''}
+        </span>
+      </td>
+      <td>{r.classes}</td>
+      <td>
+        {r.topic}
+        {r.files ? <span className="ep-sheet__meta">{r.files} attachment(s)</span> : null}
+      </td>
+      <td>{day(r.requestedAt)}</td>
+      <td>
+        <span className="ep-lesson__status" data-status={r.status}>
+          {STATUS[r.status]}
+        </span>
+      </td>
+      <td>
+        {r.status === 'pending' ? (
+          <>
+            <span className="ep-lesson__level">
+              Level {r.currentLevel} of {r.levels} pending
+            </span>
+            <span className="ep-sheet__meta">{r.approver ?? 'N/A'}</span>
+          </>
+        ) : (
+          '–'
+        )}
+      </td>
+      <td>
+        <a
+          className={`ep-btn ep-btn--sm ${r.myTurn ? 'ep-btn--primary' : 'ep-btn--secondary'}`}
+          href={detailHref(r.id)}
+          aria-label={`${r.myTurn ? 'Review' : 'View'} lesson ${r.id}: ${r.topic}`}
+        >
+          {r.myTurn ? 'Review' : 'View'}
+        </a>
+      </td>
+    </tr>
+  );
+}
+
 /**
  * Lesson Report: the four counts, the filters, the status tabs and the list with who each lesson waits
  * for. `path` is the page (its `tab` is kept by `keep`), `exportPath` the app's download route.
@@ -50,8 +125,11 @@ export function LessonReport({
   keep,
   exportPath,
   detailHref,
+  feed,
 }: {
   list: LessonListData;
+  /** the staff website: its list that loads as it scrolls, in place of the table and its pages */
+  feed?: ReactNode;
   filters: LessonFilters;
   path: string;
   /** Query pairs every link keeps (the tab of the page). */
@@ -195,80 +273,35 @@ export function LessonReport({
       </nav>
       {list.data.length === 0 ? (
         <p className="ep-sheet__hint">No lesson for these filters.</p>
+      ) : feed ? (
+        feed
       ) : (
         <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Lessons">
           <table className="ep-table ep-table--dense">
             <caption className="ep-sr-only">Lessons uploaded for approval</caption>
             <thead>
               <tr>
-                <th scope="col">S.no</th>
-                <th scope="col">Request ID</th>
-                <th scope="col">Employee details</th>
-                <th scope="col">Class</th>
-                <th scope="col">Topic</th>
-                <th scope="col">Request date</th>
-                <th scope="col">Status</th>
-                <th scope="col">Current approver</th>
-                <th scope="col">Action</th>
+                {LESSON_HEAD.map((h) => (
+                  <th key={h} scope="col">
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {list.data.map((r, i) => (
-                <tr key={r.id}>
-                  <td>{(list.page.number - 1) * list.page.size + i + 1}</td>
-                  <th scope="row">
-                    <a href={detailHref(r.id)} style={{ textDecoration: 'underline' }}>
-                      #{r.id}
-                    </a>
-                  </th>
-                  <td>
-                    <strong>{r.employee}</strong>
-                    <span className="ep-sheet__meta">
-                      {r.employeeCode}
-                      {r.department ? ` · ${r.department}` : ''}
-                    </span>
-                  </td>
-                  <td>{r.classes}</td>
-                  <td>
-                    {r.topic}
-                    {r.files ? (
-                      <span className="ep-sheet__meta">{r.files} attachment(s)</span>
-                    ) : null}
-                  </td>
-                  <td>{day(r.requestedAt)}</td>
-                  <td>
-                    <span className="ep-lesson__status" data-status={r.status}>
-                      {STATUS[r.status]}
-                    </span>
-                  </td>
-                  <td>
-                    {r.status === 'pending' ? (
-                      <>
-                        <span className="ep-lesson__level">
-                          Level {r.currentLevel} of {r.levels} pending
-                        </span>
-                        <span className="ep-sheet__meta">{r.approver ?? 'N/A'}</span>
-                      </>
-                    ) : (
-                      '–'
-                    )}
-                  </td>
-                  <td>
-                    <a
-                      className={`ep-btn ep-btn--sm ${r.myTurn ? 'ep-btn--primary' : 'ep-btn--secondary'}`}
-                      href={detailHref(r.id)}
-                      aria-label={`${r.myTurn ? 'Review' : 'View'} lesson ${r.id}: ${r.topic}`}
-                    >
-                      {r.myTurn ? 'Review' : 'View'}
-                    </a>
-                  </td>
-                </tr>
+                <LessonRow
+                  key={r.id}
+                  r={r}
+                  n={(list.page.number - 1) * list.page.size + i + 1}
+                  detailHref={detailHref}
+                />
               ))}
             </tbody>
           </table>
         </div>
       )}
-      {list.page.total > list.page.size ? (
+      {!feed && list.page.total > list.page.size ? (
         <nav className="ep-lesson__pager" aria-label="Pages">
           {list.page.number > 1 ? (
             <a

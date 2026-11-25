@@ -71,6 +71,8 @@ export const ListDailyWorkQuerySchema = z.object({
   classSectionId: IdSchema.optional(),
   subjectId: IdSchema.optional(),
   kind: DailyWorkKindSchema.optional(),
+  /** the report's Show: daily work (homework and classwork) or assignments */
+  mode: z.enum(['daily', 'assignment']).optional(),
   from: DateSchema.optional(),
   to: DateSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -301,6 +303,12 @@ export const ListDocumentsQuerySchema = z.object({
   to: DateSchema.optional(),
 });
 export class ListDocumentsQueryDto extends createZodDto(ListDocumentsQuerySchema) {}
+/** The list, given `page`, a page at a time (the staff app and website: the latest 10, then more as they scroll). */
+export const ListDocumentsPageSchema = ListDocumentsQuerySchema.extend({
+  page: z.coerce.number().int().min(1).max(500).optional(),
+  size: z.coerce.number().int().min(1).max(100).default(10),
+});
+export class ListDocumentsPageDto extends createZodDto(ListDocumentsPageSchema) {}
 export const DocumentReportQuerySchema = ListDocumentsQuerySchema.extend({
   format: z.enum(['xlsx', 'pdf']).default('xlsx'),
   /** `1`: the file inside a JSON answer (the teacher app's own download route reads it). */

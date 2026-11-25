@@ -271,7 +271,8 @@ export interface WorkReportItem {
 }
 export interface WorkReportProps {
   items: WorkReportItem[];
-  mode: 'daily' | 'assignment';
+  /** daily: homework beside classwork; assignment: the assignments; all: the three side by side (one list by date) */
+  mode: 'daily' | 'assignment' | 'all';
   /** A link beside each entry (who acknowledged, remove…). */
   extra?: (item: WorkReportItem) => ReactNode;
   fileLinks?: WorkFileLinks;
@@ -297,9 +298,10 @@ const day = (d: string) =>
 /** What was posted, a line per day, class and subject: homework beside classwork, with its publish time. */
 export function WorkReport({ items, mode, extra, fileLinks }: WorkReportProps) {
   const assignment = mode === 'assignment';
+  const all = mode === 'all';
   const lines = new Map<string, WorkReportItem[]>();
   for (const it of items) {
-    if (assignment !== (it.kind === 'assignment')) continue;
+    if (!all && assignment !== (it.kind === 'assignment')) continue;
     const k = `${it.assignedOn}|${it.section}|${it.subjectName ?? ''}`;
     lines.set(k, [...(lines.get(k) ?? []), it]);
   }
@@ -335,7 +337,12 @@ export function WorkReport({ items, mode, extra, fileLinks }: WorkReportProps) {
     <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Report">
       <table className="ep-table ep-table--dense ep-sheet__report">
         <caption className="ep-sr-only">
-          {assignment ? 'Assignments' : 'Homework and classwork'} posted
+          {all
+            ? 'Homework, classwork and assignments'
+            : assignment
+              ? 'Assignments'
+              : 'Homework and classwork'}{' '}
+          posted
         </caption>
         <thead>
           <tr>
@@ -348,6 +355,7 @@ export function WorkReport({ items, mode, extra, fileLinks }: WorkReportProps) {
               <>
                 <th scope="col">Homework</th>
                 <th scope="col">Classwork</th>
+                {all ? <th scope="col">Assignment</th> : null}
               </>
             )}
           </tr>
@@ -364,6 +372,7 @@ export function WorkReport({ items, mode, extra, fileLinks }: WorkReportProps) {
                 <>
                   {cell(list, 'homework')}
                   {cell(list, 'classwork')}
+                  {all ? cell(list, 'assignment') : null}
                 </>
               )}
             </tr>

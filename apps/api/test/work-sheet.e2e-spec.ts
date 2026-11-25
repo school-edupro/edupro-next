@@ -344,6 +344,14 @@ describe('daily work sheet (e2e)', () => {
     expect(
       (await get(classTeacher, '/academics/documents?to=2020-01-01')).json().data,
     ).toHaveLength(0);
+    // a page at a time for the staff app and website (25 Nov 2026); without page, as before
+    expect(list.page).toBeNull();
+    const p1 = (await get(classTeacher, '/academics/documents?page=1&size=10')).json();
+    expect(p1.page).toEqual({ number: 1, size: 10, total: 1 });
+    expect(p1.data).toHaveLength(1);
+    expect(
+      (await get(classTeacher, '/academics/documents?page=2&size=10')).json().data,
+    ).toHaveLength(0);
     for (const format of ['xlsx', 'pdf']) {
       const f = await get(admin, `/academics/documents/report?format=${format}&kind=session_plan`);
       expect(f.statusCode).toBe(200);

@@ -1,11 +1,14 @@
-// The staff app's leave and gate pass lists: the latest 10, then 10 more as the person scrolls (as the staff website).
+// The staff app's leave, gate pass, lesson, document and daily work lists: the latest 10, then 10 more as the person scrolls (as the staff website).
 // Every name and number here is made up.
 import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app_services.dart';
 import 'package:edupro/family/common.dart';
 import 'package:edupro/profiles/profiles.dart';
+import 'package:edupro/staff/daily_work.dart';
+import 'package:edupro/staff/documents.dart';
 import 'package:edupro/staff/gate_passes.dart';
 import 'package:edupro/staff/leave_page.dart';
+import 'package:edupro/staff/lesson_plans.dart';
 import 'package:edupro/staff/student_leave.dart';
 import 'package:edupro/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -132,6 +135,81 @@ Object? answer(Call c) {
         'decided': <Object>[],
         'page': {'number': page, 'size': size, 'total': many},
       };
+    case 'GET /academics/daily-work/sheet/options':
+      return {'data': <Object>[]};
+    case 'GET /academics/documents':
+      return {
+        'data': [
+          for (var i = from; i < upto; i++)
+            {
+              'id': 'x$i',
+              'kind': 'session_plan',
+              'kindLabel': 'Session plan',
+              'title': 'Plan $i',
+              'remark': null,
+              'section': 'VI-A',
+              'subject': null,
+              'fileIds': <Object>[],
+              'publishAt': '2026-11-20T04:30:00.000Z',
+              'scheduled': false,
+              'ackRequired': false,
+              'ackCount': 0,
+              'postedBy': 'Asha Teacher',
+            },
+        ],
+        'kinds': <Object>[],
+        'page': {'number': page, 'size': size, 'total': many},
+      };
+    case 'GET /academics/lessons':
+      return {
+        'data': [
+          for (var i = from; i < upto; i++)
+            {
+              'id': 'x$i',
+              'date': '2026-11-20',
+              'classes': 'VI-A',
+              'topic': 'Topic $i',
+              'employee': 'Asha Teacher',
+              'employeeCode': 'E015',
+              'department': 'English',
+              'status': 'pending',
+              'currentLevel': 1,
+              'levels': 2,
+              'approver': 'Sample Head',
+              'requestedAt': '2026-11-19T04:30:00.000Z',
+              'files': 0,
+              'mine': true,
+              'myTurn': false,
+              'deleted': false,
+            },
+        ],
+        'counts': {'total': many, 'pending': many, 'acknowledged': 0, 'rejected': 0},
+        'page': {'number': page, 'size': size, 'total': many},
+        'office': false,
+      };
+    case 'GET /academics/daily-work':
+      return {
+        'data': [
+          for (var i = from; i < upto; i++)
+            {
+              'id': 'x$i',
+              'kind': i.isEven ? 'homework' : 'assignment',
+              'section': 'VI-A',
+              'subjectName': 'S$i',
+              'title': 'Work $i',
+              'body': 'Made-up work $i',
+              'assignedOn': '2026-11-20',
+              'dueOn': null,
+              'postedBy': 'Asha Teacher',
+              'files': <Object>[],
+              'publishAt': '2026-11-20T04:30:00.000Z',
+              'scheduled': false,
+              'ackRequired': false,
+              'ackCount': 0,
+            },
+        ],
+        'page': {'number': page, 'size': size, 'total': many},
+      };
     case 'GET /gate-passes/staff':
       return {
         'data': [for (var i = from; i < upto; i++) _pass(i, mine: true)],
@@ -215,4 +293,41 @@ void main() {
     await tester.pumpAndSettle();
     await scrolls(tester, t, '/gate-passes/staff', 'sgMine');
   });
+
+  testWidgets('Session plan, curriculum, date sheet (uploaded): 10, 10 more, the end', (
+    tester,
+  ) async {
+    final t = await pump(tester, const DocumentsListTab(profile: staff));
+    await scrolls(tester, t, '/academics/documents', 'doc');
+  });
+
+  testWidgets('Lesson report: 10, 10 more, the end; the counts over all', (tester) async {
+    final t = await pump(tester, const LessonReportTab());
+    expect(find.byKey(const Key('lpTile-total')), findsOneWidget);
+    await scrolls(tester, t, '/academics/lessons', 'lpRow');
+  });
+
+  testWidgets(
+    'Daily work report: one list by date, 10 posts, 10 more, the end; each with its kind',
+    (tester) async {
+      final t = await pump(tester, const WorkReportTab(profile: staff));
+      final pages = t.calls.where((c) => c.path == '/academics/daily-work').toList();
+      expect(pages.first.query, allOf(containsPair('page', 1), containsPair('size', 10)));
+      expect(find.byKey(const Key('wrCard-2026-11-20|VI-A|S0')), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('wrCard-2026-11-20|VI-A|S15')),
+        300,
+        scrollable: _list,
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.byKey(const Key('feedEnd')), 300, scrollable: _list);
+      await tester.pumpAndSettle();
+      expect(t.calls.where((c) => c.path == '/academics/daily-work').map((c) => c.query?['page']), [
+        1,
+        2,
+        3,
+      ]);
+      expect(find.byKey(const Key('wrCard-2026-11-20|VI-A|S22')), findsOneWidget);
+    },
+  );
 }
