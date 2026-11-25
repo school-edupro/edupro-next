@@ -33,6 +33,7 @@ import {
   ConsentEditDto,
   ConsentNotifyDto,
   ConsentSharesDto,
+  MineConsentListQueryDto,
   MineFormQueryDto,
   PublicOtpDto,
   PublicRespondDto,
@@ -235,10 +236,13 @@ export class ConsentFormsController {
 
   // ---- families and staff ----
   @Get('mine/consent-forms')
-  @ApiOperation({ summary: 'The forms for my children and for me (staff)' })
+  @ApiOperation({
+    summary:
+      'The forms for my children and for me (staff); part=staff: my own part, a page at a time',
+  })
   @AuthenticatedOnly()
-  mine(@ReqCtx() ctx: RequestContext) {
-    return this.svc.mine(ctx);
+  mine(@ReqCtx() ctx: RequestContext, @Query() q: MineConsentListQueryDto) {
+    return this.svc.mine(ctx, q);
   }
 
   @Get('mine/consent-forms/responses/:rid/pdf')

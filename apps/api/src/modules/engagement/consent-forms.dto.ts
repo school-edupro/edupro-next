@@ -212,6 +212,19 @@ export const MineFormQuerySchema = z.object({
 });
 export class MineFormQueryDto extends createZodDto(MineFormQuerySchema) {}
 
+/**
+ * The forms asked of me. `part=staff`: only the staff member's own part (the staff app and website), with the
+ * figures and, given `page`, the latest `size` first (a tab: to answer, answered or closed). Without it, every
+ * form for my children and me at once (the family app and website).
+ */
+export const MineConsentListSchema = z.object({
+  part: z.enum(['staff']).optional(),
+  tab: z.enum(['todo', 'answered', 'closed']).optional(),
+  page: z.coerce.number().int().min(1).max(500).optional(),
+  size: z.coerce.number().int().min(1).max(50).default(10),
+});
+export class MineConsentListQueryDto extends createZodDto(MineConsentListSchema) {}
+
 // ---- the public link (no login) ----
 const Mobile = z
   .string()

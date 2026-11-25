@@ -132,7 +132,7 @@ class _ListState extends ConsumerState<_List> {
         final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
         return (items: asList(a['data']), more: page * 10 < total, total: total);
       },
-      header: (_) => [
+      header: (_, _) => [
         Text(s.ooHelp, style: const TextStyle(fontSize: 13)),
         const SizedBox(height: Tokens.sp3),
       ],

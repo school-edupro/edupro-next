@@ -31,6 +31,7 @@ class PagedFeed extends ConsumerStatefulWidget {
     required this.empty,
     this.header,
     this.firstCacheKey,
+    this.emptyCard,
   });
 
   /// the API's answer for a page (1, 2, …)
@@ -42,11 +43,14 @@ class PagedFeed extends ConsumerStatefulWidget {
   /// one item; [replace] puts a changed copy in its place (read, acknowledged)
   final Widget Function(BuildContext context, Json item, void Function(Json) replace) item;
 
-  /// what stands above the items (a title, the filters), given the total once known
-  final List<Widget> Function(int? total)? header;
+  /// what stands above the items (a title, the filters, figures), given the total and the latest answer once known
+  final List<Widget> Function(int? total, Json? answer)? header;
 
   /// said when there is nothing at all
   final String empty;
+
+  /// shown instead of [empty] when there is nothing at all (a card with a title and a line)
+  final Widget? emptyCard;
   final String? firstCacheKey;
 
   @override
@@ -59,6 +63,7 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
   int _page = 0;
   bool _more = true;
   int? _total;
+  Json? _answer;
   bool _busy = false;
   Object? _error;
   DateTime? _staleAt;
@@ -96,7 +101,8 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
       } else {
         answer = await widget.load(page);
       }
-      final p = widget.parse(asJson(answer), page);
+      final json = asJson(answer);
+      final p = widget.parse(json, page);
       if (!mounted) return;
       final seen = {for (final x in _items) '${x['id']}'};
       setState(() {
@@ -104,6 +110,7 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
         _page = page;
         _more = p.more && p.items.isNotEmpty;
         _total = p.total ?? _total;
+        _answer = json;
       });
       // a short first page that does not fill the screen: bring the next one too
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -122,6 +129,7 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
       _page = 0;
       _more = true;
       _total = null;
+      _answer = null;
       _error = null;
     });
     await _next();
@@ -141,7 +149,7 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
           if (_staleAt != null) ...[StaleLine(at: _staleAt!), const SizedBox(height: Tokens.sp3)],
-          ...?widget.header?.call(_total),
+          ...?widget.header?.call(_total, _answer),
           for (var i = 0; i < _items.length; i++)
             widget.item(context, _items[i], (changed) => setState(() => _items[i] = changed)),
           if (_busy)
@@ -166,7 +174,7 @@ class _PagedFeedState extends ConsumerState<PagedFeed> {
               ),
             )
           else if (_items.isEmpty)
-            EmptyLine(widget.empty)
+            widget.emptyCard ?? EmptyLine(widget.empty)
           else if (_more)
             Center(
               child: TextButton(

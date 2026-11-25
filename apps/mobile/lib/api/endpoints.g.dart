@@ -1072,9 +1072,9 @@ class EduProApi {
   Future<dynamic> engagementCreateChange({required CreateChangeRequestDto body}) =>
       _t.send('POST', '/engagement/change-requests', body: body.toJson());
 
-  /// GET /engagement/mine/consent-forms — The forms for my children and for me (staff)
-  Future<dynamic> consentFormsMine() =>
-      _t.send('GET', '/engagement/mine/consent-forms');
+  /// GET /engagement/mine/consent-forms — The forms for my children and for me (staff); part=staff: my own part, a page at a time
+  Future<dynamic> consentFormsMine({String? part, String? tab, int? page, int? size}) =>
+      _t.send('GET', '/engagement/mine/consent-forms', query: {if (part != null) 'part': part, if (tab != null) 'tab': tab, if (page != null) 'page': page, if (size != null) 'size': size});
 
   /// GET /engagement/mine/consent-forms/{id}
   Future<dynamic> consentFormsMineForm({required String id, String? studentId, String? responseId}) =>

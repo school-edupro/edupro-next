@@ -56,6 +56,8 @@ const PAGES = [
   '/messages',
   '/messages?tab=notices',
   '/office-orders?tab=all',
+  // forms and declarations, 10 at a time
+  '/consents',
   '/library',
   '/library?view=history',
   '/library?view=find&q=a',

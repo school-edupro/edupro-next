@@ -3,6 +3,7 @@
 import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app_services.dart';
 import 'package:edupro/family/common.dart';
+import 'package:edupro/family/consents.dart';
 import 'package:edupro/family/messages.dart';
 import 'package:edupro/l10n/strings.dart';
 import 'package:edupro/profiles/profiles.dart';
@@ -25,7 +26,7 @@ const staff = Profile(
   app: 'teacher',
 );
 
-/// 23 messages and 23 notices: pages of 10, 10 and 3.
+/// 23 messages, 23 notices and 23 forms asked of the staff member: pages of 10, 10 and 3.
 Object? answer(Call c) {
   final page = int.tryParse('${c.query?['page'] ?? 1}') ?? 1;
   final size = int.tryParse('${c.query?['size'] ?? 10}') ?? 10;
@@ -75,6 +76,39 @@ Object? answer(Call c) {
         ],
         'page': {'number': page, 'size': size, 'total': 23},
       };
+    case 'GET /engagement/mine/consent-forms':
+      return {
+        'forms': [
+          for (var i = from; i < upto; i++)
+            {
+              'id': 'f$i',
+              'title': 'Declaration $i',
+              'description': null,
+              'open': true,
+              'closesAt': null,
+              'editUntil': null,
+              'repeat': 'once',
+              'feeMode': 'none',
+              'approval': false,
+              'people': [
+                {'kind': 'staff', 'id': 'e7', 'name': 'Myself', 'canAnswer': true, 'responses': []},
+              ],
+            },
+        ],
+        'children': [],
+        'staff': true,
+        'counts': {
+          'todo': 23,
+          'answered': 0,
+          'closed': 0,
+          'answeredAll': 0,
+          'waiting': 0,
+          'feeDue': 0,
+        },
+        'page': {'number': page, 'size': size, 'total': 23},
+      };
+    case 'GET /payments/gateways/options':
+      return {'data': []};
     case 'POST /comms/inbox/read':
       return {'ok': true};
   }
@@ -175,6 +209,31 @@ void main() {
     expect(pages().last.query, allOf(containsPair('page', 1), isNot(contains('kind'))));
   });
 
+  testWidgets(
+    'forms and declarations: the latest 10 to answer first, 10 more as it scrolls, then the end',
+    (tester) async {
+      final t = await pump(tester, const ConsentsScreen(profile: staff));
+      List<Call> pages() =>
+          t.calls.where((c) => c.path == '/engagement/mine/consent-forms').toList();
+      expect(
+        pages().first.query,
+        allOf(containsPair('part', 'staff'), containsPair('tab', 'todo'), containsPair('size', 10)),
+      );
+      // the figures over every form, from the API
+      expect(
+        find.descendant(of: find.byKey(const Key('cfFig-todo')), matching: find.text('23')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('cf-f0')), findsOneWidget);
+      expect(find.byKey(const Key('cf-f10')), findsNothing);
+      await scrollTo(tester, find.byKey(const Key('cf-f15')));
+      expect(pages().map((c) => c.query?['page']).take(2), [1, 2]);
+      await scrollTo(tester, find.byKey(const Key('feedEnd')));
+      expect(pages().map((c) => c.query?['page']), [1, 2, 3]);
+      expect(find.byKey(const Key('cf-f22')), findsOneWidget);
+    },
+  );
+
   for (final (name, hindi, dark) in [
     ('light', false, false),
     ('dark', false, true),
@@ -185,6 +244,7 @@ void main() {
         InboxList(profile: staff),
         NoticesList(profile: staff),
         OfficeOrdersScreen(profile: staff),
+        ConsentsScreen(profile: staff),
       ]) {
         await pump(tester, w, hindi: hindi, dark: dark);
         for (final g in [

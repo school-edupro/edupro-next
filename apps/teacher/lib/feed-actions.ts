@@ -1,7 +1,7 @@
 'use server';
 /**
- * The staff website's lists that load as they scroll (Messages: messages and notices; Office orders): the next page
- * of 10, and acknowledging a notice in place.
+ * The staff website's lists that load as they scroll (Messages: messages and notices; Office orders; Forms and
+ * declarations): the next page of 10, and acknowledging a notice in place.
  */
 import { bff } from './bff';
 
@@ -35,6 +35,21 @@ export async function loadNotices(
       `/academics/notices?page=${String(page)}&size=${String(PAGE)}${kind ? `&kind=${kind}` : ''}`,
     );
     return { ok: true, data: r.data, more: page * PAGE < r.page.total };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The next page of the forms and declarations asked of me as staff (the latest first). */
+export async function loadConsents(
+  page: number,
+): Promise<{ ok: true; data: unknown[]; more: boolean } | { ok: false }> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return { ok: false };
+  try {
+    const r = await bff.api.fetch<{ forms: unknown[]; page: { total: number } }>(
+      `/engagement/mine/consent-forms?part=staff&page=${String(page)}&size=${String(PAGE)}`,
+    );
+    return { ok: true, data: r.forms, more: page * PAGE < r.page.total };
   } catch {
     return { ok: false };
   }

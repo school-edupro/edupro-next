@@ -971,5 +971,15 @@ more as the user scrolls down").
   for staff) show the latest 10 and load 10 more as they scroll (`OfficeOrdersScreen` on `PagedFeed`; the website's
   `components/NoticeFeed.tsx` with `kind`, shared with Messages → Notices; `lib/feed-actions.ts`); Acknowledge in
   place on the website.
-- Tests: `staff_feed_test.dart` (10 first, the next pages on scroll, the end; a notice type from page 1; Office orders' two tabs; a11y light /
-  dark / Hindi); `teacher-a11y` gets `/messages` and `/messages?tab=notices`.
+- **Forms and declarations** (staff), app and website, the same: the API's `GET /engagement/mine/consent-forms`
+  takes `part=staff` (only the staff member's own part), `tab` (todo / answered / closed), `page` and `size` (10,
+  at most 50), and answers with `page.total` and `counts` (to answer, answered, closed, answered in all, waiting,
+  fee due) over all their forms; without `part` it answers as before for families. The app's staff list keeps its
+  figures and tabs (from `counts`) and loads the tab's latest 10, then 10 more as it scrolls (`ConsentsScreen` on
+  `PagedFeed`, whose header now also gets the latest answer; `emptyCard` for the tab's empty card); after an answer
+  or a payment it loads again from the newest. The website's `/consents` shows the latest 10 and loads 10 more
+  (`consents/ConsentFeed.tsx`, `loadConsents` in `lib/feed-actions.ts`). The family app is unchanged.
+- Tests: `staff_feed_test.dart` (10 first, the next pages on scroll, the end; a notice type from page 1; Office orders' two tabs; forms to
+  answer 10 → 20 → 23; a11y light / dark / Hindi); `consents_test.dart` (the staff list asks `part=staff`, its
+  figures from `counts`, a tab from page 1); API `consent-forms.e2e-spec` (pages, tabs, figures; the family list
+  unchanged); `teacher-a11y` gets `/messages`, `/messages?tab=notices`, `/office-orders?tab=all` and `/consents`.

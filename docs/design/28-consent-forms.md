@@ -244,3 +244,12 @@ to pay.
   app the profile kind.
 - Tests: `consent-forms.e2e-spec.ts` (a pupil signed in sees and answers her own form, not another pupil's, and opens
   the PDF), `consents_test.dart` (staff: Forms and declarations natively; a student answers, the parent pays).
+
+## As built — the staff list a page at a time (25 Nov 2026)
+
+- `GET /engagement/mine/consent-forms?part=staff&tab=todo|answered|closed&page=N&size=10` gives only the staff
+  member's own part, the latest first, with `page: {number, size, total}` and `counts` (todo, answered, closed,
+  answeredAll, waiting, feeDue) over all their forms (the newest 100 forms of the school, as before). Without
+  `part` the answer is as before (families and students: every form at once, the children's part).
+- The staff app (Forms and declarations) and the staff website (`/consents`) show the latest 10 and load 10 more as
+  the person scrolls (docs/design/89, "Messages: the latest 10").

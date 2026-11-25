@@ -12,6 +12,7 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../staff/data.dart' show PickedFile, uploadFile;
 import '../theme/tokens.g.dart';
+import '../ui/paged_feed.dart';
 import '../ui/widgets.dart';
 import 'attendance.dart' show leaveFilePickerProvider;
 import 'common.dart';
@@ -391,6 +392,9 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
   String? _message;
   String? _paid;
 
+  /// staff: bumped after an answer or a payment, so their list loads again from the newest
+  int _round = 0;
+
   Profile get _p => widget.profile;
 
   Future<void> _open(Json f, {String? responseId}) async {
@@ -405,6 +409,7 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
     );
     if (!mounted) return;
     ref.invalidate(consentFormsProvider);
+    setState(() => _round++);
     if (msg == null) return;
     setState(() {
       _message = msg;
@@ -457,6 +462,7 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
     setState(() {
       _paid = paid;
       _message = null;
+      _round++;
     });
   }
 
@@ -466,6 +472,38 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = (dark ? Tokens.mobGray300 : Tokens.textMuted);
     final gateways = ref.watch(feeGatewaysProvider((_p, 'misc')));
+    // staff: their own part, the latest 10 of the tab first and 10 more as they scroll (as the staff website);
+    // the figures and tab counts come from the API over all their forms
+    if (_p.isStaff) {
+      return PagedFeed(
+        key: ValueKey('cfFeed-$_tab-$_round'),
+        firstCacheKey: 'consents-feed:${_p.id}:$_tab',
+        load: (page) =>
+            ref.read(apiProvider).consentFormsMine(part: 'staff', tab: _tab, page: page, size: 10),
+        parse: (a, page) {
+          final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
+          return (items: asList(a['forms']), more: page * 10 < total, total: total);
+        },
+        header: (_, a) {
+          final n = a == null ? null : asJson(a['counts']);
+          int? count(String k) => n == null ? null : (n[k] as num?)?.toInt() ?? 0;
+          return _top(
+            s,
+            muted,
+            todo: count('todo'),
+            answered: count('answered'),
+            closed: count('closed'),
+            waiting: count('waiting'),
+            feeDue: n == null ? null : (n['feeDue'] as num?)?.toDouble() ?? 0,
+            answeredAll: count('answeredAll'),
+          );
+        },
+        empty: s.cfNothingToAnswer,
+        emptyCard: _empty(s, muted),
+        item: (context, f, _) =>
+            _card(s, f, asJson(asList(f['people']).firstOrNull), gateways, muted, dark),
+      );
+    }
     return LoadedList<Json>(
       value: ref.watch(consentFormsProvider(_p)),
       refresh: () {
@@ -513,111 +551,139 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
           'closed' => closed,
           _ => todo,
         };
-        void go(String tab) => setState(() => _tab = tab);
         return [
-          Text(
-            _p.isStaff ? s.cfStaffTitle : s.cfTitle,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+          ..._top(
+            s,
+            muted,
+            todo: todo.length,
+            answered: answered.length,
+            closed: closed.length,
+            waiting: waiting,
+            feeDue: feeDue,
+            answeredAll: answeredCount,
           ),
-          Text(_p.isStaff ? s.cfStaffLead : s.cfLead, style: TextStyle(color: muted, fontSize: 14)),
-          const SizedBox(height: Tokens.sp3),
-          if (_message != null) ...[
-            _Alert(key: const Key('cfMessage'), text: _message!),
-            const SizedBox(height: Tokens.sp3),
-          ],
-          if (_paid != null) ...[
-            _Alert(
-              key: const Key('cfPaid'),
-              text: _paid == '1' ? s.cfPaidOk : s.cfPaidNot,
-              danger: _paid != '1',
-            ),
-            const SizedBox(height: Tokens.sp3),
-          ],
-          FigureGrid(
-            key: const Key('cfFigures'),
-            tiles: [
-              FigureTile(
-                key: const Key('cfFig-todo'),
-                label: s.cfToAnswer,
-                value: '${todo.length}',
-                icon: Icons.edit_note_outlined,
-                tone: todo.isNotEmpty ? Tokens.statusWarning : null,
-                onTap: () => go('todo'),
-              ),
-              FigureTile(
-                key: const Key('cfFig-waiting'),
-                label: s.cfWaiting,
-                value: '$waiting',
-                icon: Icons.hourglass_empty_outlined,
-              ),
-              FigureTile(
-                key: const Key('cfFig-fee'),
-                label: s.cfFeeToPay,
-                value: s.money(feeDue),
-                icon: Icons.payments_outlined,
-                tone: feeDue > 0 ? Tokens.statusWarning : null,
-              ),
-              FigureTile(
-                key: const Key('cfFig-answered'),
-                label: s.cfAnswered,
-                value: '$answeredCount',
-                icon: Icons.task_alt_outlined,
-                onTap: () => go('answered'),
-              ),
-            ],
-          ),
-          const SizedBox(height: Tokens.sp4),
-          Semantics(
-            label: s.cfTitle,
-            container: true,
-            explicitChildNodes: true,
-            child: Wrap(
-              spacing: Tokens.sp2,
-              runSpacing: Tokens.sp2,
-              children: [
-                for (final (v, label, n) in [
-                  ('todo', s.cfToAnswer, todo.length),
-                  ('answered', s.cfAnswered, answered.length),
-                  ('closed', s.cfClosed, closed.length),
-                ])
-                  ChoiceChip(
-                    key: Key('cfTab-$v'),
-                    label: Text(s.cfTab(label, n)),
-                    selected: _tab == v,
-                    showCheckmark: false,
-                    onSelected: (_) => go(v),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Tokens.sp3),
-          if (list.isEmpty)
-            Card(
-              key: const Key('cfEmpty'),
-              child: Padding(
-                padding: const EdgeInsets.all(Tokens.sp4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(switch (_tab) {
-                      'answered' => s.cfNoAnswers,
-                      'closed' => s.cfNoClosed,
-                      _ => s.cfNothingToAnswer,
-                    }, style: const TextStyle(fontWeight: Tokens.fwBold)),
-                    const SizedBox(height: Tokens.sp1),
-                    Text(
-                      _tab == 'todo' ? s.cfEmptyTodo : s.cfEmptyDone,
-                      style: TextStyle(color: muted, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          if (list.isEmpty) _empty(s, muted),
           for (final (f, person) in list) _card(s, f, person, gateways, muted, dark),
         ];
       },
     );
   }
+
+  /// The title, the messages, the figures and the tabs above the forms; a `null` count is not known yet.
+  List<Widget> _top(
+    S s,
+    Color muted, {
+    required int? todo,
+    required int? answered,
+    required int? closed,
+    required int? waiting,
+    required double? feeDue,
+    required int? answeredAll,
+  }) {
+    String v(int? n) => n == null ? '–' : '$n';
+    void go(String tab) => setState(() => _tab = tab);
+    return [
+      Text(
+        _p.isStaff ? s.cfStaffTitle : s.cfTitle,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
+      ),
+      Text(_p.isStaff ? s.cfStaffLead : s.cfLead, style: TextStyle(color: muted, fontSize: 14)),
+      const SizedBox(height: Tokens.sp3),
+      if (_message != null) ...[
+        _Alert(key: const Key('cfMessage'), text: _message!),
+        const SizedBox(height: Tokens.sp3),
+      ],
+      if (_paid != null) ...[
+        _Alert(
+          key: const Key('cfPaid'),
+          text: _paid == '1' ? s.cfPaidOk : s.cfPaidNot,
+          danger: _paid != '1',
+        ),
+        const SizedBox(height: Tokens.sp3),
+      ],
+      FigureGrid(
+        key: const Key('cfFigures'),
+        tiles: [
+          FigureTile(
+            key: const Key('cfFig-todo'),
+            label: s.cfToAnswer,
+            value: v(todo),
+            icon: Icons.edit_note_outlined,
+            tone: (todo ?? 0) > 0 ? Tokens.statusWarning : null,
+            onTap: () => go('todo'),
+          ),
+          FigureTile(
+            key: const Key('cfFig-waiting'),
+            label: s.cfWaiting,
+            value: v(waiting),
+            icon: Icons.hourglass_empty_outlined,
+          ),
+          FigureTile(
+            key: const Key('cfFig-fee'),
+            label: s.cfFeeToPay,
+            value: feeDue == null ? '–' : s.money(feeDue),
+            icon: Icons.payments_outlined,
+            tone: (feeDue ?? 0) > 0 ? Tokens.statusWarning : null,
+          ),
+          FigureTile(
+            key: const Key('cfFig-answered'),
+            label: s.cfAnswered,
+            value: v(answeredAll),
+            icon: Icons.task_alt_outlined,
+            onTap: () => go('answered'),
+          ),
+        ],
+      ),
+      const SizedBox(height: Tokens.sp4),
+      Semantics(
+        label: s.cfTitle,
+        container: true,
+        explicitChildNodes: true,
+        child: Wrap(
+          spacing: Tokens.sp2,
+          runSpacing: Tokens.sp2,
+          children: [
+            for (final (t, label, n) in [
+              ('todo', s.cfToAnswer, todo),
+              ('answered', s.cfAnswered, answered),
+              ('closed', s.cfClosed, closed),
+            ])
+              ChoiceChip(
+                key: Key('cfTab-$t'),
+                label: Text(n == null ? label : s.cfTab(label, n)),
+                selected: _tab == t,
+                showCheckmark: false,
+                onSelected: (_) => go(t),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: Tokens.sp3),
+    ];
+  }
+
+  /// Nothing in this tab.
+  Widget _empty(S s, Color muted) => Card(
+    key: const Key('cfEmpty'),
+    child: Padding(
+      padding: const EdgeInsets.all(Tokens.sp4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(switch (_tab) {
+            'answered' => s.cfNoAnswers,
+            'closed' => s.cfNoClosed,
+            _ => s.cfNothingToAnswer,
+          }, style: const TextStyle(fontWeight: Tokens.fwBold)),
+          const SizedBox(height: Tokens.sp1),
+          Text(
+            _tab == 'todo' ? s.cfEmptyTodo : s.cfEmptyDone,
+            style: TextStyle(color: muted, fontSize: 14),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _card(S s, Json f, Json person, AsyncValue<List<Json>?> gateways, Color muted, bool dark) {
     final id = '${f['id']}';

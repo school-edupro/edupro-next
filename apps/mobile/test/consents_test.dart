@@ -325,23 +325,23 @@ class School {
     final q = c.query ?? const <String, Object?>{};
     switch ('${c.method} ${c.path}') {
       case 'GET /engagement/mine/consent-forms':
+        // staff: the part asked of the staff member themself (the first person becomes "staff")
+        final own = [
+          for (final f in forms())
+            {
+              ...f,
+              'people': [
+                {
+                  ...(f['people'] as List).first as Map<String, Object?>,
+                  'kind': 'staff',
+                  'id': 'e7',
+                },
+              ],
+            },
+        ];
+        if (q['part'] == 'staff') return staffPage(own, q);
         return {
-          // staff: the part asked of the staff member themself (the first person becomes "staff")
-          'forms': staff
-              ? [
-                  for (final f in forms())
-                    {
-                      ...f,
-                      'people': [
-                        {
-                          ...(f['people'] as List).first as Map<String, Object?>,
-                          'kind': 'staff',
-                          'id': 'e7',
-                        },
-                      ],
-                    },
-                ]
-              : forms(),
+          'forms': staff ? own : forms(),
           'children': [
             {'id': '41', 'name': 'Kid Sample', 'section': 'VI-A'},
           ],
@@ -778,6 +778,32 @@ void main() {
       expect(find.text(s.cfStaffLead), findsOneWidget);
       expect(find.text('Science trip to the planetarium'), findsOneWidget);
       expect(find.text('Answer now'), findsWidgets);
+      // the staff part from the API, a page at a time: the tab and its first 10
+      final t = await pump(
+        tester,
+        const ConsentsScreen(profile: me),
+        school: School()..staff = true,
+      );
+      List<Map<String, Object?>?> asked() => [
+        for (final c in t.calls)
+          if (c.path == '/engagement/mine/consent-forms') c.query,
+      ];
+      expect(
+        asked().last,
+        allOf(
+          containsPair('part', 'staff'),
+          containsPair('tab', 'todo'),
+          containsPair('page', 1),
+          containsPair('size', 10),
+        ),
+      );
+      // the figures come from the API's counts over all the staff member's forms
+      final todo = staffPage(School().forms(), {})['counts'] as Map;
+      expect(within('cfFig-todo', '${todo['todo']}'), findsOneWidget);
+      expect(find.text(s.cfTab(s.cfToAnswer, todo['todo'] as int)), findsOneWidget);
+      await tapIn(tester, find.byKey(const Key('cfTab-answered')));
+      expect(asked().last, allOf(containsPair('tab', 'answered'), containsPair('page', 1)));
+      expect(find.byKey(const Key('cfTab-answered')), findsOneWidget);
     },
   );
 
@@ -1152,4 +1178,38 @@ void main() {
       }
     }
   });
+}
+
+/// The API's `part=staff` answer (GET /engagement/mine/consent-forms): the figures over all the staff member's
+/// forms, then the tab's forms a page at a time.
+Map<String, Object?> staffPage(List<Map<String, Object?>> own, Map<String, Object?> q) {
+  Map<String, Object?> me(Map<String, Object?> f) =>
+      (f['people'] as List).first as Map<String, Object?>;
+  String? tabOf(Map<String, Object?> f) => me(f)['canAnswer'] == true
+      ? 'todo'
+      : f['open'] != true
+      ? 'closed'
+      : (me(f)['responses'] as List).isNotEmpty
+      ? 'answered'
+      : null;
+  final answers = [for (final f in own) ...(me(f)['responses'] as List).cast<Map>()];
+  final list = q['tab'] == null ? own : own.where((f) => tabOf(f) == q['tab']).toList();
+  final page = int.parse('${q['page'] ?? 1}');
+  final size = int.parse('${q['size'] ?? 10}');
+  return {
+    'forms': list.skip((page - 1) * size).take(size).toList(),
+    'children': <Object?>[],
+    'staff': true,
+    'counts': {
+      'todo': own.where((f) => tabOf(f) == 'todo').length,
+      'answered': own.where((f) => tabOf(f) == 'answered').length,
+      'closed': own.where((f) => tabOf(f) == 'closed').length,
+      'answeredAll': own
+          .where((f) => tabOf(f) != 'todo' && (me(f)['responses'] as List).isNotEmpty)
+          .length,
+      'waiting': answers.where((a) => a['waiting'] == true).length,
+      'feeDue': 0,
+    },
+    'page': {'number': page, 'size': size, 'total': list.length},
+  };
 }

@@ -84,7 +84,7 @@ class InboxList extends ConsumerWidget {
         load: (page) => ref.read(apiProvider).commsInboxList(page: page, size: 10),
         parse: (a, _) =>
             (items: asList(a['data']), more: asJson(a['page'])['more'] == true, total: null),
-        header: (_) => [
+        header: (_, _) => [
           Text(
             s.messagesTitle,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),
@@ -454,7 +454,7 @@ class _NoticesListState extends ConsumerState<NoticesList> {
           final total = (asJson(a['page'])['total'] as num?)?.toInt() ?? 0;
           return (items: asList(a['data']), more: page * 10 < total, total: total);
         },
-        header: (total) => [
+        header: (total, _) => [
           Text(
             s.noticesTitle,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: Tokens.fwBold),

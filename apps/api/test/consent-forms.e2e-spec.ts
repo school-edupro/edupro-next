@@ -1235,4 +1235,58 @@ describe('consent forms (e2e)', () => {
     const t = (await get('/engagement/consent-forms/dashboard', teacher)).json();
     expect(t).toMatchObject({ canCreate: false, forms: [], totals: { open: 0 } });
   });
+
+  it('staff: my own part a page at a time, the latest 10 first; tabs and figures over all (25 Nov 2026)', async () => {
+    type Form = {
+      id: string;
+      open: boolean;
+      people: Array<{ kind: string; responses: unknown[] }>;
+    };
+    const made: string[] = [];
+    for (let i = 1; i <= 12; i++) {
+      const f = await post('/engagement/consent-forms', {
+        title: `Staff declaration ${String(i)}`,
+        respondents: 'staff',
+        fields: [{ key: 'ok', label: 'I agree', type: 'agree', required: true }],
+        audience: { staff: 'filter', departments: ['Science'] },
+        settings: { repeat: 'once' },
+      });
+      expect(f.statusCode).toBe(201);
+      made.push(f.json().id);
+      await put(`/engagement/consent-forms/${f.json().id}/status`, {
+        status: 'published',
+        push: false,
+      });
+    }
+    const url = '/engagement/mine/consent-forms?part=staff';
+    const all = (await get(url, teacher)).json();
+    expect(all).toMatchObject({ page: null, children: [], staff: true });
+    expect(
+      (all.forms as Form[]).every((f) => f.people.length === 1 && f.people[0]!.kind === 'staff'),
+    ).toBe(true);
+    const { counts } = all;
+    expect(counts.todo).toBeGreaterThanOrEqual(12);
+    expect(counts.todo + counts.answered + counts.closed).toBe(all.forms.length);
+    // to answer: 10, then the rest; the latest first
+    const p1 = (await get(`${url}&tab=todo&page=1&size=10`, teacher)).json();
+    expect(p1.forms).toHaveLength(10);
+    expect(p1.page).toEqual({ number: 1, size: 10, total: counts.todo });
+    expect(p1.counts).toEqual(counts);
+    expect(p1.forms[0].id).toBe(made[11]);
+    const p2 = (await get(`${url}&tab=todo&page=2&size=10`, teacher)).json();
+    expect(p2.forms).toHaveLength(Math.min(10, counts.todo - 10));
+    const seen = new Set((p1.forms as Form[]).map((f) => f.id));
+    expect((p2.forms as Form[]).some((f) => seen.has(f.id))).toBe(false);
+    // answered: open forms the teacher answered (the trip)
+    const answered = (await get(`${url}&tab=answered&page=1`, teacher)).json();
+    expect(answered.page.total).toBe(counts.answered);
+    expect(
+      (answered.forms as Form[]).every((f) => f.open && f.people[0]!.responses.length > 0),
+    ).toBe(true);
+    // the family list is as before: every form at once, the children's part
+    const fam = (await get('/engagement/mine/consent-forms', parent)).json();
+    expect(fam).not.toHaveProperty('page');
+    expect(fam.children.length).toBeGreaterThan(0);
+    expect((await get(`${url}&page=1&size=51`, teacher)).statusCode).toBe(400);
+  });
 });

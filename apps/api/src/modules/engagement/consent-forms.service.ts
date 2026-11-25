@@ -2170,21 +2170,28 @@ export class ConsentFormsService {
   }
 
   /** The forms for me: per child (family) and for myself (staff), open ones and those I answered. */
-  async mine(ctx: RequestContext) {
+  async mine(
+    ctx: RequestContext,
+    q: { part?: 'staff'; tab?: 'todo' | 'answered' | 'closed'; page?: number; size?: number } = {},
+  ) {
     const me = await this.whoAmI(ctx);
+    // the staff app and website ask only for the staff member's own part
+    const kids = q.part === 'staff' ? [] : me.children;
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<FormDb>(
         // eslint-disable-next-line no-restricted-syntax -- fixed SELECT fragment constant; values are bound parameters
         `${FORM} WHERE f.deleted_at IS NULL AND f.status IN ('published', 'closed') ORDER BY f.published_at DESC NULLS LAST LIMIT 100`,
       );
-      const out = [];
+      const out: Array<
+        Row & { open: boolean; people: Array<{ canAnswer: boolean; responses: Row[] }> }
+      > = [];
       for (const f of r.rows) {
         f.audience = { ...AUDIENCE_DEFAULT, ...f.audience };
-        const pupils = me.children.length ? new Set(await this.audienceStudents(c, f)) : new Set();
+        const pupils = kids.length ? new Set(await this.audienceStudents(c, f)) : new Set();
         const asStaff =
           me.employeeId !== null && (await this.audienceStaff(c, f)).includes(me.employeeId);
         const people = [
-          ...me.children
+          ...kids
             .filter((s) => pupils.has(s.id))
             .map((s) => ({ kind: 'student' as const, id: s.id, name: s.name })),
           ...(asStaff ? [{ kind: 'staff' as const, id: me.employeeId!, name: 'Myself' }] : []),
@@ -2237,7 +2244,44 @@ export class ConsentFormsService {
           people: rows,
         });
       }
-      return { forms: out, children: me.children, staff: me.employeeId !== null };
+      if (q.part !== 'staff')
+        return { forms: out, children: me.children, staff: me.employeeId !== null };
+      // my own part as staff: the figures over every form, then the tab's forms a page at a time (latest first)
+      const own = (f: (typeof out)[number]) => f.people[0]!;
+      const tabOf = (f: (typeof out)[number]) =>
+        own(f).canAnswer
+          ? 'todo'
+          : !f.open
+            ? 'closed'
+            : own(f).responses.length
+              ? 'answered'
+              : null;
+      const answers = out.flatMap((f) => own(f).responses);
+      const counts = {
+        todo: out.filter((f) => tabOf(f) === 'todo').length,
+        answered: out.filter((f) => tabOf(f) === 'answered').length,
+        closed: out.filter((f) => tabOf(f) === 'closed').length,
+        /** answered, open or closed (the Answered figure) */
+        answeredAll: out.filter((f) => tabOf(f) !== 'todo' && own(f).responses.length).length,
+        waiting: answers.filter((a) => a.waiting === true).length,
+        feeDue:
+          Math.round(
+            answers.reduce(
+              (sum, a) =>
+                sum + (a.lineId ? Math.max(0, Number(a.lineAmount ?? 0) - Number(a.paid ?? 0)) : 0),
+              0,
+            ) * 100,
+          ) / 100,
+      };
+      const list = q.tab ? out.filter((f) => tabOf(f) === q.tab) : out;
+      const size = q.size ?? 10;
+      return {
+        forms: q.page ? list.slice((q.page - 1) * size, q.page * size) : list,
+        children: [],
+        staff: me.employeeId !== null,
+        counts,
+        page: q.page ? { number: q.page, size, total: list.length } : null,
+      };
     });
   }
 
